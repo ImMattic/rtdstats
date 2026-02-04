@@ -4,3 +4,4 @@ uvicorn
 pydantic
 psycopg2-binary
 alembic
+requests
