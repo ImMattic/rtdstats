@@ -1,0 +1,213 @@
+{
+  "A": {
+    "route": {
+      "id": "A",
+      "short_name": "A",
+      "long_name": "Union Station to Denver Airport Station",
+      "type": "2",
+      "color": "57C1E9"
+    },
+    "vehicles": [
+      {
+        "trip_id": "115716553",
+        "vehicle_label": "3",
+        "position": {
+          "latitude": 39.759483337402344,
+          "longitude": -104.80939483642578,
+          "bearing": 109.55630493164062
+        },
+        "current_stop_sequence": 0,
+        "current_status": 2,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:19:53",
+        "current_stop": {
+          "stop_id": "34473",
+          "stop_name": "40th Ave & Airport Blvd - Gateway Park Station Track 1",
+          "stop_lat": 39.770316,
+          "stop_lon": -104.787626
+        }
+      },
+      {
+        "trip_id": "115716546",
+        "vehicle_label": "4",
+        "position": {
+          "latitude": 39.754188537597656,
+          "longitude": -104.99964904785156,
+          "bearing": 225.4882354736328
+        },
+        "current_stop_sequence": 0,
+        "current_status": 1,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:28",
+        "current_stop": {
+          "stop_id": "34667",
+          "stop_name": "Union Station Track 1",
+          "stop_lat": 39.753698,
+          "stop_lon": -105.0002
+        }
+      },
+      {
+        "trip_id": "115716587",
+        "vehicle_label": "2",
+        "position": {
+          "latitude": 39.84601974487305,
+          "longitude": -104.67410278320312,
+          "bearing": 357.4977722167969
+        },
+        "current_stop_sequence": 0,
+        "current_status": 1,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:23",
+        "current_stop": {
+          "stop_id": "34476",
+          "stop_name": "Denver Airport Station",
+          "stop_lat": 39.84657,
+          "stop_lon": -104.673988
+        }
+      },
+      {
+        "trip_id": "115716588",
+        "vehicle_label": "1",
+        "position": {
+          "latitude": 39.77008819580078,
+          "longitude": -104.88398742675781,
+          "bearing": 275.5740051269531
+        },
+        "current_stop_sequence": 0,
+        "current_status": 2,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:18",
+        "current_stop": {
+          "stop_id": "34470",
+          "stop_name": "Central Park Station Track 2",
+          "stop_lat": 39.770753,
+          "stop_lon": -104.892193
+        }
+      }
+    ],
+    "summary": {
+      "total_vehicles": 4,
+      "occupancy_levels": {
+        "UNKNOWN": 4
+      }
+    }
+  },
+  "113G": {
+    "route": {
+      "id": "113G",
+      "short_name": "G",
+      "long_name": "Union Station to Wheat Ridge Ward Station",
+      "type": "2",
+      "color": "F6B221"
+    },
+    "vehicles": [
+      {
+        "trip_id": "115704111",
+        "vehicle_label": "32",
+        "position": {
+          "latitude": 39.75398254394531,
+          "longitude": -105.00057983398438,
+          "bearing": 227.90634155273438
+        },
+        "current_stop_sequence": 0,
+        "current_status": 1,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:19:58",
+        "current_stop": {
+          "stop_id": "34781",
+          "stop_name": "Union Station Track 7",
+          "stop_lat": 39.753772,
+          "stop_lon": -105.000812
+        }
+      },
+      {
+        "trip_id": "115704049",
+        "vehicle_label": "31",
+        "position": {
+          "latitude": 39.800106048583984,
+          "longitude": -105.07376098632812,
+          "bearing": 265.2607116699219
+        },
+        "current_stop_sequence": 0,
+        "current_status": 2,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:23",
+        "current_stop": {
+          "stop_id": "34542",
+          "stop_name": "Olde Town Arvada W-Bound",
+          "stop_lat": 39.798843,
+          "stop_lon": -105.080742
+        }
+      },
+      {
+        "trip_id": "115704009",
+        "vehicle_label": "30",
+        "position": {
+          "latitude": 39.78748321533203,
+          "longitude": -105.13508605957031,
+          "bearing": 232.79696655273438
+        },
+        "current_stop_sequence": 0,
+        "current_status": 1,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:28",
+        "current_stop": {
+          "stop_id": "34510",
+          "stop_name": "Wheat Ridge - Ward Station Track 1",
+          "stop_lat": 39.788077,
+          "stop_lon": -105.132658
+        }
+      }
+    ],
+    "summary": {
+      "total_vehicles": 3,
+      "occupancy_levels": {
+        "UNKNOWN": 3
+      }
+    }
+  },
+  "113B": {
+    "route": {
+      "id": "113B",
+      "short_name": "B",
+      "long_name": "Union Station to Westminster Station",
+      "type": "2",
+      "color": "4E9D2D"
+    },
+    "vehicles": [
+      {
+        "trip_id": "115704084",
+        "vehicle_label": "2",
+        "position": {
+          "latitude": 39.80820846557617,
+          "longitude": -105.01026916503906,
+          "bearing": 304.4486999511719
+        },
+        "current_stop_sequence": 0,
+        "current_status": 2,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:33",
+        "current_stop": {
+          "stop_id": "34561",
+          "stop_name": "Westminster Station N-Bound",
+          "stop_lat": 39.823078,
+          "stop_lon": -105.029428
+        }
+      }
+    ],
+    "summary": {
+      "total_vehicles": 1,
+      "occupancy_levels": {
+        "UNKNOWN": 1
+      }
+    }
+  }
+}

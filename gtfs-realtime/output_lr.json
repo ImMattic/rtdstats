@@ -1,0 +1,652 @@
+{
+  "101H": {
+    "route": {
+      "id": "101H",
+      "short_name": "H",
+      "long_name": "18th&California Station to Florida Station",
+      "type": "0",
+      "color": "0075BE"
+    },
+    "vehicles": [
+      {
+        "trip_id": "115724292",
+        "vehicle_label": "202,285",
+        "position": {
+          "latitude": 39.639320373535156,
+          "longitude": -104.88542175292969,
+          "bearing": 232.0
+        },
+        "current_stop_sequence": 0,
+        "current_status": 2,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:08",
+        "current_stop": {
+          "stop_id": "34011",
+          "stop_name": "Southmoor Station",
+          "stop_lat": 39.648971,
+          "stop_lon": -104.916439
+        }
+      },
+      {
+        "trip_id": "115724360",
+        "vehicle_label": "112,114",
+        "position": {
+          "latitude": 39.641456604003906,
+          "longitude": -104.88097381591797,
+          "bearing": 57.5
+        },
+        "current_stop_sequence": 0,
+        "current_status": 2,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:45",
+        "current_stop": {
+          "stop_id": "25974",
+          "stop_name": "Dayton Station",
+          "stop_lat": 39.643119,
+          "stop_lon": -104.87767
+        }
+      },
+      {
+        "trip_id": "115724359",
+        "vehicle_label": "257,277",
+        "position": {
+          "latitude": 39.742286682128906,
+          "longitude": -104.99825286865234,
+          "bearing": 189.0
+        },
+        "current_stop_sequence": 0,
+        "current_status": 2,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:48",
+        "current_stop": {
+          "stop_id": "23058",
+          "stop_name": "Colfax at Auraria Station",
+          "stop_lat": 39.74033,
+          "stop_lon": -105.002519
+        }
+      },
+      {
+        "trip_id": "115724180",
+        "vehicle_label": "223,318",
+        "position": {
+          "latitude": 39.69142150878906,
+          "longitude": -104.97663879394531,
+          "bearing": 319.79998779296875
+        },
+        "current_stop_sequence": 0,
+        "current_status": 2,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:49",
+        "current_stop": {
+          "stop_id": "34015",
+          "stop_name": "Louisiana & Pearl Station",
+          "stop_lat": 39.693283,
+          "stop_lon": -104.978684
+        }
+      },
+      {
+        "trip_id": "115724179",
+        "vehicle_label": "233,272",
+        "position": {
+          "latitude": 39.68980407714844,
+          "longitude": -104.82855224609375,
+          "bearing": 180.0
+        },
+        "current_stop_sequence": 0,
+        "current_status": 1,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:36",
+        "current_stop": {
+          "stop_id": "34578",
+          "stop_name": "Florida Station",
+          "stop_lat": 39.689534,
+          "stop_lon": -104.828474
+        }
+      }
+    ],
+    "summary": {
+      "total_vehicles": 5,
+      "occupancy_levels": {
+        "UNKNOWN": 5
+      }
+    }
+  },
+  "101D": {
+    "route": {
+      "id": "101D",
+      "short_name": "D",
+      "long_name": "18th&California Station to Mineral Station",
+      "type": "0",
+      "color": "008348"
+    },
+    "vehicles": [
+      {
+        "trip_id": "115724438",
+        "vehicle_label": "269,299",
+        "position": {
+          "latitude": 39.747047424316406,
+          "longitude": -104.99160766601562,
+          "bearing": 233.8000030517578
+        },
+        "current_stop_sequence": 0,
+        "current_status": 1,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:19:36",
+        "current_stop": {
+          "stop_id": "23055",
+          "stop_name": "18th & Stout Station",
+          "stop_lat": 39.747997,
+          "stop_lon": -104.990429
+        }
+      },
+      {
+        "trip_id": "115724323",
+        "vehicle_label": "210,268",
+        "position": {
+          "latitude": 39.678550720214844,
+          "longitude": -104.99267578125,
+          "bearing": 191.1999969482422
+        },
+        "current_stop_sequence": 0,
+        "current_status": 2,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:19:39",
+        "current_stop": {
+          "stop_id": "25435",
+          "stop_name": "Evans Station",
+          "stop_lat": 39.677331,
+          "stop_lon": -104.992946
+        }
+      },
+      {
+        "trip_id": "115724440",
+        "vehicle_label": "248,260",
+        "position": {
+          "latitude": 39.58149337768555,
+          "longitude": -105.02436828613281,
+          "bearing": 202.10000610351562
+        },
+        "current_stop_sequence": 0,
+        "current_status": 2,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:51"
+      },
+      {
+        "trip_id": "115724237",
+        "vehicle_label": "283,284",
+        "position": {
+          "latitude": 39.580318450927734,
+          "longitude": -105.02490997314453,
+          "bearing": 21.700000762939453
+        },
+        "current_stop_sequence": 0,
+        "current_status": 1,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:25",
+        "current_stop": {
+          "stop_id": "24896",
+          "stop_name": "Littleton / Mineral Ave Station",
+          "stop_lat": 39.580413,
+          "stop_lon": -105.024812
+        }
+      },
+      {
+        "trip_id": "115724238",
+        "vehicle_label": "239,321",
+        "position": {
+          "latitude": 39.66511154174805,
+          "longitude": -104.99607849121094,
+          "bearing": 11.399999618530273
+        },
+        "current_stop_sequence": 0,
+        "current_status": 2,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:19:03",
+        "current_stop": {
+          "stop_id": "24882",
+          "stop_name": "Evans Station",
+          "stop_lat": 39.678143,
+          "stop_lon": -104.992653
+        }
+      }
+    ],
+    "summary": {
+      "total_vehicles": 5,
+      "occupancy_levels": {
+        "UNKNOWN": 5
+      }
+    }
+  },
+  "101E": {
+    "route": {
+      "id": "101E",
+      "short_name": "E",
+      "long_name": "Union Station to RidgeGate Parkway Station",
+      "type": "0",
+      "color": "552683"
+    },
+    "vehicles": [
+      {
+        "trip_id": "115724500",
+        "vehicle_label": "119,124,139",
+        "position": {
+          "latitude": 39.755638122558594,
+          "longitude": -105.00292205810547,
+          "bearing": 212.5
+        },
+        "current_stop_sequence": 0,
+        "current_status": 1,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:34",
+        "current_stop": {
+          "stop_id": "25434",
+          "stop_name": "Union Station Track 12",
+          "stop_lat": 39.755125,
+          "stop_lon": -105.003351
+        }
+      },
+      {
+        "trip_id": "115724502",
+        "vehicle_label": "229,264,315",
+        "position": {
+          "latitude": 39.5250129699707,
+          "longitude": -104.86361694335938,
+          "bearing": 193.6999969482422
+        },
+        "current_stop_sequence": 0,
+        "current_status": 2,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:49",
+        "current_stop": {
+          "stop_id": "35211",
+          "stop_name": "Ridgegate Parkway Station",
+          "stop_lat": 39.520244,
+          "stop_lon": -104.865725
+        }
+      },
+      {
+        "trip_id": "115724114",
+        "vehicle_label": "123,126,142",
+        "position": {
+          "latitude": 39.70304489135742,
+          "longitude": -104.99028015136719,
+          "bearing": 356.29998779296875
+        },
+        "current_stop_sequence": 0,
+        "current_status": 2,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:48",
+        "current_stop": {
+          "stop_id": "23042",
+          "stop_name": "Alameda Station",
+          "stop_lat": 39.708706,
+          "stop_lon": -104.993143
+        }
+      },
+      {
+        "trip_id": "115724501",
+        "vehicle_label": "245,282,317",
+        "position": {
+          "latitude": 39.68369674682617,
+          "longitude": -104.94471740722656,
+          "bearing": 118.0
+        },
+        "current_stop_sequence": 0,
+        "current_status": 1,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:52"
+      },
+      {
+        "trip_id": "115724113",
+        "vehicle_label": "252,313,342",
+        "position": {
+          "latitude": 39.559165954589844,
+          "longitude": -104.8720703125,
+          "bearing": 344.1000061035156
+        },
+        "current_stop_sequence": 0,
+        "current_status": 2,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:46",
+        "current_stop": {
+          "stop_id": "34006",
+          "stop_name": "County Line Station",
+          "stop_lat": 39.562189,
+          "stop_lon": -104.872231
+        }
+      }
+    ],
+    "summary": {
+      "total_vehicles": 5,
+      "occupancy_levels": {
+        "UNKNOWN": 5
+      }
+    }
+  },
+  "103W": {
+    "route": {
+      "id": "103W",
+      "short_name": "W",
+      "long_name": "Union Station to Jefferson County Government Center-Golden Station",
+      "type": "0",
+      "color": "009DAA"
+    },
+    "vehicles": [
+      {
+        "trip_id": "115726059",
+        "vehicle_label": "217,247",
+        "position": {
+          "latitude": 39.73044204711914,
+          "longitude": -105.12635040283203,
+          "bearing": 321.3999938964844
+        },
+        "current_stop_sequence": 0,
+        "current_status": 2,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:48",
+        "current_stop": {
+          "stop_id": "33960",
+          "stop_name": "Oak Station",
+          "stop_lat": 39.73717,
+          "stop_lon": -105.119452
+        }
+      },
+      {
+        "trip_id": "115726117",
+        "vehicle_label": "131,134",
+        "position": {
+          "latitude": 39.734947204589844,
+          "longitude": -105.0360336303711,
+          "bearing": 236.0
+        },
+        "current_stop_sequence": 0,
+        "current_status": 2,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:45",
+        "current_stop": {
+          "stop_id": "33560",
+          "stop_name": "Perry Station",
+          "stop_lat": 39.73479,
+          "stop_lon": -105.040409
+        }
+      },
+      {
+        "trip_id": "115726063",
+        "vehicle_label": "211,221",
+        "position": {
+          "latitude": 39.73472213745117,
+          "longitude": -105.039794921875,
+          "bearing": 91.0
+        },
+        "current_stop_sequence": 0,
+        "current_status": 1,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:47",
+        "current_stop": {
+          "stop_id": "33965",
+          "stop_name": "Perry Station",
+          "stop_lat": 39.734688,
+          "stop_lon": -105.039597
+        }
+      },
+      {
+        "trip_id": "115726120",
+        "vehicle_label": "289,307",
+        "position": {
+          "latitude": 39.73241424560547,
+          "longitude": -105.12804412841797,
+          "bearing": 166.10000610351562
+        },
+        "current_stop_sequence": 0,
+        "current_status": 2,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:49",
+        "current_stop": {
+          "stop_id": "33566",
+          "stop_name": "Federal Center Station",
+          "stop_lat": 39.720037,
+          "stop_lon": -105.12964
+        }
+      },
+      {
+        "trip_id": "115726062",
+        "vehicle_label": "117,121",
+        "position": {
+          "latitude": 39.754886627197266,
+          "longitude": -105.00341796875,
+          "bearing": 28.0
+        },
+        "current_stop_sequence": 0,
+        "current_status": 1,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:17:30",
+        "current_stop": {
+          "stop_id": "25430",
+          "stop_name": "Union Station Track 11",
+          "stop_lat": 39.755422,
+          "stop_lon": -105.00297
+        }
+      },
+      {
+        "trip_id": "115726057",
+        "vehicle_label": "234,331",
+        "position": {
+          "latitude": 39.721248626708984,
+          "longitude": -105.13065338134766,
+          "bearing": 270.3999938964844
+        },
+        "current_stop_sequence": 0,
+        "current_status": 2,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:18:08",
+        "current_stop": {
+          "stop_id": "33955",
+          "stop_name": "Federal Center Station",
+          "stop_lat": 39.719895,
+          "stop_lon": -105.128448
+        }
+      }
+    ],
+    "summary": {
+      "total_vehicles": 6,
+      "occupancy_levels": {
+        "UNKNOWN": 6
+      }
+    }
+  },
+  "107R": {
+    "route": {
+      "id": "107R",
+      "short_name": "R",
+      "long_name": "Lincoln Station to Peoria Station",
+      "type": "0",
+      "color": "C4D600"
+    },
+    "vehicles": [
+      {
+        "trip_id": "115726583",
+        "vehicle_label": "335",
+        "position": {
+          "latitude": 39.57933044433594,
+          "longitude": -104.87691497802734,
+          "bearing": 328.5
+        },
+        "current_stop_sequence": 0,
+        "current_status": 2,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:36",
+        "current_stop": {
+          "stop_id": "34008",
+          "stop_name": "Arapahoe at Village Center Station",
+          "stop_lat": 39.600442,
+          "stop_lon": -104.888539
+        }
+      },
+      {
+        "trip_id": "115726578",
+        "vehicle_label": "329,351",
+        "position": {
+          "latitude": 39.70838928222656,
+          "longitude": -104.81905364990234,
+          "bearing": 359.5
+        },
+        "current_stop_sequence": 0,
+        "current_status": 1,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:17:32",
+        "current_stop": {
+          "stop_id": "34579",
+          "stop_name": "Aurora Metro Center Station",
+          "stop_lat": 39.708951,
+          "stop_lon": -104.818993
+        }
+      },
+      {
+        "trip_id": "115726579",
+        "vehicle_label": "332,339",
+        "position": {
+          "latitude": 39.54569625854492,
+          "longitude": -104.86953735351562,
+          "bearing": 176.0
+        },
+        "current_stop_sequence": 0,
+        "current_status": 1,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:31",
+        "current_stop": {
+          "stop_id": "34005",
+          "stop_name": "Lincoln Station",
+          "stop_lat": 39.546353,
+          "stop_lon": -104.869622
+        }
+      },
+      {
+        "trip_id": "115726585",
+        "vehicle_label": "327,344",
+        "position": {
+          "latitude": 39.579830169677734,
+          "longitude": -104.87731170654297,
+          "bearing": 328.20001220703125
+        },
+        "current_stop_sequence": 0,
+        "current_status": 1,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:47",
+        "current_stop": {
+          "stop_id": "34007",
+          "stop_name": "Dry Creek Station",
+          "stop_lat": 39.579326,
+          "stop_lon": -104.876957
+        }
+      },
+      {
+        "trip_id": "115726612",
+        "vehicle_label": "340,349",
+        "position": {
+          "latitude": 39.693180084228516,
+          "longitude": -104.82857513427734,
+          "bearing": 180.0
+        },
+        "current_stop_sequence": 0,
+        "current_status": 2,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:44",
+        "current_stop": {
+          "stop_id": "34578",
+          "stop_name": "Florida Station",
+          "stop_lat": 39.689534,
+          "stop_lon": -104.828474
+        }
+      }
+    ],
+    "summary": {
+      "total_vehicles": 5,
+      "occupancy_levels": {
+        "UNKNOWN": 5
+      }
+    }
+  },
+  "109L": {
+    "route": {
+      "id": "109L",
+      "short_name": "L",
+      "long_name": "30th & Downing to 16th & Stout",
+      "type": "0",
+      "color": "FFCE00"
+    },
+    "vehicles": [
+      {
+        "trip_id": "115726961",
+        "vehicle_label": "148",
+        "position": {
+          "latitude": 39.758460998535156,
+          "longitude": -104.9734878540039,
+          "bearing": 178.0
+        },
+        "current_stop_sequence": 0,
+        "current_status": 2,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:37",
+        "current_stop": {
+          "stop_id": "23709",
+          "stop_name": "27th & Welton Station",
+          "stop_lat": 39.754909,
+          "stop_lon": -104.977791
+        }
+      },
+      {
+        "trip_id": "115726937",
+        "vehicle_label": "580",
+        "position": {
+          "latitude": 39.7477912902832,
+          "longitude": -104.9870834350586,
+          "bearing": 224.8193359375
+        },
+        "current_stop_sequence": 0,
+        "current_status": 1,
+        "occupancy_status": "UNKNOWN",
+        "occupancy_percentage": null,
+        "timestamp": "2026-02-05T20:20:44",
+        "current_stop": {
+          "stop_id": "23054",
+          "stop_name": "20th & Welton Station",
+          "stop_lat": 39.747879,
+          "stop_lon": -104.987032
+        }
+      }
+    ],
+    "summary": {
+      "total_vehicles": 2,
+      "occupancy_levels": {
+        "UNKNOWN": 2
+      }
+    }
+  }
+}
