@@ -5,13 +5,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.vehicle_position import VehiclePosition
 from app.models.trip_update import TripUpdate
 from app.schemas.vehicle_position import VehiclePositionHistoryOut
+from app.services.gtfs_decoder import load_gtfs_static_data
 
 router = APIRouter(prefix="/historical", tags=["historical"])
 
@@ -28,11 +29,13 @@ async def get_historical_vehicles(
         datetime | None,
         Query(description="End timestamp (ISO 8601, default: now)"),
     ] = None,
-    limit: Annotated[int, Query(ge=1, le=10_000)] = 1_000,
+    limit: Annotated[int, Query(ge=1, le=10_000)] = 200,
+    page: Annotated[int, Query(ge=1)] = 1,
 ) -> dict:
     now = datetime.now(tz=timezone.utc)
     start = start or (now - timedelta(hours=24))
     end = end or now
+    offset = (page - 1) * limit
 
     stmt = (
         select(VehiclePosition)
@@ -41,6 +44,7 @@ async def get_historical_vehicles(
             VehiclePosition.timestamp <= end,
         )
         .order_by(VehiclePosition.timestamp.desc())
+        .offset(offset)
         .limit(limit)
     )
     if route_id:
@@ -49,7 +53,8 @@ async def get_historical_vehicles(
     result = await db.execute(stmt)
     rows = result.scalars().all()
 
-    # Pair up with delays via a second query (best-effort)
+    # Enrich with static route names and most-recent delays
+    routes_static, _ = load_gtfs_static_data()
     delay_map = await _delay_map(db, start, end, route_id)
 
     vehicles = [
@@ -58,6 +63,7 @@ async def get_historical_vehicles(
             vehicle_label=r.vehicle_label,
             trip_id=r.trip_id,
             route_id=r.route_id,
+            route_short_name=routes_static.get(r.route_id, {}).get("route_short_name"),
             latitude=r.latitude,
             longitude=r.longitude,
             bearing=r.bearing,
@@ -70,10 +76,23 @@ async def get_historical_vehicles(
         for r in rows
     ]
 
+    count_stmt = select(func.count()).select_from(VehiclePosition).where(
+        VehiclePosition.timestamp >= start,
+        VehiclePosition.timestamp <= end,
+    )
+    if route_id:
+        count_stmt = count_stmt.where(VehiclePosition.route_id == route_id)
+    total = int((await db.execute(count_stmt)).scalar_one())
+    total_pages = (total + limit - 1) // limit if total else 0
+
     return {
         "start": start.isoformat(),
         "end": end.isoformat(),
+        "page": page,
+        "limit": limit,
         "returned": len(vehicles),
+        "total": total,
+        "total_pages": total_pages,
         "vehicles": [v.model_dump() for v in vehicles],
     }
 
@@ -84,20 +103,31 @@ async def _delay_map(
     end: datetime,
     route_id: str | None,
 ) -> dict[str, int]:
-    stmt = (
-        select(TripUpdate.trip_id, TripUpdate.arrival_delay)
+    """Return the most-recent non-null arrival_delay (seconds) keyed by trip_id."""
+    # Subquery: find the latest timestamp per trip_id that has a delay value
+    subq = (
+        select(
+            TripUpdate.trip_id,
+            func.max(TripUpdate.timestamp).label("max_ts"),
+        )
         .where(
             TripUpdate.timestamp >= start,
             TripUpdate.timestamp <= end,
             TripUpdate.arrival_delay.is_not(None),
         )
+        .group_by(TripUpdate.trip_id)
+        .subquery()
+    )
+    stmt = select(TripUpdate.trip_id, TripUpdate.arrival_delay).join(
+        subq,
+        (TripUpdate.trip_id == subq.c.trip_id) & (TripUpdate.timestamp == subq.c.max_ts),
     )
     if route_id:
         stmt = stmt.where(TripUpdate.route_id == route_id)
 
     result = await db.execute(stmt)
-    delay_map: dict[str, int] = {}
-    for trip_id, delay in result.all():
-        if trip_id and trip_id not in delay_map:
-            delay_map[trip_id] = delay
-    return delay_map
+    return {
+        trip_id: delay
+        for trip_id, delay in result.all()
+        if trip_id is not None
+    }

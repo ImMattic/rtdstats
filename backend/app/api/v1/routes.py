@@ -23,7 +23,7 @@ _VEHICLE_TYPE_NAMES = {
 
 
 def _all_routes() -> list[RouteInfo]:
-    routes, _ = load_gtfs_static_data()
+    routes, _ = load_gtfs_static_data(gtfs_static_root=_gtfs_root())
     return [
         RouteInfo(
             route_id=r["route_id"],

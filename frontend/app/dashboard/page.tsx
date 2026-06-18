@@ -20,7 +20,7 @@ export default function DashboardPage() {
   const alertCount = alerts.data?.alerts.length ?? 0;
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-6 space-y-8">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 space-y-8 text-gray-900">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold">Dashboard</h1>
 

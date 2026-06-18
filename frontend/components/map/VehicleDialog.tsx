@@ -18,7 +18,7 @@ export default function VehicleDialog({ vehicle: v, onClose }: Props) {
   const isEarly = (v.delay_seconds ?? 0) < -60;
 
   return (
-    <div className="absolute bottom-6 left-1/2 z-[9999] w-80 -translate-x-1/2 rounded-xl bg-white shadow-2xl ring-1 ring-black/5">
+    <div className="animate-dialog-in absolute bottom-6 left-1/2 z-[9999] w-80 -translate-x-1/2 rounded-xl bg-white/95 shadow-2xl ring-1 ring-black/5 backdrop-blur-sm">
       {/* Header */}
       <div
         className="flex items-center justify-between rounded-t-xl px-4 py-3 text-white"
@@ -74,7 +74,7 @@ export default function VehicleDialog({ vehicle: v, onClose }: Props) {
         {/* Headway */}
         {v.headway_minutes !== null && (
           <p className="text-gray-500 text-xs">
-            Approx. headway:{" "}
+            Scheduled headway:{" "}
             <span className="font-medium text-gray-800">
               {v.headway_minutes} min
             </span>

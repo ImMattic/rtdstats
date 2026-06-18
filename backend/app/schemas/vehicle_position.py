@@ -59,6 +59,7 @@ class VehiclePositionHistoryOut(BaseModel):
     vehicle_label: str | None
     trip_id: str | None
     route_id: str
+    route_short_name: str | None = None
     latitude: float | None
     longitude: float | None
     bearing: float | None

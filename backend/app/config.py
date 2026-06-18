@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     polling_interval_seconds: int = 10
 
     # ── Alert thresholds ─────────────────────────────────────────────────────
-    stuck_vehicle_minutes: int = 5
+    stuck_vehicle_minutes: int = 12
 
     # ── CORS ──────────────────────────────────────────────────────────────────
     cors_origins: list[str] = ["http://localhost:3000"]

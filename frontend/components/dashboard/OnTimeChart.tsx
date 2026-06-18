@@ -32,13 +32,13 @@ export default function OnTimeChart({ routes }: Props) {
           type="number"
           domain={[0, 100]}
           tickFormatter={(v) => `${v}%`}
-          tick={{ fontSize: 11 }}
+          tick={{ fontSize: 11, fill: "#4b5563" }}
         />
         <YAxis
           type="category"
           dataKey="route_short_name"
           width={36}
-          tick={{ fontSize: 11 }}
+          tick={{ fontSize: 11, fill: "#1f2937" }}
         />
         <Tooltip
           formatter={(value: number) => [`${value.toFixed(1)}%`, "On time"]}

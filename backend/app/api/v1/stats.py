@@ -1,13 +1,12 @@
 """On-time performance, frequency, and stuck-vehicle alert endpoints."""
 from __future__ import annotations
 
-import math
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from sqlalchemy import String, bindparam, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -23,6 +22,7 @@ from app.schemas.stats import (
     StuckAlert,
 )
 from app.services.gtfs_decoder import load_gtfs_static_data
+from app.config import get_settings
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
@@ -102,60 +102,83 @@ async def ontime_performance(
 
 # ── Frequency ──────────────────────────────────────────────────────────────
 
+# Estimated round-trip cycle time per GTFS route_type (minutes).
+# headway ≈ cycle_time / active_vehicle_count  (e.g. 10 buses on 90-min loop → 9 min)
+_ROUTE_CYCLE_MINUTES: dict[str, float] = {
+    "0": 45.0,   # light rail
+    "1": 30.0,   # heavy rail / subway
+    "2": 120.0,  # commuter rail
+    "3": 90.0,   # bus (default)
+}
+
+
 @router.get("/frequency", response_model=FrequencyResponse)
 async def frequency_stats(
     db: Annotated[AsyncSession, Depends(get_db)],
     route_id: Annotated[str | None, Query()] = None,
 ) -> FrequencyResponse:
-    """Estimate current headway per route from live vehicle positions."""
-    cutoff = datetime.now(tz=timezone.utc) - timedelta(minutes=2)
+    """Estimate current headway per route from live vehicle position counts.
 
-    stmt = select(
-        VehiclePosition.route_id,
-        VehiclePosition.vehicle_id,
-        func.max(VehiclePosition.timestamp).label("last_seen"),
-    ).where(
-        VehiclePosition.timestamp >= cutoff,
-    ).group_by(
-        VehiclePosition.route_id,
-        VehiclePosition.vehicle_id,
+    Groups the last 30 minutes of positions into 5-minute buckets and counts
+    distinct vehicles per bucket.  Headway = cycle_time / vehicle_count using
+    route-type-aware cycle times.  Min / max reflect real variation across
+    buckets (peak vs. off-peak within the window).
+    """
+    cutoff = datetime.now(tz=timezone.utc) - timedelta(minutes=30)
+
+    # Count distinct active vehicles per route per 5-minute bucket.
+    # Integer division bucketing avoids modulo-operator escaping issues.
+    _BUCKET_SQL = """
+        SELECT
+            route_id,
+            COUNT(DISTINCT COALESCE(vehicle_id, trip_id)) AS cnt
+        FROM vehicle_positions
+        WHERE timestamp >= :cutoff
+          AND (:route_id IS NULL OR route_id = :route_id)
+        GROUP BY
+            route_id,
+            date_trunc('hour', timestamp)
+                + (EXTRACT(minute FROM timestamp)::int / 5) * 5 * INTERVAL '1 minute'
+    """
+    result = await db.execute(
+        text(_BUCKET_SQL).bindparams(
+            bindparam("cutoff"),
+            bindparam("route_id", type_=String),
+        ),
+        {"cutoff": cutoff, "route_id": route_id},
     )
-    if route_id:
-        stmt = stmt.where(VehiclePosition.route_id == route_id)
+    bucket_rows = result.all()
 
-    result = await db.execute(stmt)
-    rows = result.all()
+    # Aggregate bucket counts per route
+    route_buckets: dict[str, list[int]] = defaultdict(list)
+    for rid, cnt in bucket_rows:
+        route_buckets[rid].append(int(cnt))
 
     routes_static, _ = load_gtfs_static_data()
 
-    # Group by route
-    route_ts: dict[str, list[datetime]] = defaultdict(list)
-    for rid, _vid, last_seen in rows:
-        route_ts[rid].append(last_seen)
-
     freq_stats: list[FrequencyRouteStats] = []
-    for rid, timestamps in sorted(route_ts.items()):
-        n = len(timestamps)
-        if n < 2:
-            avg_hw = min_hw = max_hw = 0.0
+    for rid, counts in sorted(route_buckets.items()):
+        route_info = routes_static.get(rid, {})
+        cycle = _ROUTE_CYCLE_MINUTES.get(route_info.get("route_type", "3"), 90.0)
+
+        max_count = max(counts)
+        if max_count >= 2:
+            avg_count = sum(counts) / len(counts)
+            avg_hw = round(cycle / avg_count, 1)
+            # More vehicles active = shorter (better) headway; fewer = longer
+            min_hw = round(cycle / max_count, 1)
+            max_hw = round(cycle / max(1, min(counts)), 1)
         else:
-            sorted_ts = sorted(timestamps)
-            gaps = [
-                (sorted_ts[i + 1] - sorted_ts[i]).total_seconds() / 60
-                for i in range(len(sorted_ts) - 1)
-            ]
-            avg_hw = round(sum(gaps) / len(gaps), 1)
-            min_hw = round(min(gaps), 1)
-            max_hw = round(max(gaps), 1)
+            avg_hw = min_hw = max_hw = 0.0
 
         freq_stats.append(
             FrequencyRouteStats(
                 route_id=rid,
-                route_short_name=routes_static.get(rid, {}).get("route_short_name", rid),
+                route_short_name=route_info.get("route_short_name", rid),
                 avg_headway_minutes=avg_hw,
                 min_headway_minutes=min_hw,
                 max_headway_minutes=max_hw,
-                vehicle_count=n,
+                vehicle_count=max_count,
             )
         )
 
@@ -171,10 +194,6 @@ async def frequency_stats(
 async def stuck_vehicle_alerts(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AlertsResponse:
-    from app.config import get_settings
-    from app.services.ingestion import _stops_cache
-    from app.services.gtfs_decoder import load_gtfs_static_data as _load
-
     settings = get_settings()
     threshold = timedelta(minutes=settings.stuck_vehicle_minutes)
     window = threshold * 3  # look back far enough to check for movement
@@ -189,12 +208,12 @@ async def stuck_vehicle_alerts(
     result = await db.execute(stmt)
     rows = result.scalars().all()
 
-    # Group by vehicle_id
+    # Group by vehicle key (prefer vehicle_id, fall back to trip_id)
     veh_rows: dict[str, list[VehiclePosition]] = defaultdict(list)
     for r in rows:
         veh_rows[r.vehicle_id or r.trip_id or ""].append(r)
 
-    routes_static, stops_static = _load()
+    routes_static, stops_static = load_gtfs_static_data()
 
     now = datetime.now(tz=timezone.utc)
     alerts: list[StuckAlert] = []
@@ -203,34 +222,46 @@ async def stuck_vehicle_alerts(
         if len(history) < 2:
             continue
         latest = history[0]
-        # Check if any position in history shows movement
         lat0, lon0 = latest.latitude, latest.longitude
         earliest_same_pos = latest.timestamp
 
+        # Walk backwards (history is already ordered newest-first) and collect
+        # the consecutive streak of rows at the same position.
+        streak: list[VehiclePosition] = [latest]
         for prev in history[1:]:
             if _positions_equal(lat0, lon0, prev.latitude, prev.longitude):
                 earliest_same_pos = prev.timestamp
+                streak.append(prev)
             else:
                 break  # vehicle moved at some point in history
 
         stationary_duration = now - earliest_same_pos
-        if stationary_duration >= threshold:
-            stop_info = stops_static.get(latest.stop_id or "", {})
-            route_info = routes_static.get(latest.route_id, {})
-            alerts.append(
-                StuckAlert(
-                    vehicle_id=latest.vehicle_id,
-                    vehicle_label=latest.vehicle_label,
-                    route_id=latest.route_id,
-                    route_short_name=route_info.get("route_short_name", latest.route_id),
-                    latitude=latest.latitude,
-                    longitude=latest.longitude,
-                    stop_id=latest.stop_id,
-                    stop_name=stop_info.get("stop_name"),
-                    stuck_since=earliest_same_pos,
-                    minutes_stuck=round(stationary_duration.total_seconds() / 60, 1),
-                )
+        if stationary_duration < threshold:
+            continue
+
+        # Skip vehicles whose entire stuck streak shows STOPPED_AT (status 1).
+        # These are legitimate terminal/layover dwells — the vehicle is
+        # intentionally parked, not broken down or stuck in traffic.
+        streak_statuses = {r.current_status for r in streak if r.current_status is not None}
+        if streak_statuses and streak_statuses <= {1}:
+            continue
+
+        stop_info = stops_static.get(latest.stop_id or "", {})
+        route_info = routes_static.get(latest.route_id, {})
+        alerts.append(
+            StuckAlert(
+                vehicle_id=latest.vehicle_id,
+                vehicle_label=latest.vehicle_label,
+                route_id=latest.route_id,
+                route_short_name=route_info.get("route_short_name", latest.route_id),
+                latitude=latest.latitude,
+                longitude=latest.longitude,
+                stop_id=latest.stop_id,
+                stop_name=stop_info.get("stop_name"),
+                stuck_since=earliest_same_pos,
+                minutes_stuck=round(stationary_duration.total_seconds() / 60, 1),
             )
+        )
 
     return AlertsResponse(computed_at=now, alerts=alerts)
 
