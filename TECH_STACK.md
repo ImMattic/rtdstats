@@ -6,14 +6,11 @@
 [![Next.js](https://img.shields.io/badge/Next.js-000?logo=next.js&logoColor=fff)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=fff)](https://www.typescriptlang.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?logo=tailwind-css&logoColor=fff)](https://tailwindcss.com/)
-[![Mapbox](https://img.shields.io/badge/Mapbox-000000?logo=mapbox&logoColor=fff)](https://www.mapbox.com/)
-[![Leaflet](https://img.shields.io/badge/Leaflet-199900?logo=leaflet&logoColor=fff)](https://leafletjs.com/)
 [![TanStack Query](https://img.shields.io/badge/TanStack_Query-FF4154?logo=react-query&logoColor=fff)](https://tanstack.com/query/latest)
 
 - **React + Next.js (App Router)**
 - **TypeScript**
 - **Tailwind CSS** for styling
-- **Mapbox GL JS** (default map) with optional **Leaflet + OpenStreetMap** fallback
 - **TanStack Query (React Query)** for data fetching
 - **Polling** every 5–10 seconds for real-time updates; **SSE/WebSockets** for later
 

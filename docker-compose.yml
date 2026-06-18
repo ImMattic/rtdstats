@@ -1,0 +1,56 @@
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: rtdstats
+      POSTGRES_USER: rtdstats
+      POSTGRES_PASSWORD: rtdstats
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rtdstats -d rtdstats"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://rtdstats:rtdstats@db:5432/rtdstats
+      GTFS_RT_VEHICLE_URL: https://www.rtd-denver.com/files/gtfs-rt/VehiclePosition.pb
+      GTFS_RT_TRIP_URL: https://www.rtd-denver.com/files/gtfs-rt/TripUpdate.pb
+      POLLING_INTERVAL_SECONDS: "10"
+      STUCK_VEHICLE_MINUTES: "5"
+      CORS_ORIGINS: '["http://localhost:3000"]'
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Mount static GTFS data so the ingestion service can read it
+      - ./gtfs-static:/app/gtfs-static:ro
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        BACKEND_URL: http://backend:8000
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Server-side proxy target — Next.js rewrites /api/* to this URL.
+      # Uses the Compose service name; never exposed to the browser.
+      BACKEND_URL: http://backend:8000
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

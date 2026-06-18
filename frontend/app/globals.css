@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Ensure the Leaflet map fills its container */
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+}
+
+/* Leaflet popup / tooltip dark theme */
+.leaflet-tooltip {
+  background: #1A2535 !important;
+  border: 1px solid #263040 !important;
+  color: #f1f5f9 !important;
+  border-radius: 6px !important;
+  font-size: 12px !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+}
+.leaflet-tooltip::before {
+  border-top-color: #263040 !important;
+}
