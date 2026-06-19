@@ -17,6 +17,33 @@ export default function HomePage() {
   const { data, isLoading, isError, dataUpdatedAt } = useVehicles();
   const [selected, setSelected] = useState<VehiclePosition | null>(null);
 
+  const handleVehicleClick = (vehicle: VehiclePosition) => {
+    setSelected((prev) => {
+      if (!prev) return vehicle;
+
+      const prevKey = prev.vehicle_id ?? prev.trip_id;
+      const nextKey = vehicle.vehicle_id ?? vehicle.trip_id;
+
+      // Clicking the same vehicle again toggles the dialog closed.
+      if (prevKey && nextKey && prevKey === nextKey) {
+        return null;
+      }
+
+      if (
+        !prevKey &&
+        !nextKey &&
+        prev.route_id === vehicle.route_id &&
+        prev.vehicle_label &&
+        vehicle.vehicle_label &&
+        prev.vehicle_label === vehicle.vehicle_label
+      ) {
+        return null;
+      }
+
+      return vehicle;
+    });
+  };
+
   const vehicles = data?.vehicles ?? [];
   const totalRoutes = new Set(vehicles.map((v) => v.route_id)).size;
 
@@ -73,7 +100,11 @@ export default function HomePage() {
             </div>
           </div>
         ) : (
-          <VehicleMap vehicles={vehicles} onVehicleClick={setSelected} />
+          <VehicleMap
+            vehicles={vehicles}
+            onVehicleClick={handleVehicleClick}
+            selectedVehicle={selected}
+          />
         )}
 
         {/* Click-through dialog */}

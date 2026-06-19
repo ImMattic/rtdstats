@@ -43,15 +43,15 @@ export default function VehicleDialog({ vehicle: v, onClose }: Props) {
       </div>
 
       {/* Body */}
-      <div className="px-4 py-3 space-y-2 text-sm">
+      <div className="px-4 py-3 space-y-2 text-sm text-gray-900">
         {/* Current stop */}
         <div className="flex items-start gap-2">
           <span className="mt-0.5 h-2 w-2 rounded-full bg-rtd-blue flex-shrink-0" />
           <div>
-            <p className="text-gray-500 text-xs">
+            <p className="text-gray-900 text-xs">
               {STATUS_LABELS[v.current_status ?? -1] ?? "At"}
             </p>
-            <p className="font-medium">{v.stop_name ?? v.stop_id ?? "Unknown stop"}</p>
+            <p className="font-medium text-gray-900">{v.stop_name ?? v.stop_id ?? "Unknown stop"}</p>
           </div>
         </div>
 

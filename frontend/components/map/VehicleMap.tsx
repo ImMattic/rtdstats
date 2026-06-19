@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Tooltip, Polyline, useMapEvents } from "react-leaflet";
 import type { VehiclePosition, RailShape } from "@/lib/types";
-import { useRailShapes } from "@/lib/hooks";
+import { useRailShapes, useRouteShape } from "@/lib/hooks";
 import { headwayColor } from "@/lib/utils";
 
 const DENVER_CENTER: [number, number] = [39.7392, -104.9903];
@@ -15,6 +15,7 @@ const RAIL_TYPES = new Set(["0", "1", "2"]); // 0=tram/LRT, 1=subway, 2=commuter
 interface Props {
   vehicles: VehiclePosition[];
   onVehicleClick: (v: VehiclePosition) => void;
+  selectedVehicle?: VehiclePosition | null;
 }
 
 function iconPx(zoom: number): number {
@@ -165,7 +166,52 @@ function VehicleMarkers({ vehicles, onVehicleClick }: Props) {
   );
 }
 
-export default function VehicleMap({ vehicles, onVehicleClick }: Props) {
+function SelectedBusRouteLine({ selectedVehicle }: { selectedVehicle?: VehiclePosition | null }) {
+  const selectedIsBus = selectedVehicle?.route_type === "3";
+  const routeId = selectedIsBus ? selectedVehicle?.route_id : undefined;
+  const { data } = useRouteShape(routeId);
+
+  if (!selectedIsBus || !data?.shapes?.length) return null;
+
+  const busLat = selectedVehicle.latitude;
+  const busLon = selectedVehicle.longitude;
+
+  const selectedShape =
+    busLat === null || busLon === null
+      ? data.shapes[0]
+      : data.shapes.reduce((bestShape, currentShape) => {
+          const bestDistance = bestShape.reduce((acc, [lat, lon]) => {
+            const dLat = lat - busLat;
+            const dLon = lon - busLon;
+            const d = dLat * dLat + dLon * dLon;
+            return d < acc ? d : acc;
+          }, Number.POSITIVE_INFINITY);
+
+          const currentDistance = currentShape.reduce((acc, [lat, lon]) => {
+            const dLat = lat - busLat;
+            const dLon = lon - busLon;
+            const d = dLat * dLat + dLon * dLon;
+            return d < acc ? d : acc;
+          }, Number.POSITIVE_INFINITY);
+
+          return currentDistance < bestDistance ? currentShape : bestShape;
+        }, data.shapes[0]);
+
+  return (
+    <>
+      <Polyline
+        positions={selectedShape as [number, number][]}
+        pathOptions={{ color: "#7dd3fc", weight: 6, opacity: 0.45 }}
+      />
+      <Polyline
+        positions={selectedShape as [number, number][]}
+        pathOptions={{ color: data.color || "#38bdf8", weight: 3, opacity: 0.95 }}
+      />
+    </>
+  );
+}
+
+export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle }: Props) {
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const L = require("leaflet") as typeof import("leaflet");
@@ -192,6 +238,7 @@ export default function VehicleMap({ vehicles, onVehicleClick }: Props) {
         maxZoom={19}
       />
       <RailLines />
+      <SelectedBusRouteLine selectedVehicle={selectedVehicle} />
       <VehicleMarkers vehicles={vehicles} onVehicleClick={onVehicleClick} />
     </MapContainer>
   );

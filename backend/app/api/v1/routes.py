@@ -153,10 +153,96 @@ def _load_rail_shapes() -> list[dict[str, Any]]:
     return result
 
 
+@lru_cache(maxsize=1)
+def _load_route_shapes_index() -> dict[str, dict[str, Any]]:
+    """Read GTFS static files once and return all route shapes keyed by route_id."""
+    root = _gtfs_root()
+
+    # 1. Collect route metadata
+    routes_meta: dict[str, dict[str, Any]] = {}
+    for folder in TRANSIT_FOLDERS:
+        path = root / folder / "routes.txt"
+        if not path.exists():
+            continue
+        with path.open("r", encoding="utf-8-sig", newline="") as fh:
+            for row in csv.DictReader(fh):
+                rid = row.get("route_id", "").strip()
+                if not rid:
+                    continue
+                color = row.get("route_color", "888888").strip() or "888888"
+                routes_meta[rid] = {
+                    "route_id": rid,
+                    "short_name": row.get("route_short_name", "").strip(),
+                    "route_type": row.get("route_type", "").strip(),
+                    "color": f"#{color}",
+                }
+
+    # 2. Map route_id -> shape_ids and shape_id -> folder
+    route_shape_ids: dict[str, set[str]] = defaultdict(set)
+    shape_id_folder: dict[str, str] = {}
+    for folder in TRANSIT_FOLDERS:
+        path = root / folder / "trips.txt"
+        if not path.exists():
+            continue
+        with path.open("r", encoding="utf-8-sig", newline="") as fh:
+            for row in csv.DictReader(fh):
+                rid = row.get("route_id", "").strip()
+                sid = row.get("shape_id", "").strip()
+                if rid in routes_meta and sid:
+                    route_shape_ids[rid].add(sid)
+                    shape_id_folder[sid] = folder
+
+    # 3. Load coordinates for each required shape_id
+    shape_coords: dict[str, list[list[float]]] = {}
+    for folder in TRANSIT_FOLDERS:
+        path = root / folder / "shapes.txt"
+        if not path.exists():
+            continue
+        raw: dict[str, list[tuple[int, float, float]]] = defaultdict(list)
+        with path.open("r", encoding="utf-8-sig", newline="") as fh:
+            for row in csv.DictReader(fh):
+                sid = row.get("shape_id", "").strip()
+                if sid not in shape_id_folder or shape_id_folder[sid] != folder:
+                    continue
+                try:
+                    seq = int(row.get("shape_pt_sequence", 0))
+                    lat = float(row.get("shape_pt_lat", 0))
+                    lon = float(row.get("shape_pt_lon", 0))
+                    raw[sid].append((seq, lat, lon))
+                except (ValueError, TypeError):
+                    pass
+        for sid, pts in raw.items():
+            pts.sort(key=lambda p: p[0])
+            shape_coords[sid] = [[p[1], p[2]] for p in pts]
+
+    # 4. Assemble result
+    result: dict[str, dict[str, Any]] = {}
+    for rid, meta in routes_meta.items():
+        shapes = [
+            shape_coords[sid]
+            for sid in route_shape_ids.get(rid, set())
+            if sid in shape_coords
+        ]
+        if shapes:
+            result[rid] = {**meta, "shapes": shapes}
+
+    return result
+
+
 @router.get("/shapes", response_model=dict)
 async def get_rail_shapes() -> dict:
     """Return GeoJSON-like shapes for all RTD rail routes (route_type 0/1/2)."""
     return {"shapes": _load_rail_shapes()}
+
+
+@router.get("/shape/{route_id}", response_model=dict)
+async def get_route_shape(route_id: str) -> dict:
+    """Return shape geometry for one route (used by selected vehicle overlay)."""
+    shape = _load_route_shapes_index().get(route_id)
+    if not shape:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"Route shape {route_id!r} not found")
+    return shape
 
 
 @router.get("/{route_id}", response_model=dict)
