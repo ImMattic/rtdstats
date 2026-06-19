@@ -6,12 +6,6 @@ RTD Stats pulls live vehicle positions from the RTD GTFS-RT feed every 10 second
 
 ---
 
-## Screenshots
-
-> _Add screenshots here once the UI is stable._
-
----
-
 ## Features
 
 - **Live map** — vehicle positions update every 10 seconds via Leaflet; click any vehicle for route, next stop, and on-time status
