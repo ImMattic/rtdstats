@@ -81,5 +81,6 @@ jobs:
           file: frontend/Dockerfile
           push: true
           tags: ${{ steps.tags.outputs.tags }}
+          build-args: BACKEND_URL=http://backend:8000
           cache-from: type=gha
           cache-to: type=gha,mode=max
