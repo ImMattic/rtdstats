@@ -219,11 +219,5 @@ The items below are the current priorities. See [TODO.md](TODO.md) for the full 
 
 ## Data Sources
 
-- **[RTD GTFS-RT](https://www.rtd-denver.com/developer-resources)** — live vehicle positions and trip updates (protobuf, updated every 10–30 seconds)
+- **[RTD GTFS-RT](https://www.rtd-denver.com/open-records/open-spatial-information/gtfs)** — live vehicle positions and trip updates (protobuf, updated every 10–30 seconds)
 - **RTD GTFS Static** — routes, stops, shapes, and schedule data (bundled in `gtfs-static/`)
-
----
-
-## License
-
-[MIT](LICENSE)
