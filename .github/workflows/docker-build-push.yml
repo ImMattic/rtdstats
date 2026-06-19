@@ -6,31 +6,13 @@ on:
       - main
       - staging
 
-jobs:
-  set-tags:
-    name: Compute Image Tags
-    runs-on: ubuntu-latest
-    outputs:
-      backend_tags: ${{ steps.tags.outputs.backend_tags }}
-      frontend_tags: ${{ steps.tags.outputs.frontend_tags }}
-    steps:
-      - name: Compute tags
-        id: tags
-        run: |
-          USER=${{ secrets.DOCKERHUB_USERNAME }}
-          SHA=${{ github.sha }}
-          if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "backend_tags=${USER}/rtdstats-backend:latest,${USER}/rtdstats-backend:${SHA}" >> "$GITHUB_OUTPUT"
-            echo "frontend_tags=${USER}/rtdstats-frontend:latest,${USER}/rtdstats-frontend:${SHA}" >> "$GITHUB_OUTPUT"
-          else
-            echo "backend_tags=${USER}/rtdstats-backend:staging,${USER}/rtdstats-backend:staging-${SHA}" >> "$GITHUB_OUTPUT"
-            echo "frontend_tags=${USER}/rtdstats-frontend:staging,${USER}/rtdstats-frontend:staging-${SHA}" >> "$GITHUB_OUTPUT"
-          fi
+env:
+  REGISTRY: docker.io
 
+jobs:
   build-backend:
     name: Build & Push Backend
     runs-on: ubuntu-latest
-    needs: set-tags
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,6 +25,17 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Compute tags
+        id: tags
+        run: |
+          USER=${{ secrets.DOCKERHUB_USERNAME }}
+          SHA=${{ github.sha }}
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "tags=${USER}/rtdstats-backend:latest,${USER}/rtdstats-backend:${SHA}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tags=${USER}/rtdstats-backend:staging,${USER}/rtdstats-backend:staging-${SHA}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build and push backend image
         uses: docker/build-push-action@v6
@@ -50,14 +43,13 @@ jobs:
           context: .
           file: backend/Dockerfile
           push: true
-          tags: ${{ needs.set-tags.outputs.backend_tags }}
+          tags: ${{ steps.tags.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   build-frontend:
     name: Build & Push Frontend
     runs-on: ubuntu-latest
-    needs: set-tags
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -71,12 +63,23 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Compute tags
+        id: tags
+        run: |
+          USER=${{ secrets.DOCKERHUB_USERNAME }}
+          SHA=${{ github.sha }}
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "tags=${USER}/rtdstats-frontend:latest,${USER}/rtdstats-frontend:${SHA}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tags=${USER}/rtdstats-frontend:staging,${USER}/rtdstats-frontend:staging-${SHA}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build and push frontend image
         uses: docker/build-push-action@v6
         with:
           context: frontend
           file: frontend/Dockerfile
           push: true
-          tags: ${{ needs.set-tags.outputs.frontend_tags }}
+          tags: ${{ steps.tags.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
