@@ -6,8 +6,8 @@ COMPOSE_FILE="/opt/rtdstats/deployment/docker-compose.staging.yml"
 ENV_FILE="/opt/rtdstats/.env"
 LOG_PREFIX="[$(date '+%Y-%m-%d %H:%M:%S')]"
 
-BACKEND_IMAGE="immattic/rtdstats-backend:staging"
-FRONTEND_IMAGE="immattic/rtdstats-frontend:staging"
+BACKEND_IMAGE="aggiematt/rtdstats-backend:staging"
+FRONTEND_IMAGE="aggiematt/rtdstats-frontend:staging"
 
 digest_before() {
     docker inspect --format='{{index .RepoDigests 0}}' "$1" 2>/dev/null || echo "none"
