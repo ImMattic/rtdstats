@@ -32,7 +32,7 @@ services:
       db:
         condition: service_healthy
     volumes:
-      - ./gtfs-static:/app/gtfs-static:ro
+      - ../gtfs-static:/app/gtfs-static:ro
 
   frontend:
     image: aggiematt/rtdstats-frontend:staging

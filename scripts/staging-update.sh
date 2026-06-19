@@ -2,7 +2,7 @@
 # Polls DockerHub for new staging images and redeploys if either has changed.
 # Run via cron every minute. Logs to /var/log/rtdstats-update.log.
 
-COMPOSE_FILE="/opt/rtdstats/docker-compose.staging.yml"
+COMPOSE_FILE="/opt/rtdstats/deployment/docker-compose.staging.yml"
 ENV_FILE="/opt/rtdstats/.env"
 LOG_PREFIX="[$(date '+%Y-%m-%d %H:%M:%S')]"
 
