@@ -161,16 +161,54 @@ async def test_alerts_skips_endpoint_stop(client, db_session):
                 lat=39.7392,
                 lon=-104.9903,
                 current_status=2,
-                current_stop_sequence=10,  # last stop of TRIP1
                 timestamp=now - timedelta(minutes=20 - i * 2),
             )
         )
     await db_session.flush()
 
-    # Inject endpoint maps directly so the test doesn't depend on GTFS static files.
-    stats_mod._trip_endpoints = {"TRIP1": (1, 10)}
+    # Inject endpoint maps: TRIP1's last stop is at the vehicle's exact position.
+    stats_mod._trip_endpoint_stops = {"TRIP1": ("STOP_FIRST", "STOP_LAST")}
+    mock_stops = {
+        "STOP_FIRST": {"stop_lat": 39.0, "stop_lon": -105.0},  # far away
+        "STOP_LAST": {"stop_lat": 39.7392, "stop_lon": -104.9903},  # at vehicle
+    }
+    with _naive_now(), patch(
+        "app.api.v1.stats.load_gtfs_static_data", return_value=({}, mock_stops)
+    ):
+        resp = await client.get("/api/v1/stats/alerts")
+    assert resp.json()["alerts"] == []
+
+
+@pytest.mark.asyncio
+async def test_alerts_skips_endpoint_stop_route_fallback(client, db_session):
+    """When trip_id is absent from static data, fall back to route-level terminals."""
+    import app.api.v1.stats as stats_mod
+
+    now = _dt_class.now(timezone.utc).replace(tzinfo=None)
+    for i in range(5):
+        db_session.add(
+            make_vehicle(
+                id=i + 10,
+                vehicle_id="V2",
+                trip_id="UNKNOWN_TRIP",  # not in static schedule
+                route_id="19",
+                lat=39.7392,
+                lon=-104.9903,
+                current_status=2,
+                timestamp=now - timedelta(minutes=20 - i * 2),
+            )
+        )
+    await db_session.flush()
+
+    # Trip not in static data; route-level fallback has the terminal nearby.
     stats_mod._trip_endpoint_stops = {}
-    with _naive_now():
+    stats_mod._route_terminal_stops = {"19": {"CIVIC_CENTER"}}
+    mock_stops = {
+        "CIVIC_CENTER": {"stop_lat": 39.7392, "stop_lon": -104.9903},
+    }
+    with _naive_now(), patch(
+        "app.api.v1.stats.load_gtfs_static_data", return_value=({}, mock_stops)
+    ):
         resp = await client.get("/api/v1/stats/alerts")
     assert resp.json()["alerts"] == []
 
