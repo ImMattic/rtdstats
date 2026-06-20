@@ -8,7 +8,7 @@ import Providers from "./providers";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "RTDstats",
+  title: "RTDstats - Denver RTD Tracking",
   description:
     "Real-time and historical tracking for Denver RTD — rail, bus, and Flatiron Flyer.",
 };
