@@ -138,3 +138,15 @@ export interface AlertsResponse {
 export interface RoutesResponse {
   routes: RouteInfo[];
 }
+
+export interface RouteStop {
+  stop_id: string;
+  stop_name: string;
+  stop_lat: number;
+  stop_lon: number;
+}
+
+export interface RouteStopsResponse {
+  route_id: string;
+  stops: RouteStop[];
+}

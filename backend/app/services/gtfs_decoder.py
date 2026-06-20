@@ -99,13 +99,22 @@ def load_gtfs_static_data(gtfs_static_root: Path | None = None) -> tuple[dict[st
     return routes, stops
 
 
-def load_trip_endpoint_sequences(gtfs_static_root: Path | None = None) -> dict[str, tuple[int, int]]:
-    """Return {trip_id: (min_stop_sequence, max_stop_sequence)} for all trips.
+def load_trip_endpoint_sequences(gtfs_static_root: Path | None = None) -> tuple[
+    dict[str, tuple[int, int]],
+    dict[str, tuple[str | None, str | None]],
+]:
+    """Return endpoint data for all trips.
+
+    Returns a pair:
+      sequences — {trip_id: (min_stop_sequence, max_stop_sequence)}
+      stop_ids  — {trip_id: (first_stop_id, last_stop_id)}
 
     Used to exclude vehicles that are legitimately waiting at route terminals.
     """
     root = gtfs_static_root or (_default_project_root() / "gtfs-static")
-    endpoints: dict[str, tuple[int, int]] = {}
+    sequences: dict[str, tuple[int, int]] = {}
+    stop_ids: dict[str, tuple[str | None, str | None]] = {}
+
     for folder in TRANSIT_FOLDERS:
         f = root / folder / "stop_times.txt"
         if not f.exists():
@@ -114,18 +123,26 @@ def load_trip_endpoint_sequences(gtfs_static_root: Path | None = None) -> dict[s
             for row in csv.DictReader(handle):
                 trip_id = row.get("trip_id")
                 seq_str = row.get("stop_sequence")
+                stop_id = row.get("stop_id", "").strip() or None
                 if not trip_id or not seq_str:
                     continue
                 try:
                     seq = int(seq_str)
                 except ValueError:
                     continue
-                if trip_id in endpoints:
-                    lo, hi = endpoints[trip_id]
-                    endpoints[trip_id] = (min(lo, seq), max(hi, seq))
+                if trip_id in sequences:
+                    lo, hi = sequences[trip_id]
+                    first_sid, last_sid = stop_ids[trip_id]
+                    if seq < lo:
+                        sequences[trip_id] = (seq, hi)
+                        stop_ids[trip_id] = (stop_id, last_sid)
+                    elif seq > hi:
+                        sequences[trip_id] = (lo, seq)
+                        stop_ids[trip_id] = (first_sid, stop_id)
                 else:
-                    endpoints[trip_id] = (seq, seq)
-    return endpoints
+                    sequences[trip_id] = (seq, seq)
+                    stop_ids[trip_id] = (stop_id, stop_id)
+    return sequences, stop_ids
 
 
 def _extract_occupancy(vehicle_pos: Any) -> str:

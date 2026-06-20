@@ -167,8 +167,9 @@ async def test_alerts_skips_endpoint_stop(client, db_session):
         )
     await db_session.flush()
 
-    # Inject endpoint map directly so the test doesn't depend on GTFS static files.
+    # Inject endpoint maps directly so the test doesn't depend on GTFS static files.
     stats_mod._trip_endpoints = {"TRIP1": (1, 10)}
+    stats_mod._trip_endpoint_stops = {}
     with _naive_now():
         resp = await client.get("/api/v1/stats/alerts")
     assert resp.json()["alerts"] == []

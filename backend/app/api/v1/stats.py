@@ -200,13 +200,14 @@ async def frequency_stats(
 _ALERTS_CACHE_TTL_SECONDS = 10.0
 _alerts_cache: tuple[float, AlertsResponse] | None = None
 _trip_endpoints: dict[str, tuple[int, int]] | None = None
+_trip_endpoint_stops: dict[str, tuple[str | None, str | None]] | None = None
 
 
 @router.get("/alerts", response_model=AlertsResponse)
 async def stuck_vehicle_alerts(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AlertsResponse:
-    global _alerts_cache, _trip_endpoints
+    global _alerts_cache, _trip_endpoints, _trip_endpoint_stops
     mono = time.monotonic()
     if _alerts_cache is not None and mono - _alerts_cache[0] < _ALERTS_CACHE_TTL_SECONDS:
         return _alerts_cache[1]
@@ -245,7 +246,7 @@ async def stuck_vehicle_alerts(
         veh_rows[r.vehicle_id or r.trip_id or ""].append(r)
 
     if _trip_endpoints is None:
-        _trip_endpoints = load_trip_endpoint_sequences()
+        _trip_endpoints, _trip_endpoint_stops = load_trip_endpoint_sequences()
     routes_static, stops_static = load_gtfs_static_data()
 
     now = datetime.now(tz=timezone.utc)
@@ -284,12 +285,18 @@ async def stuck_vehicle_alerts(
         if streak_statuses and streak_statuses <= {1}:
             continue
 
-        # Skip vehicles sitting at the first or last stop of their scheduled trip.
-        # Vehicles routinely wait at terminals between runs.
-        if latest.trip_id and latest.current_stop_sequence is not None:
-            ep = _trip_endpoints.get(latest.trip_id)
-            if ep and latest.current_stop_sequence in (ep[0], ep[1]):
-                continue
+        # Skip vehicles at the first or last stop of their scheduled trip.
+        # Checked two ways: by stop_sequence and by stop_id, so either route-match
+        # or stop-name-match can catch a terminal dwell even when one lookup misses.
+        if latest.trip_id:
+            if latest.current_stop_sequence is not None and _trip_endpoints:
+                ep = _trip_endpoints.get(latest.trip_id)
+                if ep and latest.current_stop_sequence in (ep[0], ep[1]):
+                    continue
+            if latest.stop_id is not None and _trip_endpoint_stops is not None:
+                ep_stops = _trip_endpoint_stops.get(latest.trip_id)
+                if ep_stops and latest.stop_id in ep_stops:
+                    continue
 
         stop_info = stops_static.get(latest.stop_id or "", {})
         route_info = routes_static.get(latest.route_id, {})
