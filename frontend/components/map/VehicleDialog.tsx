@@ -99,7 +99,7 @@ export default function VehicleDialog({ vehicle: v, onClose }: Props) {
         {/* RTD schedule link */}
         <div className="pt-1.5 border-t border-gray-100">
           <a
-            href="https://www.rtd-denver.com/routes-and-schedules"
+            href={`https://app.rtd-denver.com/route/${v.route_short_name}/schedule`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-xs text-rtd-blue hover:underline"
