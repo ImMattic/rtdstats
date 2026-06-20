@@ -3,7 +3,7 @@
 # Run via cron every minute. Logs to /var/log/rtdstats-update.log.
 
 COMPOSE_FILE="/opt/rtdstats/deployment/docker-compose.staging.yml"
-ENV_FILE="/opt/rtdstats/.env"
+ENV_FILE="/opt/rtdstats/deployment/.env"
 LOG_PREFIX="[$(date '+%Y-%m-%d %H:%M:%S')]"
 
 BACKEND_IMAGE="aggiematt/rtdstats-backend:staging"
