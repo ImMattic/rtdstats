@@ -1,4 +1,5 @@
 "use client";
+import { memo, useMemo } from "react";
 import {
   BarChart,
   Bar,
@@ -15,15 +16,16 @@ interface Props {
   routes: OnTimeRouteStats[];
 }
 
-export default function OnTimeChart({ routes }: Props) {
+function OnTimeChart({ routes }: Props) {
+  // Sort by on_time_pct descending, top 20; recompute only when routes change.
+  const data = useMemo(
+    () => [...routes].sort((a, b) => b.on_time_pct - a.on_time_pct).slice(0, 20),
+    [routes],
+  );
+
   if (!routes.length) {
     return <p className="text-sm text-gray-500 py-4">No on-time data yet.</p>;
   }
-
-  // Sort by on_time_pct descending
-  const data = [...routes]
-    .sort((a, b) => b.on_time_pct - a.on_time_pct)
-    .slice(0, 20); // cap for readability
 
   return (
     <ResponsiveContainer width="100%" height={260}>
@@ -63,3 +65,5 @@ export default function OnTimeChart({ routes }: Props) {
     </ResponsiveContainer>
   );
 }
+
+export default memo(OnTimeChart);

@@ -16,6 +16,10 @@ from app.services.gtfs_decoder import load_gtfs_static_data
 
 router = APIRouter(prefix="/historical", tags=["historical"])
 
+# Pagination total is capped to keep wide-range queries cheap. If the true count
+# exceeds this the UI simply shows "many pages" rather than an exact figure.
+_COUNT_CAP = 50_000
+
 
 @router.get("/vehicles", response_model=dict)
 async def get_historical_vehicles(
@@ -53,9 +57,11 @@ async def get_historical_vehicles(
     result = await db.execute(stmt)
     rows = result.scalars().all()
 
-    # Enrich with static route names and most-recent delays
+    # Enrich with static route names and most-recent delays. Only look up delays
+    # for the trip_ids actually on this page — not the whole (up to 1-year) range.
     routes_static, _ = load_gtfs_static_data()
-    delay_map = await _delay_map(db, start, end, route_id)
+    page_trip_ids = {r.trip_id for r in rows if r.trip_id}
+    delay_map = await _delay_map(db, start, end, page_trip_ids)
 
     vehicles = [
         VehiclePositionHistoryOut(
@@ -76,13 +82,19 @@ async def get_historical_vehicles(
         for r in rows
     ]
 
-    count_stmt = select(func.count()).select_from(VehiclePosition).where(
-        VehiclePosition.timestamp >= start,
-        VehiclePosition.timestamp <= end,
+    # Bounded count: stop scanning past _COUNT_CAP rows so a wide date range
+    # (the table can hold a year of data) can't turn pagination into a full scan.
+    inner = (
+        select(VehiclePosition.id)
+        .where(
+            VehiclePosition.timestamp >= start,
+            VehiclePosition.timestamp <= end,
+        )
+        .limit(_COUNT_CAP)
     )
     if route_id:
-        count_stmt = count_stmt.where(VehiclePosition.route_id == route_id)
-    total = int((await db.execute(count_stmt)).scalar_one())
+        inner = inner.where(VehiclePosition.route_id == route_id)
+    total = int((await db.execute(select(func.count()).select_from(inner.subquery()))).scalar_one())
     total_pages = (total + limit - 1) // limit if total else 0
 
     return {
@@ -101,30 +113,26 @@ async def _delay_map(
     db: AsyncSession,
     start: datetime,
     end: datetime,
-    route_id: str | None,
+    trip_ids: set[str],
 ) -> dict[str, int]:
-    """Return the most-recent non-null arrival_delay (seconds) keyed by trip_id."""
-    # Subquery: find the latest timestamp per trip_id that has a delay value
-    subq = (
-        select(
-            TripUpdate.trip_id,
-            func.max(TripUpdate.timestamp).label("max_ts"),
-        )
+    """Latest non-null arrival_delay (seconds) keyed by trip_id, for the given trips.
+
+    Scoped to the page's trip_ids (uses ``ix_tu_trip_ts``) rather than scanning
+    the whole date range. Uses ``DISTINCT ON`` to take the latest row per trip.
+    """
+    if not trip_ids:
+        return {}
+    stmt = (
+        select(TripUpdate.trip_id, TripUpdate.arrival_delay)
         .where(
+            TripUpdate.trip_id.in_(trip_ids),
             TripUpdate.timestamp >= start,
             TripUpdate.timestamp <= end,
             TripUpdate.arrival_delay.is_not(None),
         )
-        .group_by(TripUpdate.trip_id)
-        .subquery()
+        .order_by(TripUpdate.trip_id, TripUpdate.timestamp.desc())
+        .distinct(TripUpdate.trip_id)
     )
-    stmt = select(TripUpdate.trip_id, TripUpdate.arrival_delay).join(
-        subq,
-        (TripUpdate.trip_id == subq.c.trip_id) & (TripUpdate.timestamp == subq.c.max_ts),
-    )
-    if route_id:
-        stmt = stmt.where(TripUpdate.route_id == route_id)
-
     result = await db.execute(stmt)
     return {
         trip_id: delay

@@ -1,6 +1,6 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useVehicles } from "@/lib/hooks";
 import type { VehiclePosition } from "@/lib/types";
 import VehicleDialog from "@/components/map/VehicleDialog";
@@ -17,7 +17,8 @@ export default function HomePage() {
   const { data, isLoading, isError, dataUpdatedAt } = useVehicles();
   const [selected, setSelected] = useState<VehiclePosition | null>(null);
 
-  const handleVehicleClick = (vehicle: VehiclePosition) => {
+  // Stable identity so the memoized marker layer isn't rebuilt every render.
+  const handleVehicleClick = useCallback((vehicle: VehiclePosition) => {
     setSelected((prev) => {
       if (!prev) return vehicle;
 
@@ -42,7 +43,7 @@ export default function HomePage() {
 
       return vehicle;
     });
-  };
+  }, []);
 
   const vehicles = data?.vehicles ?? [];
   const totalRoutes = new Set(vehicles.map((v) => v.route_id)).size;

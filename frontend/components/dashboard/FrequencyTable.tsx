@@ -1,3 +1,5 @@
+"use client";
+import { memo, useMemo } from "react";
 import type { FrequencyRouteStats } from "@/lib/types";
 import { headwayColor } from "@/lib/utils";
 
@@ -25,7 +27,13 @@ function FrequencyBadge({ minutes }: { minutes: number }) {
   );
 }
 
-export default function FrequencyTable({ routes }: Props) {
+function FrequencyTable({ routes }: Props) {
+  // Sort by avg headway ascending; recompute only when routes change.
+  const sorted = useMemo(
+    () => [...routes].sort((a, b) => a.avg_headway_minutes - b.avg_headway_minutes),
+    [routes],
+  );
+
   if (!routes.length) {
     return <p className="text-sm text-gray-500 py-4">No frequency data yet.</p>;
   }
@@ -46,8 +54,7 @@ export default function FrequencyTable({ routes }: Props) {
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {[...routes]
-            .sort((a, b) => a.avg_headway_minutes - b.avg_headway_minutes)
+          {sorted
             .map((r) => (
               <tr key={r.route_id} className="hover:bg-gray-50">
                 <td className="px-3 py-2 font-bold text-gray-900">{r.route_short_name}</td>
@@ -70,3 +77,5 @@ export default function FrequencyTable({ routes }: Props) {
     </div>
   );
 }
+
+export default memo(FrequencyTable);

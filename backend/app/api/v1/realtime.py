@@ -1,6 +1,7 @@
 """Real-time vehicle position endpoints."""
 from __future__ import annotations
 
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
@@ -46,23 +47,19 @@ async def _latest_positions(
 
     Since timestamps now reflect ingest time (not GPS clock), this window
     reliably captures the last ~6 poll cycles at the default 10s interval.
+
+    Uses Postgres ``DISTINCT ON`` (one index-friendly scan of the hot chunk)
+    instead of a self-join against a ``max(timestamp)`` subquery.
     """
     cutoff = datetime.now(tz=timezone.utc) - timedelta(seconds=60)
-    # Use a stable key for vehicles: prefer `vehicle_id` but fall back to `trip_id`
+    # Stable key for vehicles: prefer `vehicle_id` but fall back to `trip_id`.
     veh_key_expr = func.coalesce(VehiclePosition.vehicle_id, VehiclePosition.trip_id)
-    subq = (
-        select(
-            veh_key_expr.label("veh_key"),
-            func.max(VehiclePosition.timestamp).label("max_ts"),
-        )
-        .where(VehiclePosition.timestamp >= cutoff)
-        .group_by(veh_key_expr)
-        .subquery()
-    )
 
-    stmt = select(VehiclePosition).join(
-        subq,
-        (func.coalesce(VehiclePosition.vehicle_id, VehiclePosition.trip_id) == subq.c.veh_key) & (VehiclePosition.timestamp == subq.c.max_ts),
+    stmt = (
+        select(VehiclePosition)
+        .where(VehiclePosition.timestamp >= cutoff)
+        .order_by(veh_key_expr, VehiclePosition.timestamp.desc())
+        .distinct(veh_key_expr)
     )
     if route_id:
         stmt = stmt.where(VehiclePosition.route_id == route_id)
@@ -74,29 +71,33 @@ async def _latest_positions(
 async def _latest_delays(
     db: AsyncSession,
 ) -> dict[str, int]:
-    """Return latest arrival_delay (seconds) keyed by trip_id."""
+    """Return latest arrival_delay (seconds) keyed by trip_id.
+
+    All stop-time updates for a trip share one ingest timestamp, so we pick, per
+    trip, the row at the latest timestamp preferring a non-null delay at the
+    earliest upcoming stop.
+    """
     cutoff = datetime.now(tz=timezone.utc) - timedelta(minutes=5)
-    subq = (
-        select(
-            TripUpdate.trip_id,
-            func.max(TripUpdate.timestamp).label("max_ts"),
+    stmt = (
+        select(TripUpdate.trip_id, TripUpdate.arrival_delay)
+        .where(
+            TripUpdate.timestamp >= cutoff,
+            TripUpdate.trip_id.is_not(None),
         )
-        .where(TripUpdate.timestamp >= cutoff)
-        .group_by(TripUpdate.trip_id)
-        .subquery()
-    )
-    stmt = select(TripUpdate).join(
-        subq,
-        (TripUpdate.trip_id == subq.c.trip_id) & (TripUpdate.timestamp == subq.c.max_ts),
+        .order_by(
+            TripUpdate.trip_id,
+            TripUpdate.timestamp.desc(),
+            TripUpdate.arrival_delay.is_(None),  # non-null delays first
+            TripUpdate.stop_sequence,
+        )
+        .distinct(TripUpdate.trip_id)
     )
     result = await db.execute(stmt)
-    rows = result.scalars().all()
-    # Aggregate by trip_id – keep first non-null arrival_delay
-    delays: dict[str, int] = {}
-    for row in rows:
-        if row.trip_id and row.trip_id not in delays and row.arrival_delay is not None:
-            delays[row.trip_id] = row.arrival_delay
-    return delays
+    return {
+        trip_id: delay
+        for trip_id, delay in result.all()
+        if trip_id is not None and delay is not None
+    }
 
 
 def _compute_headways(
@@ -160,12 +161,22 @@ def _enrich(
     )
 
 
-# ── Endpoints ──────────────────────────────────────────────────────────────
+# ── Short-lived response cache ─────────────────────────────────────────────
+# The underlying data only changes every poll cycle (~10s), but every browser
+# tab polls every ~10s independently. Caching the assembled response for a few
+# seconds lets concurrent clients share a single DB computation. Keyed by
+# route_id; the key space is bounded by the number of routes (~190).
 
-@router.get("/vehicles", response_model=RealtimeResponse)
-async def get_all_vehicles(db: Annotated[AsyncSession, Depends(get_db)]) -> RealtimeResponse:
+_CACHE_TTL_SECONDS = 5.0
+_vehicles_cache: dict[str, tuple[float, RealtimeResponse]] = {}
+
+
+async def _build_vehicles_response(
+    db: AsyncSession,
+    route_id: str | None,
+) -> RealtimeResponse:
     routes, stops = _routes_and_stops()
-    positions = await _latest_positions(db)
+    positions = await _latest_positions(db, route_id=route_id)
     delays = await _latest_delays(db)
     headways = _compute_headways(positions)
 
@@ -183,24 +194,30 @@ async def get_all_vehicles(db: Annotated[AsyncSession, Depends(get_db)]) -> Real
     )
 
 
+async def _cached_vehicles_response(
+    db: AsyncSession,
+    route_id: str | None,
+) -> RealtimeResponse:
+    key = route_id or "__all__"
+    now = time.monotonic()
+    hit = _vehicles_cache.get(key)
+    if hit is not None and now - hit[0] < _CACHE_TTL_SECONDS:
+        return hit[1]
+    resp = await _build_vehicles_response(db, route_id)
+    _vehicles_cache[key] = (now, resp)
+    return resp
+
+
+# ── Endpoints ──────────────────────────────────────────────────────────────
+
+@router.get("/vehicles", response_model=RealtimeResponse)
+async def get_all_vehicles(db: Annotated[AsyncSession, Depends(get_db)]) -> RealtimeResponse:
+    return await _cached_vehicles_response(db, None)
+
+
 @router.get("/vehicles/{route_id}", response_model=RealtimeResponse)
 async def get_vehicles_by_route(
     route_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> RealtimeResponse:
-    routes, stops = _routes_and_stops()
-    positions = await _latest_positions(db, route_id=route_id)
-    delays = await _latest_delays(db)
-    headways = _compute_headways(positions)
-
-    enriched = [_enrich(vp, routes, stops, delays, headways) for vp in positions]
-    vehicles_with_loc = [v for v in enriched if v.latitude is not None and v.longitude is not None]
-
-    return RealtimeResponse(
-        updated_at=datetime.now(tz=timezone.utc),
-        vehicles=vehicles_with_loc,
-        route_headways=headways,
-        total_vehicles=len(enriched),
-        vehicles_with_location=len(vehicles_with_loc),
-        unique_vehicle_keys=None,
-    )
+    return await _cached_vehicles_response(db, route_id)
