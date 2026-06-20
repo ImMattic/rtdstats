@@ -74,7 +74,7 @@ export default function VehicleDialog({ vehicle: v, onClose }: Props) {
         {/* Headway */}
         {v.headway_minutes !== null && (
           <p className="text-gray-500 text-xs">
-            Scheduled headway:{" "}
+            Real-time headway:{" "}
             <span className="font-medium text-gray-800">
               {v.headway_minutes} min
             </span>
