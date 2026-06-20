@@ -2,7 +2,7 @@
 
 import L from "leaflet";
 import { memo, useEffect, useMemo, useState } from "react";
-import { MapContainer, TileLayer, Marker, Tooltip, Polyline, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Tooltip, Polyline, useMap, useMapEvents } from "react-leaflet";
 import type { VehiclePosition, RailShape } from "@/lib/types";
 import { useRailShapes, useRouteShape } from "@/lib/hooks";
 import { headwayColor } from "@/lib/utils";
@@ -13,10 +13,17 @@ const DEFAULT_ZOOM = 11;
 // RTD route_type values that are rail
 const RAIL_TYPES = new Set(["0", "1", "2"]); // 0=tram/LRT, 1=subway, 2=commuter rail
 
+interface FlyToCoords {
+  lat: number;
+  lng: number;
+  zoom?: number;
+}
+
 interface Props {
   vehicles: VehiclePosition[];
   onVehicleClick: (v: VehiclePosition) => void;
   selectedVehicle?: VehiclePosition | null;
+  flyTo?: FlyToCoords | null;
 }
 
 function iconPx(zoom: number): number {
@@ -222,7 +229,17 @@ function SelectedBusRouteLine({ selectedVehicle }: { selectedVehicle?: VehiclePo
   );
 }
 
-export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle }: Props) {
+function FlyToHandler({ flyTo }: { flyTo?: FlyToCoords | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (flyTo) {
+      map.flyTo([flyTo.lat, flyTo.lng], flyTo.zoom ?? 16, { duration: 1.2 });
+    }
+  }, [map, flyTo]);
+  return null;
+}
+
+export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, flyTo }: Props) {
   useEffect(() => {
     // @ts-expect-error – _getIconUrl is internal
     delete L.Icon.Default.prototype._getIconUrl;
@@ -246,6 +263,7 @@ export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle }
         subdomains="abcd"
         maxZoom={19}
       />
+      <FlyToHandler flyTo={flyTo} />
       <RailLines />
       <SelectedBusRouteLine selectedVehicle={selectedVehicle} />
       <VehicleMarkers vehicles={vehicles} onVehicleClick={onVehicleClick} />

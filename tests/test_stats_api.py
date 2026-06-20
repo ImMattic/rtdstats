@@ -126,6 +126,54 @@ async def test_alerts_single_row_ignored(client, db_session):
     assert resp.json()["alerts"] == []
 
 
+async def test_alerts_skips_zero_coordinates(client, db_session):
+    """Vehicles reporting GPS position (0, 0) are invalid readings and must not alert."""
+    now = _dt_class.now(timezone.utc).replace(tzinfo=None)
+    for i in range(5):
+        db_session.add(
+            make_vehicle(
+                id=i + 1,
+                vehicle_id="V1",
+                lat=0.0,
+                lon=0.0,
+                current_status=2,
+                timestamp=now - timedelta(minutes=20 - i * 2),
+            )
+        )
+    await db_session.flush()
+
+    with _naive_now():
+        resp = await client.get("/api/v1/stats/alerts")
+    assert resp.json()["alerts"] == []
+
+
+async def test_alerts_skips_endpoint_stop(client, db_session):
+    """Vehicles waiting at the first or last stop of their trip must not alert."""
+    import app.api.v1.stats as stats_mod
+
+    now = _dt_class.now(timezone.utc).replace(tzinfo=None)
+    for i in range(5):
+        db_session.add(
+            make_vehicle(
+                id=i + 1,
+                vehicle_id="V1",
+                trip_id="TRIP1",
+                lat=39.7392,
+                lon=-104.9903,
+                current_status=2,
+                current_stop_sequence=10,  # last stop of TRIP1
+                timestamp=now - timedelta(minutes=20 - i * 2),
+            )
+        )
+    await db_session.flush()
+
+    # Inject endpoint map directly so the test doesn't depend on GTFS static files.
+    stats_mod._trip_endpoints = {"TRIP1": (1, 10)}
+    with _naive_now():
+        resp = await client.get("/api/v1/stats/alerts")
+    assert resp.json()["alerts"] == []
+
+
 # ── /stats/ontime ─────────────────────────────────────────────────────────────
 
 def _mock_execute(rows: list):

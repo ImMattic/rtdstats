@@ -77,6 +77,35 @@ def load_gtfs_static_data(gtfs_static_root: Path | None = None) -> tuple[dict[st
     return routes, stops
 
 
+def load_trip_endpoint_sequences(gtfs_static_root: Path | None = None) -> dict[str, tuple[int, int]]:
+    """Return {trip_id: (min_stop_sequence, max_stop_sequence)} for all trips.
+
+    Used to exclude vehicles that are legitimately waiting at route terminals.
+    """
+    root = gtfs_static_root or (_default_project_root() / "gtfs-static")
+    endpoints: dict[str, tuple[int, int]] = {}
+    for folder in TRANSIT_FOLDERS:
+        f = root / folder / "stop_times.txt"
+        if not f.exists():
+            continue
+        with f.open("r", encoding="utf-8", newline="") as handle:
+            for row in csv.DictReader(handle):
+                trip_id = row.get("trip_id")
+                seq_str = row.get("stop_sequence")
+                if not trip_id or not seq_str:
+                    continue
+                try:
+                    seq = int(seq_str)
+                except ValueError:
+                    continue
+                if trip_id in endpoints:
+                    lo, hi = endpoints[trip_id]
+                    endpoints[trip_id] = (min(lo, seq), max(hi, seq))
+                else:
+                    endpoints[trip_id] = (seq, seq)
+    return endpoints
+
+
 def _extract_occupancy(vehicle_pos: Any) -> str:
     if _safe_has_field(vehicle_pos, "occupancy_status"):
         enum_value = int(vehicle_pos.occupancy_status)

@@ -22,7 +22,7 @@ from app.schemas.stats import (
     OverallOnTime,
     StuckAlert,
 )
-from app.services.gtfs_decoder import load_gtfs_static_data
+from app.services.gtfs_decoder import load_gtfs_static_data, load_trip_endpoint_sequences
 from app.config import get_settings
 
 router = APIRouter(prefix="/stats", tags=["stats"])
@@ -199,13 +199,14 @@ async def frequency_stats(
 # client; cache the assembled response briefly so concurrent tabs share one scan.
 _ALERTS_CACHE_TTL_SECONDS = 10.0
 _alerts_cache: tuple[float, AlertsResponse] | None = None
+_trip_endpoints: dict[str, tuple[int, int]] | None = None
 
 
 @router.get("/alerts", response_model=AlertsResponse)
 async def stuck_vehicle_alerts(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AlertsResponse:
-    global _alerts_cache
+    global _alerts_cache, _trip_endpoints
     mono = time.monotonic()
     if _alerts_cache is not None and mono - _alerts_cache[0] < _ALERTS_CACHE_TTL_SECONDS:
         return _alerts_cache[1]
@@ -227,6 +228,7 @@ async def stuck_vehicle_alerts(
                 VehiclePosition.latitude,
                 VehiclePosition.longitude,
                 VehiclePosition.current_status,
+                VehiclePosition.current_stop_sequence,
                 VehiclePosition.stop_id,
                 VehiclePosition.timestamp,
             )
@@ -242,6 +244,8 @@ async def stuck_vehicle_alerts(
     for r in rows:
         veh_rows[r.vehicle_id or r.trip_id or ""].append(r)
 
+    if _trip_endpoints is None:
+        _trip_endpoints = load_trip_endpoint_sequences()
     routes_static, stops_static = load_gtfs_static_data()
 
     now = datetime.now(tz=timezone.utc)
@@ -252,6 +256,11 @@ async def stuck_vehicle_alerts(
             continue
         latest = history[0]
         lat0, lon0 = latest.latitude, latest.longitude
+
+        # Skip vehicles with invalid GPS coordinates (e.g. tracker defaulting to 0,0).
+        if lat0 is None or lon0 is None or (abs(lat0) < 0.001 and abs(lon0) < 0.001):
+            continue
+
         earliest_same_pos = latest.timestamp
 
         # Walk backwards (history is already ordered newest-first) and collect
@@ -274,6 +283,13 @@ async def stuck_vehicle_alerts(
         streak_statuses = {r.current_status for r in streak if r.current_status is not None}
         if streak_statuses and streak_statuses <= {1}:
             continue
+
+        # Skip vehicles sitting at the first or last stop of their scheduled trip.
+        # Vehicles routinely wait at terminals between runs.
+        if latest.trip_id and latest.current_stop_sequence is not None:
+            ep = _trip_endpoints.get(latest.trip_id)
+            if ep and latest.current_stop_sequence in (ep[0], ep[1]):
+                continue
 
         stop_info = stops_static.get(latest.stop_id or "", {})
         route_info = routes_static.get(latest.route_id, {})

@@ -1,6 +1,7 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useCallback, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useVehicles } from "@/lib/hooks";
 import type { VehiclePosition } from "@/lib/types";
 import VehicleDialog from "@/components/map/VehicleDialog";
@@ -13,9 +14,26 @@ const VehicleMap = dynamic(() => import("@/components/map/VehicleMap"), {
   loading: () => <LoadingSpinner label="Loading map…" />,
 });
 
-export default function HomePage() {
+function HomePageInner() {
   const { data, isLoading, isError, dataUpdatedAt } = useVehicles();
   const [selected, setSelected] = useState<VehiclePosition | null>(null);
+  const searchParams = useSearchParams();
+
+  const flyTo = useMemo(() => {
+    const lat = searchParams.get("lat");
+    const lng = searchParams.get("lng");
+    if (!lat || !lng) return null;
+    return { lat: parseFloat(lat), lng: parseFloat(lng) };
+  }, [searchParams]);
+
+  const targetVehicleId = searchParams.get("vehicle_id");
+
+  // Auto-select the vehicle referenced by the URL params once the vehicle list loads.
+  useEffect(() => {
+    if (!targetVehicleId || !data?.vehicles) return;
+    const match = data.vehicles.find((v) => v.vehicle_id === targetVehicleId);
+    if (match) setSelected(match);
+  }, [targetVehicleId, data?.vehicles]);
 
   // Stable identity so the memoized marker layer isn't rebuilt every render.
   const handleVehicleClick = useCallback((vehicle: VehiclePosition) => {
@@ -105,6 +123,7 @@ export default function HomePage() {
             vehicles={vehicles}
             onVehicleClick={handleVehicleClick}
             selectedVehicle={selected}
+            flyTo={flyTo}
           />
         )}
 
@@ -114,5 +133,13 @@ export default function HomePage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={<LoadingSpinner label="Loading map…" />}>
+      <HomePageInner />
+    </Suspense>
   );
 }
