@@ -42,17 +42,22 @@ export default function DelayIncidents({ alerts }: Props) {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <span className="rounded-full bg-red-200 px-2 py-0.5 text-xs font-semibold text-red-800">
-                  {a.minutes_stuck} min
-                </span>
                 {href && (
                   <Link
                     href={href}
-                    className="rounded px-2 py-0.5 text-xs font-semibold bg-rtd-blue text-white hover:bg-blue-700 transition-colors"
+                    title="See on Map"
+                    className="text-gray-600 hover:text-gray-900 transition-colors"
                   >
-                    See on Map
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+                      <circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" strokeWidth="2" />
+                    </svg>
                   </Link>
                 )}
+                <span className="rounded-full bg-red-200 px-2 py-0.5 text-xs font-semibold text-red-800">
+                  {a.minutes_stuck} min
+                </span>
               </div>
             </div>
             <p className="mt-1 text-xs text-red-500">
