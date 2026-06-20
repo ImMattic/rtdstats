@@ -30,7 +30,7 @@ CHANGED=0
 
 if [ "$CHANGED" = "1" ]; then
     echo "$LOG_PREFIX Restarting app containers..."
-    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --no-deps --pull never frontend backend
+    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --no-deps --pull never db frontend backend
     echo "$LOG_PREFIX Done."
 else
     echo "$LOG_PREFIX No changes."
