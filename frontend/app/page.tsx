@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useVehicles } from "@/lib/hooks";
 import type { VehiclePosition } from "@/lib/types";
 import VehicleDialog from "@/components/map/VehicleDialog";
+import VehicleSearch from "@/components/map/VehicleSearch";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { headwayColor } from "@/lib/utils";
 
@@ -17,6 +18,7 @@ const VehicleMap = dynamic(() => import("@/components/map/VehicleMap"), {
 function HomePageInner() {
   const { data, isLoading, isError, dataUpdatedAt } = useVehicles();
   const [selected, setSelected] = useState<VehiclePosition | null>(null);
+  const [searchFlyTo, setSearchFlyTo] = useState<{ lat: number; lng: number; zoom?: number } | null>(null);
   const searchParams = useSearchParams();
 
   const flyTo = useMemo(() => {
@@ -34,6 +36,13 @@ function HomePageInner() {
     const match = data.vehicles.find((v) => v.vehicle_id === targetVehicleId);
     if (match) setSelected(match);
   }, [targetVehicleId, data?.vehicles]);
+
+  const handleSearchSelect = useCallback((vehicle: VehiclePosition) => {
+    setSelected(vehicle);
+    if (vehicle.latitude !== null && vehicle.longitude !== null) {
+      setSearchFlyTo({ lat: vehicle.latitude, lng: vehicle.longitude, zoom: 15 });
+    }
+  }, []);
 
   // Stable identity so the memoized marker layer isn't rebuilt every render.
   const handleVehicleClick = useCallback((vehicle: VehiclePosition) => {
@@ -110,7 +119,7 @@ function HomePageInner() {
       </div>
 
       {/* Map */}
-      <div className="relative" style={{ height: "calc(100vh - 8rem)" }}>
+      <div className="relative" style={{ height: "calc(100vh - 10rem)" }}>
         {isError ? (
           <div className="flex h-full items-center justify-center">
             <div className="text-center text-gray-500">
@@ -119,12 +128,15 @@ function HomePageInner() {
             </div>
           </div>
         ) : (
-          <VehicleMap
-            vehicles={vehicles}
-            onVehicleClick={handleVehicleClick}
-            selectedVehicle={selected}
-            flyTo={flyTo}
-          />
+          <>
+            <VehicleMap
+              vehicles={vehicles}
+              onVehicleClick={handleVehicleClick}
+              selectedVehicle={selected}
+              flyTo={searchFlyTo ?? flyTo}
+            />
+            <VehicleSearch vehicles={vehicles} onSelect={handleSearchSelect} />
+          </>
         )}
 
         {/* Click-through dialog */}

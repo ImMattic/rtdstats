@@ -9,6 +9,10 @@ import { headwayColor } from "@/lib/utils";
 
 const DENVER_CENTER: [number, number] = [39.7392, -104.9903];
 const DEFAULT_ZOOM = 11;
+const DENVER_METRO_BOUNDS: L.LatLngBoundsExpression = [
+  [38.2, -106.5],
+  [41.2, -103.5],
+];
 
 const DOWNTOWN_CENTER: [number, number] = [39.74948688769244, -104.99440656899203];
 const DOWNTOWN_ZOOM_THRESHOLD = 14;
@@ -327,6 +331,9 @@ export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, 
     <MapContainer
       center={DENVER_CENTER}
       zoom={DEFAULT_ZOOM}
+      minZoom={9}
+      maxBounds={DENVER_METRO_BOUNDS}
+      maxBoundsViscosity={1.0}
       className="h-full w-full"
       scrollWheelZoom
     >
