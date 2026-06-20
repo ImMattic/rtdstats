@@ -25,6 +25,27 @@ VEHICLE_TYPE_MAP = {
     "3": "bus",
 }
 
+# Manual overrides for new RTD lines not yet present in the bundled GTFS static feeds.
+# These supplement (or replace) anything loaded from the CSV files.
+_ROUTE_OVERRIDES: dict[str, dict[str, str]] = {
+    "101C": {
+        "route_id": "101C",
+        "route_short_name": "C",
+        "route_long_name": "C Line",
+        "route_type": "0",
+        "route_color": "f79239",
+        "agency_id": "RTD",
+    },
+    "101T": {
+        "route_id": "101T",
+        "route_short_name": "T",
+        "route_long_name": "T Line",
+        "route_type": "0",
+        "route_color": "b71318",
+        "agency_id": "RTD",
+    },
+}
+
 
 def _safe_has_field(message: Any, field_name: str) -> bool:
     try:
@@ -74,6 +95,7 @@ def load_gtfs_static_data(gtfs_static_root: Path | None = None) -> tuple[dict[st
                         "stop_lon": float(row.get("stop_lon") or 0.0),
                     }
 
+    routes.update(_ROUTE_OVERRIDES)
     return routes, stops
 
 

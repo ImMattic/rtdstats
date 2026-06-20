@@ -21,10 +21,10 @@ export function headwayColor(headwayMinutes: number | null): string {
   return "#8C1D18";                           // 60+ min – deep red
 }
 
-/** Format seconds as "+Xm Ys" / "On time" / "-Xm Ys". */
+/** Format seconds as "+Xm Ys" / "" / "-Xm Ys". Returns "" for exactly 0 (badge already says "On time"). */
 export function formatDelay(seconds: number | null): string {
   if (seconds === null) return "—";
-  if (seconds === 0) return "On time";
+  if (seconds === 0) return "";
   const sign = seconds > 0 ? "+" : "-";
   const abs = Math.abs(seconds);
   const mins = Math.floor(abs / 60);

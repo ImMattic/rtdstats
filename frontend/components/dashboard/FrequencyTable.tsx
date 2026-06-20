@@ -50,7 +50,7 @@ function FrequencyTable({ routes }: Props) {
   const [pageSize, setPageSize] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(15);
 
   const sorted = useMemo(() => {
-    const copy = [...routes];
+    const copy = routes.filter((r) => r.avg_headway_minutes > 0);
     copy.sort((a, b) => {
       const av = a[sortKey];
       const bv = b[sortKey];

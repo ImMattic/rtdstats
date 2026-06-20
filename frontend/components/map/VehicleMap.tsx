@@ -112,6 +112,7 @@ function createVehicleIcon(
 const RTD_LINE_COLORS: Record<string, string> = {
   A:  "#54C0E8",
   B:  "#4C9C2E",
+  C:  "#f79239",
   D:  "#047835",
   E:  "#691F74",
   FF: "#003595",
@@ -120,6 +121,7 @@ const RTD_LINE_COLORS: Record<string, string> = {
   L:  "#FFCD00",
   N:  "#904199",
   R:  "#C1D32F",
+  T:  "#b71318",
   W:  "#0091B3",
 };
 
@@ -144,7 +146,7 @@ function RailLines() {
   );
 }
 
-const VehicleMarkers = memo(function VehicleMarkers({ vehicles, onVehicleClick }: Props) {
+const VehicleMarkers = memo(function VehicleMarkers({ vehicles, onVehicleClick, selectedVehicle }: Props) {
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
 
   useMapEvents({
@@ -153,35 +155,45 @@ const VehicleMarkers = memo(function VehicleMarkers({ vehicles, onVehicleClick }
     },
   });
 
-  // Recompute only when the vehicle set or zoom changes — not on unrelated
-  // parent re-renders. Icons themselves come from the module-level cache.
+  // Stable primitive key for the selected vehicle so the memo only re-runs
+  // when selection actually changes, not on every object reference change.
+  const selectedKey = selectedVehicle
+    ? (selectedVehicle.vehicle_id ?? selectedVehicle.trip_id ?? null)
+    : null;
+
+  // Recompute only when the vehicle set, zoom, or selection changes.
+  // Icons themselves come from the module-level cache.
   const markers = useMemo(
     () =>
       vehicles
         .filter((v) => v.latitude !== null && v.longitude !== null)
-        .map((v, i) => (
-          <Marker
-            key={`${v.vehicle_id ?? v.trip_id ?? i}`}
-            position={[v.latitude!, v.longitude!]}
-            icon={createVehicleIcon(
-              v.bearing,
-              v.route_color,
-              headwayColor(v.headway_minutes),
-              zoom,
-              RAIL_TYPES.has(v.route_type),
-            )}
-            eventHandlers={{ click: () => onVehicleClick(v) }}
-          >
-            <Tooltip direction="top" offset={[0, -4]} opacity={1}>
-              <span className="font-semibold">{v.route_short_name}</span>
-              {v.vehicle_label ? ` · #${v.vehicle_label}` : ""}
-              {v.stop_name ? (
-                <><br />{v.current_status_label ?? ""} {v.stop_name}</>
-              ) : null}
-            </Tooltip>
-          </Marker>
-        )),
-    [vehicles, zoom, onVehicleClick],
+        .map((v, i) => {
+          const vKey = v.vehicle_id ?? v.trip_id ?? null;
+          const isSelected = vKey !== null && vKey === selectedKey;
+          return (
+            <Marker
+              key={`${v.vehicle_id ?? v.trip_id ?? i}`}
+              position={[v.latitude!, v.longitude!]}
+              icon={createVehicleIcon(
+                v.bearing,
+                v.route_color,
+                isSelected ? "#FFFFFF" : headwayColor(v.headway_minutes),
+                zoom,
+                RAIL_TYPES.has(v.route_type),
+              )}
+              eventHandlers={{ click: () => onVehicleClick(v) }}
+            >
+              <Tooltip direction="top" offset={[0, -4]} opacity={1}>
+                <span className="font-semibold">{v.route_short_name}</span>
+                {v.vehicle_label ? ` · #${v.vehicle_label}` : ""}
+                {v.stop_name ? (
+                  <><br />{v.current_status_label ?? ""} {v.stop_name}</>
+                ) : null}
+              </Tooltip>
+            </Marker>
+          );
+        }),
+    [vehicles, zoom, onVehicleClick, selectedKey],
   );
 
   return <>{markers}</>;
@@ -266,7 +278,7 @@ export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, 
       <FlyToHandler flyTo={flyTo} />
       <RailLines />
       <SelectedBusRouteLine selectedVehicle={selectedVehicle} />
-      <VehicleMarkers vehicles={vehicles} onVehicleClick={onVehicleClick} />
+      <VehicleMarkers vehicles={vehicles} onVehicleClick={onVehicleClick} selectedVehicle={selectedVehicle} />
     </MapContainer>
   );
 }
