@@ -10,6 +10,12 @@ import { headwayColor } from "@/lib/utils";
 const DENVER_CENTER: [number, number] = [39.7392, -104.9903];
 const DEFAULT_ZOOM = 11;
 
+const DOWNTOWN_CENTER: [number, number] = [39.74948688769244, -104.99440656899203];
+const DOWNTOWN_ZOOM_THRESHOLD = 14;
+// ~1 mile radius (0.0145° ≈ 1609m in latitude); covers Union Station and the
+// broader downtown core where stopped vehicles create a dense, unreadable cluster.
+const DOWNTOWN_RADIUS_SQ = 0.0145 * 0.0145;
+
 // RTD route_type values that are rail
 const RAIL_TYPES = new Set(["0", "1", "2"]); // 0=tram/LRT, 1=subway, 2=commuter rail
 
@@ -166,7 +172,15 @@ const VehicleMarkers = memo(function VehicleMarkers({ vehicles, onVehicleClick, 
   const markers = useMemo(
     () =>
       vehicles
-        .filter((v) => v.latitude !== null && v.longitude !== null)
+        .filter((v) => {
+          if (v.latitude === null || v.longitude === null) return false;
+          if (zoom < DOWNTOWN_ZOOM_THRESHOLD) {
+            const dLat = v.latitude - DOWNTOWN_CENTER[0];
+            const dLon = v.longitude - DOWNTOWN_CENTER[1];
+            if (dLat * dLat + dLon * dLon < DOWNTOWN_RADIUS_SQ) return false;
+          }
+          return true;
+        })
         .map((v, i) => {
           const vKey = v.vehicle_id ?? v.trip_id ?? null;
           const isSelected = vKey !== null && vKey === selectedKey;
