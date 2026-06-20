@@ -1,3 +1,5 @@
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -6,17 +8,31 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import v1_router
+from app.api.v1.routes import warm_shape_cache
 from app.config import get_settings
 from app.services.gtfs_decoder import decode_vehicle_positions
 from app.services.scheduler import start_scheduler, stop_scheduler
 
 _settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     start_scheduler()
+
+    # Parse ~35 MB of GTFS shape CSVs once, in a worker thread, so the first
+    # bus-click / rail-line request doesn't block the event loop for seconds.
+    async def _warm() -> None:
+        try:
+            await asyncio.to_thread(warm_shape_cache)
+            logger.info("Route-shape cache warmed")
+        except Exception:
+            logger.exception("Failed to warm route-shape cache")
+
+    warm_task = asyncio.create_task(_warm())
     yield
+    warm_task.cancel()
     stop_scheduler()
 
 

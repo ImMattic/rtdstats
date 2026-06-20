@@ -3,6 +3,19 @@ services:
     image: timescale/timescaledb:latest-pg16
     container_name: rtdstats-db
     restart: unless-stopped
+    # Tuned for the small staging VM (~4 GB RAM). See docker-compose.yml.
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=768MB"
+      - "-c"
+      - "effective_cache_size=2GB"
+      - "-c"
+      - "work_mem=16MB"
+      - "-c"
+      - "maintenance_work_mem=128MB"
+      - "-c"
+      - "max_connections=50"
     environment:
       POSTGRES_DB: rtdstats
       POSTGRES_USER: rtdstats
@@ -14,6 +27,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+        reservations:
+          memory: 768M
 
   backend:
     image: aggiematt/rtdstats-backend:staging
@@ -33,6 +52,10 @@ services:
         condition: service_healthy
     volumes:
       - ../gtfs-static:/app/gtfs-static:ro
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
 
   frontend:
     image: aggiematt/rtdstats-frontend:staging
@@ -44,6 +67,10 @@ services:
       BACKEND_URL: http://backend:8000
     depends_on:
       - backend
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
 volumes:
   pgdata:

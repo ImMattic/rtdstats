@@ -2,6 +2,20 @@ services:
   db:
     image: timescale/timescaledb:latest-pg16
     restart: unless-stopped
+    # Tuned for a small VM (~4 GB RAM). TimescaleDB's image entrypoint applies
+    # these via -c flags. shared_buffers ~25% RAM, effective_cache_size ~50%.
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=768MB"
+      - "-c"
+      - "effective_cache_size=2GB"
+      - "-c"
+      - "work_mem=16MB"
+      - "-c"
+      - "maintenance_work_mem=128MB"
+      - "-c"
+      - "max_connections=50"
     environment:
       POSTGRES_DB: rtdstats
       POSTGRES_USER: rtdstats
@@ -15,6 +29,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+        reservations:
+          memory: 768M
 
   backend:
     build:
@@ -36,6 +56,10 @@ services:
     volumes:
       # Mount static GTFS data so the ingestion service can read it
       - ./gtfs-static:/app/gtfs-static:ro
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
 
   frontend:
     build:
@@ -51,6 +75,10 @@ services:
       BACKEND_URL: http://backend:8000
     depends_on:
       - backend
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
 volumes:
   pgdata:

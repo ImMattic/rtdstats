@@ -13,15 +13,16 @@ import {
   type HistoricalParams,
 } from "./api";
 
-// Poll interval for real-time data (ms)
-const REALTIME_INTERVAL = 7_000;
+// Poll interval for real-time data (ms). RTD's GTFS-RT protobuf feed refreshes
+// roughly every 30 seconds — fetching faster than the data changes is wasted work.
+const REALTIME_INTERVAL = 30_000;
 
 export function useVehicles() {
   return useQuery({
     queryKey: ["vehicles"],
     queryFn: fetchVehicles,
     refetchInterval: REALTIME_INTERVAL,
-    staleTime: 5_000,
+    staleTime: 0,
   });
 }
 
@@ -30,7 +31,7 @@ export function useVehiclesByRoute(routeId: string) {
     queryKey: ["vehicles", routeId],
     queryFn: () => fetchVehiclesByRoute(routeId),
     refetchInterval: REALTIME_INTERVAL,
-    staleTime: 5_000,
+    staleTime: 0,
     enabled: Boolean(routeId),
   });
 }
@@ -55,7 +56,9 @@ export function useOnTime(days = 7, routeId?: string) {
   return useQuery({
     queryKey: ["ontime", days, routeId],
     queryFn: () => fetchOnTime(days, routeId),
-    refetchInterval: 60_000,
+    // Multi-day on-time stats barely move minute to minute.
+    refetchInterval: 300_000,
+    staleTime: 300_000,
   });
 }
 
@@ -64,6 +67,7 @@ export function useFrequency(routeId?: string) {
     queryKey: ["frequency", routeId],
     queryFn: () => fetchFrequency(routeId),
     refetchInterval: 30_000,
+    staleTime: 30_000,
   });
 }
 
@@ -72,6 +76,7 @@ export function useAlerts() {
     queryKey: ["alerts"],
     queryFn: fetchAlerts,
     refetchInterval: 30_000,
+    staleTime: 30_000,
   });
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import L from "leaflet";
+import { memo, useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, Marker, Tooltip, Polyline, useMapEvents } from "react-leaflet";
 import type { VehiclePosition, RailShape } from "@/lib/types";
 import { useRailShapes, useRouteShape } from "@/lib/hooks";
@@ -25,6 +26,11 @@ function iconPx(zoom: number): number {
   return 28;
 }
 
+// Reusable divIcons keyed by their visual inputs. Icons are immutable, so the
+// ~200+ vehicles redrawn every poll/zoom collapse into a handful of cache hits
+// instead of that many fresh SVG strings + L.divIcon() allocations.
+const _iconCache = new Map<string, L.DivIcon>();
+
 /**
  * Bus icon: ice-cream cone (circle body + directional triangle tip).
  * Rail icon: rounded rectangle with a chevron nose — looks like a train front.
@@ -36,15 +42,17 @@ function createVehicleIcon(
   strokeColor: string,
   zoom: number,
   isRail: boolean,
-) {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const L = require("leaflet") as typeof import("leaflet");
+): L.DivIcon {
+  // Bucket bearing to 5° so the cache stays small (visually indistinguishable).
+  const rot = Math.round((bearing ?? 0) / 5) * 5;
+  const cacheKey = `${isRail ? 1 : 0}|${fillColor || "888888"}|${strokeColor}|${zoom}|${rot}`;
+  const cached = _iconCache.get(cacheKey);
+  if (cached) return cached;
 
   const s   = iconPx(zoom);
   const cx  = s / 2;
   const sw  = Math.max(1.5, s / 14);
   const fill  = `#${fillColor || "888888"}`;
-  const rot   = bearing ?? 0;
   let svgBody: string;
   let totalH: number;
   let anchorY: number;
@@ -82,13 +90,15 @@ function createVehicleIcon(
 
   const html = `<div style="transform:rotate(${rot}deg);transform-origin:${cx}px ${anchorY}px;width:${s}px;height:${totalH}px;">${svgBody}</div>`;
 
-  return L.divIcon({
+  const icon = L.divIcon({
     html,
     className: "",
     iconSize:      [s, totalH],
     iconAnchor:    [cx, anchorY],
     tooltipAnchor: [0, -(anchorY + 4)],
   });
+  _iconCache.set(cacheKey, icon);
+  return icon;
 }
 
 /** Official RTD brand colors keyed by route short name (upper-case). */
@@ -127,7 +137,7 @@ function RailLines() {
   );
 }
 
-function VehicleMarkers({ vehicles, onVehicleClick }: Props) {
+const VehicleMarkers = memo(function VehicleMarkers({ vehicles, onVehicleClick }: Props) {
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
 
   useMapEvents({
@@ -136,9 +146,11 @@ function VehicleMarkers({ vehicles, onVehicleClick }: Props) {
     },
   });
 
-  return (
-    <>
-      {vehicles
+  // Recompute only when the vehicle set or zoom changes — not on unrelated
+  // parent re-renders. Icons themselves come from the module-level cache.
+  const markers = useMemo(
+    () =>
+      vehicles
         .filter((v) => v.latitude !== null && v.longitude !== null)
         .map((v, i) => (
           <Marker
@@ -161,41 +173,40 @@ function VehicleMarkers({ vehicles, onVehicleClick }: Props) {
               ) : null}
             </Tooltip>
           </Marker>
-        ))}
-    </>
+        )),
+    [vehicles, zoom, onVehicleClick],
   );
-}
+
+  return <>{markers}</>;
+});
 
 function SelectedBusRouteLine({ selectedVehicle }: { selectedVehicle?: VehiclePosition | null }) {
   const selectedIsBus = selectedVehicle?.route_type === "3";
   const routeId = selectedIsBus ? selectedVehicle?.route_id : undefined;
   const { data } = useRouteShape(routeId);
 
-  if (!selectedIsBus || !data?.shapes?.length) return null;
+  const busLat = selectedVehicle?.latitude ?? null;
+  const busLon = selectedVehicle?.longitude ?? null;
 
-  const busLat = selectedVehicle.latitude;
-  const busLon = selectedVehicle.longitude;
+  // Pick the shape variant closest to the bus. Memoized so this O(points) scan
+  // runs only when the route/position/shape data changes — not every poll.
+  const selectedShape = useMemo(() => {
+    const shapes = data?.shapes;
+    if (!shapes?.length) return null;
+    if (busLat === null || busLon === null) return shapes[0];
+    return shapes.reduce((bestShape, currentShape) => {
+      const nearest = (shape: number[][]) =>
+        shape.reduce((acc, [lat, lon]) => {
+          const dLat = lat - busLat;
+          const dLon = lon - busLon;
+          const d = dLat * dLat + dLon * dLon;
+          return d < acc ? d : acc;
+        }, Number.POSITIVE_INFINITY);
+      return nearest(currentShape) < nearest(bestShape) ? currentShape : bestShape;
+    }, shapes[0]);
+  }, [data, busLat, busLon]);
 
-  const selectedShape =
-    busLat === null || busLon === null
-      ? data.shapes[0]
-      : data.shapes.reduce((bestShape, currentShape) => {
-          const bestDistance = bestShape.reduce((acc, [lat, lon]) => {
-            const dLat = lat - busLat;
-            const dLon = lon - busLon;
-            const d = dLat * dLat + dLon * dLon;
-            return d < acc ? d : acc;
-          }, Number.POSITIVE_INFINITY);
-
-          const currentDistance = currentShape.reduce((acc, [lat, lon]) => {
-            const dLat = lat - busLat;
-            const dLon = lon - busLon;
-            const d = dLat * dLat + dLon * dLon;
-            return d < acc ? d : acc;
-          }, Number.POSITIVE_INFINITY);
-
-          return currentDistance < bestDistance ? currentShape : bestShape;
-        }, data.shapes[0]);
+  if (!selectedIsBus || !selectedShape) return null;
 
   return (
     <>
@@ -205,7 +216,7 @@ function SelectedBusRouteLine({ selectedVehicle }: { selectedVehicle?: VehiclePo
       />
       <Polyline
         positions={selectedShape as [number, number][]}
-        pathOptions={{ color: data.color || "#38bdf8", weight: 3, opacity: 0.95 }}
+        pathOptions={{ color: data?.color || "#38bdf8", weight: 3, opacity: 0.95 }}
       />
     </>
   );
@@ -213,8 +224,6 @@ function SelectedBusRouteLine({ selectedVehicle }: { selectedVehicle?: VehiclePo
 
 export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle }: Props) {
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const L = require("leaflet") as typeof import("leaflet");
     // @ts-expect-error – _getIconUrl is internal
     delete L.Icon.Default.prototype._getIconUrl;
     L.Icon.Default.mergeOptions({
