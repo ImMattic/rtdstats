@@ -13,16 +13,16 @@ import {
   type HistoricalParams,
 } from "./api";
 
-// Poll interval for real-time data (ms). Matches the 10s backend ingest cadence
-// — fetching faster than the data changes is wasted work.
-const REALTIME_INTERVAL = 10_000;
+// Poll interval for real-time data (ms). RTD's GTFS-RT protobuf feed refreshes
+// roughly every 30 seconds — fetching faster than the data changes is wasted work.
+const REALTIME_INTERVAL = 30_000;
 
 export function useVehicles() {
   return useQuery({
     queryKey: ["vehicles"],
     queryFn: fetchVehicles,
     refetchInterval: REALTIME_INTERVAL,
-    staleTime: REALTIME_INTERVAL,
+    staleTime: 0,
   });
 }
 
@@ -31,7 +31,7 @@ export function useVehiclesByRoute(routeId: string) {
     queryKey: ["vehicles", routeId],
     queryFn: () => fetchVehiclesByRoute(routeId),
     refetchInterval: REALTIME_INTERVAL,
-    staleTime: REALTIME_INTERVAL,
+    staleTime: 0,
     enabled: Boolean(routeId),
   });
 }

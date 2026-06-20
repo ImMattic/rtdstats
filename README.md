@@ -2,7 +2,7 @@
 
 **Real-time and historical transit tracking for Denver's RTD network.**
 
-RTD Stats pulls live vehicle positions from the RTD GTFS-RT feed every 10 seconds and stores them in a time-series database. A live map shows every rail car and Flatiron Flyer bus moving in real time, and a dashboard surfaces on-time performance, frequency stats, and delay incidents — data that RTD's own tools don't make easy to explore.
+RTD Stats pulls live vehicle positions from the RTD GTFS-RT feed every 30 seconds and stores them in a time-series database. A live map shows every rail car and Flatiron Flyer bus moving in real time, and a dashboard surfaces on-time performance, frequency stats, and delay incidents — data that RTD's own tools don't make easy to explore.
 
 ---
 

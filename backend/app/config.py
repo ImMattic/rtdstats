@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     )
 
     # ── Ingestion scheduler ───────────────────────────────────────────────────
-    polling_interval_seconds: int = 10
+    polling_interval_seconds: int = 30
 
     # ── Alert thresholds ─────────────────────────────────────────────────────
     stuck_vehicle_minutes: int = 12

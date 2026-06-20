@@ -46,7 +46,7 @@ async def _latest_positions(
     """Return the most-recent snapshot per vehicle_id within the last 60 seconds.
 
     Since timestamps now reflect ingest time (not GPS clock), this window
-    reliably captures the last ~6 poll cycles at the default 10s interval.
+    reliably captures the last ~2 poll cycles at the default 30s interval.
 
     Uses Postgres ``DISTINCT ON`` (one index-friendly scan of the hot chunk)
     instead of a self-join against a ``max(timestamp)`` subquery.
@@ -162,8 +162,8 @@ def _enrich(
 
 
 # ── Short-lived response cache ─────────────────────────────────────────────
-# The underlying data only changes every poll cycle (~10s), but every browser
-# tab polls every ~10s independently. Caching the assembled response for a few
+# The underlying data only changes every poll cycle (~30s), but every browser
+# tab polls every ~30s independently. Caching the assembled response for a few
 # seconds lets concurrent clients share a single DB computation. Keyed by
 # route_id; the key space is bounded by the number of routes (~190).
 
