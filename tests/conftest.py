@@ -75,6 +75,7 @@ def clear_module_caches():
 
     realtime_mod._vehicles_cache.clear()
     stats_mod._alerts_cache = None
+    stats_mod._trip_endpoints = None
     ingestion_mod._routes_cache = None
     ingestion_mod._stops_cache = None
     yield
@@ -91,6 +92,7 @@ def patch_gtfs_static():
         patch("app.api.v1.realtime.load_gtfs_static_data", return_value=({}, {})),
         patch("app.api.v1.historical.load_gtfs_static_data", return_value=({}, {})),
         patch("app.api.v1.stats.load_gtfs_static_data", return_value=({}, {})),
+        patch("app.api.v1.stats.load_trip_endpoint_sequences", return_value=({}, {})),
     ):
         yield
 
@@ -99,9 +101,11 @@ def make_vehicle(
     id: int = 1,
     route_id: str = "R1",
     vehicle_id: str = "V1",
+    trip_id: str | None = None,
     lat: float = 39.7392,
     lon: float = -104.9903,
     current_status: int = 2,
+    current_stop_sequence: int = 1,
     timestamp: datetime | None = None,
     **kwargs,
 ) -> VehiclePosition:
@@ -111,11 +115,11 @@ def make_vehicle(
         route_id=route_id,
         vehicle_id=vehicle_id,
         vehicle_label=f"Label{id}",
-        trip_id=f"T{id}",
+        trip_id=trip_id if trip_id is not None else f"T{id}",
         latitude=lat,
         longitude=lon,
         bearing=0.0,
-        current_stop_sequence=1,
+        current_stop_sequence=current_stop_sequence,
         current_status=current_status,
         stop_id="S1",
         occupancy_status=None,

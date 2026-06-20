@@ -2,21 +2,38 @@
 
 import L from "leaflet";
 import { memo, useEffect, useMemo, useState } from "react";
-import { MapContainer, TileLayer, Marker, Tooltip, Polyline, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Tooltip, Polyline, CircleMarker, useMap, useMapEvents } from "react-leaflet";
 import type { VehiclePosition, RailShape } from "@/lib/types";
-import { useRailShapes, useRouteShape } from "@/lib/hooks";
+import { useRailShapes, useRouteShape, useRouteStops } from "@/lib/hooks";
 import { headwayColor } from "@/lib/utils";
 
 const DENVER_CENTER: [number, number] = [39.7392, -104.9903];
 const DEFAULT_ZOOM = 11;
+const DENVER_METRO_BOUNDS: L.LatLngBoundsExpression = [
+  [38.2, -106.5],
+  [41.2, -103.5],
+];
+
+const DOWNTOWN_CENTER: [number, number] = [39.74948688769244, -104.99440656899203];
+const DOWNTOWN_ZOOM_THRESHOLD = 14;
+// ~1 mile radius (0.0145° ≈ 1609m in latitude); covers Union Station and the
+// broader downtown core where stopped vehicles create a dense, unreadable cluster.
+const DOWNTOWN_RADIUS_SQ = 0.0145 * 0.0145;
 
 // RTD route_type values that are rail
 const RAIL_TYPES = new Set(["0", "1", "2"]); // 0=tram/LRT, 1=subway, 2=commuter rail
+
+interface FlyToCoords {
+  lat: number;
+  lng: number;
+  zoom?: number;
+}
 
 interface Props {
   vehicles: VehiclePosition[];
   onVehicleClick: (v: VehiclePosition) => void;
   selectedVehicle?: VehiclePosition | null;
+  flyTo?: FlyToCoords | null;
 }
 
 function iconPx(zoom: number): number {
@@ -32,8 +49,8 @@ function iconPx(zoom: number): number {
 const _iconCache = new Map<string, L.DivIcon>();
 
 /**
- * Bus icon: ice-cream cone (circle body + directional triangle tip).
- * Rail icon: rounded rectangle with a chevron nose — looks like a train front.
+ * Bus icon: circle body with a small seamless directional tip, single unified path.
+ * Rail icon: rounded rectangle with a pointed nose, single seamless path.
  * Both are rotated by `bearing` and scale with zoom.
  */
 function createVehicleIcon(
@@ -58,33 +75,50 @@ function createVehicleIcon(
   let anchorY: number;
 
   if (isRail) {
-    // Train: tall rounded rect with a pointed front (top)
-    const w   = Math.round(s * 0.55);
-    const h   = Math.round(s * 1.4);
-    const rx  = Math.round(w * 0.3);
-    const x0  = cx - w / 2;
-    // Chevron nose: two diagonal lines at the top centre
-    const noseH = Math.round(h * 0.22);
-    totalH  = h + Math.ceil(sw);
-    anchorY = Math.round(h / 2);
+    // Train: elongated body with a pointed nose, drawn as a single unified path
+    // so there's no seam between the nose triangle and the body rectangle.
+    const w  = Math.round(s * 0.52);
+    const bH = Math.round(s * 1.15); // body height
+    const nH = Math.round(s * 0.28); // nose height
+    const rx = Math.round(w * 0.32);
+    const x0 = cx - w / 2;
+    const x1 = cx + w / 2;
+    totalH  = nH + bH + Math.ceil(sw * 2);
+    anchorY = Math.round(nH + bH / 2);
+    const path = [
+      `M ${cx} ${sw}`,
+      `L ${x1} ${nH}`,
+      `L ${x1} ${nH + bH - rx}`,
+      `Q ${x1} ${nH + bH} ${x1 - rx} ${nH + bH}`,
+      `L ${x0 + rx} ${nH + bH}`,
+      `Q ${x0} ${nH + bH} ${x0} ${nH + bH - rx}`,
+      `L ${x0} ${nH}`,
+      `Z`,
+    ].join(" ");
     svgBody = `<svg width="${s}" height="${totalH}" viewBox="0 0 ${s} ${totalH}" xmlns="http://www.w3.org/2000/svg">
-      <rect x="${x0}" y="${noseH}" width="${w}" height="${h - noseH}" rx="${rx}" ry="${rx}"
-        fill="${fill}" stroke="${strokeColor}" stroke-width="${sw}"/>
-      <polygon points="${cx},${sw} ${x0},${noseH + sw} ${x0 + w},${noseH + sw}"
-        fill="${fill}" stroke="${strokeColor}" stroke-width="${sw}" stroke-linejoin="round"/>
+      <path d="${path}" fill="${fill}" stroke="${strokeColor}" stroke-width="${sw}" stroke-linejoin="round"/>
     </svg>`;
   } else {
-    // Bus: cone tip + circle
-    const r   = Math.round(s * 0.38);
-    const cy  = Math.round(s * 0.65);
-    const coneBase = cy - r + 2;
-    totalH  = cy + r + Math.ceil(sw);
-    anchorY = cy;
+    // Bus: circle with a small directional tip, single unified path, no seam.
+    // The two tip sides are tangent to the circle, flowing into the arc without
+    // a visible corner.
+    const r    = Math.round(s * 0.39);
+    const tip  = Math.round(s * 0.26);            // tip protrusion beyond circle edge
+    const h    = r + tip;                          // tip-to-circle-center distance
+    const ty   = Math.round(r * r / h);           // tangent point: pixels above center
+    const tx   = Math.round(r * Math.sqrt(h * h - r * r) / h); // tangent point: horiz offset
+    const cy_c = sw + h;                           // circle center y
+    const tanY = cy_c - ty;                        // y of both tangent points
+    totalH  = Math.ceil(cy_c + r + sw);
+    anchorY = Math.round(cy_c);
+    const path = [
+      `M ${cx} ${sw}`,                                      // tip
+      `L ${cx + tx} ${tanY}`,                               // right tangent point
+      `A ${r} ${r} 0 1 1 ${cx - tx} ${tanY}`,              // arc through bottom (cw, large)
+      `Z`,
+    ].join(" ");
     svgBody = `<svg width="${s}" height="${totalH}" viewBox="0 0 ${s} ${totalH}" xmlns="http://www.w3.org/2000/svg">
-      <polygon points="${cx},${sw} ${cx - s * 0.3},${coneBase} ${cx + s * 0.3},${coneBase}"
-        fill="${fill}" stroke="${strokeColor}" stroke-width="${sw}" stroke-linejoin="round"/>
-      <circle cx="${cx}" cy="${cy}" r="${r}"
-        fill="${fill}" stroke="${strokeColor}" stroke-width="${sw}"/>
+      <path d="${path}" fill="${fill}" stroke="${strokeColor}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>
     </svg>`;
   }
 
@@ -105,6 +139,7 @@ function createVehicleIcon(
 const RTD_LINE_COLORS: Record<string, string> = {
   A:  "#54C0E8",
   B:  "#4C9C2E",
+  C:  "#f79239",
   D:  "#047835",
   E:  "#691F74",
   FF: "#003595",
@@ -113,6 +148,7 @@ const RTD_LINE_COLORS: Record<string, string> = {
   L:  "#FFCD00",
   N:  "#904199",
   R:  "#C1D32F",
+  T:  "#b71318",
   W:  "#0091B3",
 };
 
@@ -137,7 +173,7 @@ function RailLines() {
   );
 }
 
-const VehicleMarkers = memo(function VehicleMarkers({ vehicles, onVehicleClick }: Props) {
+const VehicleMarkers = memo(function VehicleMarkers({ vehicles, onVehicleClick, selectedVehicle }: Props) {
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
 
   useMapEvents({
@@ -146,35 +182,53 @@ const VehicleMarkers = memo(function VehicleMarkers({ vehicles, onVehicleClick }
     },
   });
 
-  // Recompute only when the vehicle set or zoom changes — not on unrelated
-  // parent re-renders. Icons themselves come from the module-level cache.
+  // Stable primitive key for the selected vehicle so the memo only re-runs
+  // when selection actually changes, not on every object reference change.
+  const selectedKey = selectedVehicle
+    ? (selectedVehicle.vehicle_id ?? selectedVehicle.trip_id ?? null)
+    : null;
+
+  // Recompute only when the vehicle set, zoom, or selection changes.
+  // Icons themselves come from the module-level cache.
   const markers = useMemo(
     () =>
       vehicles
-        .filter((v) => v.latitude !== null && v.longitude !== null)
-        .map((v, i) => (
-          <Marker
-            key={`${v.vehicle_id ?? v.trip_id ?? i}`}
-            position={[v.latitude!, v.longitude!]}
-            icon={createVehicleIcon(
-              v.bearing,
-              v.route_color,
-              headwayColor(v.headway_minutes),
-              zoom,
-              RAIL_TYPES.has(v.route_type),
-            )}
-            eventHandlers={{ click: () => onVehicleClick(v) }}
-          >
-            <Tooltip direction="top" offset={[0, -4]} opacity={1}>
-              <span className="font-semibold">{v.route_short_name}</span>
-              {v.vehicle_label ? ` · #${v.vehicle_label}` : ""}
-              {v.stop_name ? (
-                <><br />{v.current_status_label ?? ""} {v.stop_name}</>
-              ) : null}
-            </Tooltip>
-          </Marker>
-        )),
-    [vehicles, zoom, onVehicleClick],
+        .filter((v) => {
+          if (v.latitude === null || v.longitude === null) return false;
+          if (zoom < DOWNTOWN_ZOOM_THRESHOLD) {
+            const dLat = v.latitude - DOWNTOWN_CENTER[0];
+            const dLon = v.longitude - DOWNTOWN_CENTER[1];
+            if (dLat * dLat + dLon * dLon < DOWNTOWN_RADIUS_SQ) return false;
+          }
+          return true;
+        })
+        .map((v, i) => {
+          const vKey = v.vehicle_id ?? v.trip_id ?? null;
+          const isSelected = vKey !== null && vKey === selectedKey;
+          return (
+            <Marker
+              key={`${v.vehicle_id ?? v.trip_id ?? i}`}
+              position={[v.latitude!, v.longitude!]}
+              icon={createVehicleIcon(
+                v.bearing,
+                v.route_color,
+                isSelected ? "#FFFFFF" : headwayColor(v.headway_minutes),
+                zoom,
+                RAIL_TYPES.has(v.route_type),
+              )}
+              eventHandlers={{ click: () => onVehicleClick(v) }}
+            >
+              <Tooltip direction="top" offset={[0, -4]} opacity={1}>
+                <span className="font-semibold">{v.route_short_name}</span>
+                {v.vehicle_label ? ` · #${v.vehicle_label}` : ""}
+                {v.stop_name ? (
+                  <><br />{v.current_status_label ?? ""} {v.stop_name}</>
+                ) : null}
+              </Tooltip>
+            </Marker>
+          );
+        }),
+    [vehicles, zoom, onVehicleClick, selectedKey],
   );
 
   return <>{markers}</>;
@@ -222,7 +276,47 @@ function SelectedBusRouteLine({ selectedVehicle }: { selectedVehicle?: VehiclePo
   );
 }
 
-export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle }: Props) {
+function RouteStopMarkers({ selectedVehicle }: { selectedVehicle?: VehiclePosition | null }) {
+  const { data } = useRouteStops(selectedVehicle?.route_id);
+
+  if (!data?.stops || !selectedVehicle) return null;
+
+  const color = `#${selectedVehicle.route_color || "888888"}`;
+  return (
+    <>
+      {data.stops.map((stop) => (
+        <CircleMarker
+          key={stop.stop_id}
+          center={[stop.stop_lat, stop.stop_lon]}
+          radius={4}
+          pathOptions={{
+            color: "#ffffff",
+            weight: 1.5,
+            fillColor: color,
+            fillOpacity: 0.9,
+            opacity: 1,
+          }}
+        >
+          <Tooltip direction="top" offset={[0, -6]} opacity={1}>
+            <span className="text-xs">{stop.stop_name}</span>
+          </Tooltip>
+        </CircleMarker>
+      ))}
+    </>
+  );
+}
+
+function FlyToHandler({ flyTo }: { flyTo?: FlyToCoords | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (flyTo) {
+      map.flyTo([flyTo.lat, flyTo.lng], flyTo.zoom ?? 16, { duration: 1.2 });
+    }
+  }, [map, flyTo]);
+  return null;
+}
+
+export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, flyTo }: Props) {
   useEffect(() => {
     // @ts-expect-error – _getIconUrl is internal
     delete L.Icon.Default.prototype._getIconUrl;
@@ -237,6 +331,9 @@ export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle }
     <MapContainer
       center={DENVER_CENTER}
       zoom={DEFAULT_ZOOM}
+      minZoom={9}
+      maxBounds={DENVER_METRO_BOUNDS}
+      maxBoundsViscosity={1.0}
       className="h-full w-full"
       scrollWheelZoom
     >
@@ -246,9 +343,11 @@ export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle }
         subdomains="abcd"
         maxZoom={19}
       />
+      <FlyToHandler flyTo={flyTo} />
       <RailLines />
       <SelectedBusRouteLine selectedVehicle={selectedVehicle} />
-      <VehicleMarkers vehicles={vehicles} onVehicleClick={onVehicleClick} />
+      <RouteStopMarkers selectedVehicle={selectedVehicle} />
+      <VehicleMarkers vehicles={vehicles} onVehicleClick={onVehicleClick} selectedVehicle={selectedVehicle} />
     </MapContainer>
   );
 }

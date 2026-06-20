@@ -32,6 +32,9 @@ export default function RootLayout({
           <div className="flex min-h-screen flex-col">
             <NavBar />
             <main className="flex flex-1 flex-col">{children}</main>
+            <footer className="border-t border-surface-border bg-surface-card py-2 text-center text-xs text-gray-500">
+              Made with ❤️ in Broomfield, CO
+            </footer>
           </div>
         </Providers>
       </body>

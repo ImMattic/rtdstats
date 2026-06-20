@@ -4,6 +4,7 @@ import type {
   HistoricalResponse,
   OnTimeResponse,
   RouteShape,
+  RouteStopsResponse,
   RailShapesResponse,
   RealtimeResponse,
   RoutesResponse,
@@ -45,6 +46,10 @@ export function fetchRailShapes(): Promise<RailShapesResponse> {
 
 export function fetchRouteShape(routeId: string): Promise<RouteShape> {
   return apiFetch(`/api/v1/routes/shape/${encodeURIComponent(routeId)}`);
+}
+
+export function fetchRouteStops(routeId: string): Promise<RouteStopsResponse> {
+  return apiFetch(`/api/v1/routes/stops/${encodeURIComponent(routeId)}`);
 }
 
 // ── Historical ────────────────────────────────────────────────────────────

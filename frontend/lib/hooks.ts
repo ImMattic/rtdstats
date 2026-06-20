@@ -6,6 +6,7 @@ import {
   fetchRoutes,
   fetchRailShapes,
   fetchRouteShape,
+  fetchRouteStops,
   fetchHistorical,
   fetchOnTime,
   fetchFrequency,
@@ -92,6 +93,15 @@ export function useRouteShape(routeId?: string) {
   return useQuery({
     queryKey: ["routeShape", routeId],
     queryFn: () => fetchRouteShape(routeId!),
+    staleTime: Infinity,
+    enabled: Boolean(routeId),
+  });
+}
+
+export function useRouteStops(routeId?: string) {
+  return useQuery({
+    queryKey: ["routeStops", routeId],
+    queryFn: () => fetchRouteStops(routeId!),
     staleTime: Infinity,
     enabled: Boolean(routeId),
   });

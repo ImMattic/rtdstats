@@ -242,6 +242,99 @@ async def get_route_shape(route_id: str) -> dict:
     return shape
 
 
+@lru_cache(maxsize=1)
+def _load_route_stops_index() -> dict[str, list[dict[str, Any]]]:
+    """Return {route_id: [{stop_id, stop_name, stop_lat, stop_lon}, ...]} ordered by stop_sequence.
+
+    Unique stops per route, deduped across all trips. Cached for process lifetime.
+    """
+    root = _gtfs_root()
+
+    # All stops: stop_id → {stop_id, stop_name, stop_lat, stop_lon}
+    all_stops: dict[str, dict[str, Any]] = {}
+    for folder in TRANSIT_FOLDERS:
+        path = root / folder / "stops.txt"
+        if not path.exists():
+            continue
+        with path.open("r", encoding="utf-8-sig", newline="") as fh:
+            for row in csv.DictReader(fh):
+                sid = row.get("stop_id", "").strip()
+                if not sid:
+                    continue
+                try:
+                    lat = float(row.get("stop_lat") or 0.0)
+                    lon = float(row.get("stop_lon") or 0.0)
+                except (ValueError, TypeError):
+                    lat, lon = 0.0, 0.0
+                all_stops[sid] = {
+                    "stop_id": sid,
+                    "stop_name": row.get("stop_name", "").strip(),
+                    "stop_lat": lat,
+                    "stop_lon": lon,
+                }
+
+    # trip_id → route_id
+    trip_route: dict[str, str] = {}
+    for folder in TRANSIT_FOLDERS:
+        path = root / folder / "trips.txt"
+        if not path.exists():
+            continue
+        with path.open("r", encoding="utf-8-sig", newline="") as fh:
+            for row in csv.DictReader(fh):
+                tid = row.get("trip_id", "").strip()
+                rid = row.get("route_id", "").strip()
+                if tid and rid:
+                    trip_route[tid] = rid
+
+    # route_id → {stop_id: min_sequence} — keeps only the lowest sequence
+    # number seen for each unique stop across all trips on that route.
+    route_stop_min_seq: dict[str, dict[str, int]] = defaultdict(dict)
+    for folder in TRANSIT_FOLDERS:
+        path = root / folder / "stop_times.txt"
+        if not path.exists():
+            continue
+        with path.open("r", encoding="utf-8-sig", newline="") as fh:
+            for row in csv.DictReader(fh):
+                tid = row.get("trip_id", "").strip()
+                sid = row.get("stop_id", "").strip()
+                seq_str = row.get("stop_sequence", "").strip()
+                if not tid or not sid or not seq_str:
+                    continue
+                rid = trip_route.get(tid)
+                if not rid:
+                    continue
+                try:
+                    seq = int(seq_str)
+                except ValueError:
+                    continue
+                stop_seqs = route_stop_min_seq[rid]
+                if sid not in stop_seqs or seq < stop_seqs[sid]:
+                    stop_seqs[sid] = seq
+
+    result: dict[str, list[dict[str, Any]]] = {}
+    for rid, stop_seqs in route_stop_min_seq.items():
+        ordered = sorted(stop_seqs.items(), key=lambda x: x[1])
+        stops = [
+            all_stops[sid]
+            for sid, _ in ordered
+            if sid in all_stops and (all_stops[sid]["stop_lat"] != 0.0 or all_stops[sid]["stop_lon"] != 0.0)
+        ]
+        if stops:
+            result[rid] = stops
+    return result
+
+
+@router.get("/stops/{route_id}", response_model=dict)
+async def get_route_stops(route_id: str) -> dict:
+    """Return ordered stops for one route (used for station markers on the map)."""
+    index = _load_route_stops_index()
+    stops = index.get(route_id)
+    if stops is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"Route {route_id!r} not found")
+    return {"route_id": route_id, "stops": stops}
+
+
 @router.get("/{route_id}", response_model=dict)
 async def get_route(route_id: str) -> dict:
     routes, _ = load_gtfs_static_data()

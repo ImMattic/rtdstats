@@ -1,6 +1,7 @@
 """On-time performance, frequency, and stuck-vehicle alert endpoints."""
 from __future__ import annotations
 
+import math
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -22,7 +23,7 @@ from app.schemas.stats import (
     OverallOnTime,
     StuckAlert,
 )
-from app.services.gtfs_decoder import load_gtfs_static_data
+from app.services.gtfs_decoder import load_gtfs_static_data, load_route_terminal_stops, load_trip_endpoint_sequences
 from app.config import get_settings
 
 router = APIRouter(prefix="/stats", tags=["stats"])
@@ -199,13 +200,15 @@ async def frequency_stats(
 # client; cache the assembled response briefly so concurrent tabs share one scan.
 _ALERTS_CACHE_TTL_SECONDS = 10.0
 _alerts_cache: tuple[float, AlertsResponse] | None = None
+_trip_endpoint_stops: dict[str, tuple[str | None, str | None]] | None = None
+_route_terminal_stops: dict[str, set[str]] | None = None
 
 
 @router.get("/alerts", response_model=AlertsResponse)
 async def stuck_vehicle_alerts(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AlertsResponse:
-    global _alerts_cache
+    global _alerts_cache, _trip_endpoint_stops, _route_terminal_stops
     mono = time.monotonic()
     if _alerts_cache is not None and mono - _alerts_cache[0] < _ALERTS_CACHE_TTL_SECONDS:
         return _alerts_cache[1]
@@ -242,6 +245,10 @@ async def stuck_vehicle_alerts(
     for r in rows:
         veh_rows[r.vehicle_id or r.trip_id or ""].append(r)
 
+    if _trip_endpoint_stops is None:
+        _, _trip_endpoint_stops = load_trip_endpoint_sequences()
+    if _route_terminal_stops is None:
+        _route_terminal_stops = load_route_terminal_stops()
     routes_static, stops_static = load_gtfs_static_data()
 
     now = datetime.now(tz=timezone.utc)
@@ -252,6 +259,11 @@ async def stuck_vehicle_alerts(
             continue
         latest = history[0]
         lat0, lon0 = latest.latitude, latest.longitude
+
+        # Skip vehicles with invalid GPS coordinates (e.g. tracker defaulting to 0,0).
+        if lat0 is None or lon0 is None or (abs(lat0) < 0.001 and abs(lon0) < 0.001):
+            continue
+
         earliest_same_pos = latest.timestamp
 
         # Walk backwards (history is already ordered newest-first) and collect
@@ -275,6 +287,28 @@ async def stuck_vehicle_alerts(
         if streak_statuses and streak_statuses <= {1}:
             continue
 
+        # Skip vehicles within 150 m of the first or last stop of their trip.
+        # Fall back to route-level terminal stops when the live trip_id isn't
+        # in the static schedule (e.g. RTD added/modified trips).
+        if lat0 is not None and lon0 is not None:
+            terminal_stop_ids: set[str] | tuple[str | None, str | None] | None = None
+            if latest.trip_id and _trip_endpoint_stops is not None:
+                terminal_stop_ids = _trip_endpoint_stops.get(latest.trip_id)
+            if terminal_stop_ids is None and latest.route_id and _route_terminal_stops is not None:
+                terminal_stop_ids = _route_terminal_stops.get(latest.route_id)
+            if terminal_stop_ids:
+                near_endpoint = False
+                for sid in terminal_stop_ids:
+                    if sid:
+                        sc = stops_static.get(sid, {})
+                        slat = sc.get("stop_lat", 0.0)
+                        slon = sc.get("stop_lon", 0.0)
+                        if slat and slon and _haversine_m(lat0, lon0, slat, slon) < 150:
+                            near_endpoint = True
+                            break
+                if near_endpoint:
+                    continue
+
         stop_info = stops_static.get(latest.stop_id or "", {})
         route_info = routes_static.get(latest.route_id, {})
         alerts.append(
@@ -295,6 +329,16 @@ async def stuck_vehicle_alerts(
     response = AlertsResponse(computed_at=now, alerts=alerts)
     _alerts_cache = (mono, response)
     return response
+
+
+def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Return great-circle distance in meters between two lat/lon points."""
+    R = 6_371_000
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlam = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
 def _positions_equal(
