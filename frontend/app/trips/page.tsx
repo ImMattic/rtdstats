@@ -407,12 +407,11 @@ function TripsContent() {
                   <tr>
                     <th className="px-3 py-2 text-left">Route</th>
                     <th className="px-3 py-2 text-left">Vehicle</th>
-                    <th className="px-3 py-2 text-left">From → To</th>
+                    <th className="w-[600px] px-3 py-2 text-left">From → To</th>
                     <th className="px-3 py-2 text-left">Start Time</th>
                     <th className="px-3 py-2 text-left">End Time</th>
                     <th className="px-3 py-2 text-right">Duration</th>
                     <th className="px-3 py-2 text-left">Occupancy</th>
-                    <th className="px-3 py-2 text-right">Obs.</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -428,8 +427,8 @@ function TripsContent() {
                       <td className="px-3 py-2 font-semibold">
                         {v.vehicle_label ? `#${v.vehicle_label}` : "—"}
                       </td>
-                      <td className="px-3 py-2 text-gray-600">
-                        <span className="whitespace-nowrap">
+                      <td className="w-[600px] max-w-[600px] px-3 py-2 text-gray-600">
+                        <span className="block truncate" title={`${v.start_stop_name ?? "—"} → ${v.end_stop_name ?? "—"}`}>
                           {v.start_stop_name ?? "—"}
                           <span className="px-1 text-gray-400">→</span>
                           {v.end_stop_name ?? "—"}
@@ -452,9 +451,6 @@ function TripsContent() {
                       </td>
                       <td className="px-3 py-2 text-gray-600">
                         {OCCUPANCY_SHORT[v.last_occupancy_status ?? "UNKNOWN"] ?? "—"}
-                      </td>
-                      <td className="px-3 py-2 text-right text-gray-500">
-                        {v.observation_count}
                       </td>
                     </tr>
                   ))}
