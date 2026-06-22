@@ -57,6 +57,9 @@ export interface RealtimeResponse {
   updated_at: string;
   vehicles: VehiclePosition[];
   route_headways: Record<string, number>;
+  total_vehicles?: number | null;
+  vehicles_with_location?: number | null;
+  unique_vehicle_keys?: number | null;
 }
 
 export interface VehicleHistoryPoint {
