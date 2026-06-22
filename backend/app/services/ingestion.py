@@ -13,6 +13,7 @@ from sqlalchemy import insert
 
 from app.config import get_settings
 from app.database import AsyncSessionLocal
+from app.models.stop_arrival import StopArrivalEvent
 from app.models.trip_update import TripUpdate
 from app.models.vehicle_position import VehiclePosition
 from app.services.gtfs_decoder import (
@@ -21,6 +22,7 @@ from app.services.gtfs_decoder import (
     load_gtfs_static_data,
 )
 from app.services.gtfs_rt_fetcher import fetch_pb
+from app.services.ontime import detect_arrivals
 
 logger = logging.getLogger(__name__)
 
@@ -122,18 +124,31 @@ async def ingest_cycle() -> None:
             out.append(r)
         return out
 
+    # Derive observed on-time arrivals from this poll's positions (geofence vs.
+    # the static timepoint schedule). De-duped against recent polls in-process.
+    arrival_events: list[dict] = []
+    if vp_rows:
+        vp_rows = _dedupe_vehicle_rows(vp_rows)
+        try:
+            arrival_events = detect_arrivals(vp_rows, now)
+        except Exception:
+            logger.exception("Failed to derive on-time arrival events")
+
     async with AsyncSessionLocal() as session:
         async with session.begin():
             if vp_rows:
-                vp_rows = _dedupe_vehicle_rows(vp_rows)
                 await session.execute(insert(VehiclePosition), vp_rows)
             if tu_rows:
                 await session.execute(insert(TripUpdate), tu_rows)
+            if arrival_events:
+                await session.execute(insert(StopArrivalEvent), arrival_events)
 
     logger.info(
-        "Ingest cycle complete: %d vehicle positions, %d trip updates",
+        "Ingest cycle complete: %d vehicle positions, %d trip updates, "
+        "%d on-time arrivals",
         len(vp_rows),
         len(tu_rows),
+        len(arrival_events),
     )
 
 

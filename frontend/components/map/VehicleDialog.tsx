@@ -4,6 +4,7 @@ import type { VehiclePosition } from "@/lib/types";
 interface Props {
   vehicle: VehiclePosition;
   onClose: () => void;
+  isStuck?: boolean;
 }
 
 const STATUS_LABELS: Record<number, string> = {
@@ -12,10 +13,11 @@ const STATUS_LABELS: Record<number, string> = {
   2: "In transit to",
 };
 
-export default function VehicleDialog({ vehicle: v, onClose }: Props) {
-  const delayText = formatDelay(v.delay_seconds);
-  const isLate = (v.delay_seconds ?? 0) > 300;
-  const isEarly = (v.delay_seconds ?? 0) < -60;
+export default function VehicleDialog({ vehicle: v, onClose, isStuck = false }: Props) {
+  const delay = v.delay_seconds ?? 0;
+  const isLate = delay > 120;
+  const isEarly = delay < -120;
+  const delayText = (isLate || isEarly) ? formatDelay(v.delay_seconds) : "";
 
   return (
     <div className="animate-dialog-in absolute bottom-6 left-1/2 z-[9999] w-80 -translate-x-1/2 rounded-xl bg-white/95 shadow-2xl ring-1 ring-black/5 backdrop-blur-sm">
@@ -59,16 +61,18 @@ export default function VehicleDialog({ vehicle: v, onClose }: Props) {
         <div className="flex items-center gap-2">
           <span
             className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-              isLate
-                ? "bg-red-100 text-red-700"
-                : isEarly
-                  ? "bg-yellow-100 text-yellow-700"
-                  : "bg-green-100 text-green-700"
+              isStuck
+                ? "bg-orange-100 text-orange-700"
+                : isLate
+                  ? "bg-red-100 text-red-700"
+                  : isEarly
+                    ? "bg-yellow-100 text-yellow-700"
+                    : "bg-green-100 text-green-700"
             }`}
           >
-            {isLate ? "Late" : isEarly ? "Early" : "On time"}
+            {isStuck ? "Stuck" : isLate ? "Late" : isEarly ? "Early" : "On time"}
           </span>
-          <span className="font-mono text-gray-700">{delayText}</span>
+          {delayText && <span className="font-mono text-gray-700">{delayText}</span>}
         </div>
 
         {/* Headway */}

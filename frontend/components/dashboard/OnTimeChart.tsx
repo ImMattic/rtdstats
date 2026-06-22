@@ -55,8 +55,12 @@ function OnTimeChart({ routes }: Props) {
                 entry.on_time_pct >= 80
                   ? "#16a34a"
                   : entry.on_time_pct >= 60
-                    ? "#ea580c"
-                    : "#dc2626"
+                    ? "#84cc16"
+                    : entry.on_time_pct >= 40
+                      ? "#eab308"
+                      : entry.on_time_pct >= 20
+                        ? "#f97316"
+                        : "#dc2626"
               }
             />
           ))}

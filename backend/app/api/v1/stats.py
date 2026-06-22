@@ -41,11 +41,11 @@ router = APIRouter(prefix="/stats", tags=["stats"])
 _ONTIME_SQL = """
     SELECT
         route_id,
-        sum(on_time)::bigint     AS on_time,
-        sum(late)::bigint        AS late,
-        sum(early)::bigint       AS early,
-        sum(observations)::bigint AS observations,
-        sum(delay_sum)::bigint   AS delay_sum
+        sum(on_time)::bigint                                  AS on_time,
+        sum(slightly_late + late + very_late)::bigint        AS late,
+        sum(very_early + early)::bigint                       AS early,
+        sum(observations)::bigint                             AS observations,
+        sum(delay_sum)::bigint                               AS delay_sum
     FROM trip_ontime_hourly
     WHERE bucket >= :cutoff
       AND (:route_id IS NULL OR route_id = :route_id)
@@ -287,7 +287,7 @@ async def stuck_vehicle_alerts(
         if streak_statuses and streak_statuses <= {1}:
             continue
 
-        # Skip vehicles within 150 m of the first or last stop of their trip.
+        # Skip vehicles at or near the first/last stop of their trip.
         # Fall back to route-level terminal stops when the live trip_id isn't
         # in the static schedule (e.g. RTD added/modified trips).
         if lat0 is not None and lon0 is not None:
@@ -297,16 +297,31 @@ async def stuck_vehicle_alerts(
             if terminal_stop_ids is None and latest.route_id and _route_terminal_stops is not None:
                 terminal_stop_ids = _route_terminal_stops.get(latest.route_id)
             if terminal_stop_ids:
-                near_endpoint = False
-                for sid in terminal_stop_ids:
-                    if sid:
-                        sc = stops_static.get(sid, {})
-                        slat = sc.get("stop_lat", 0.0)
-                        slon = sc.get("stop_lon", 0.0)
-                        if slat and slon and _haversine_m(lat0, lon0, slat, slon) < 150:
-                            near_endpoint = True
-                            break
-                if near_endpoint:
+                # Normalize to a flat set of non-None stop IDs for uniform handling.
+                flat_terminals: set[str] = (
+                    terminal_stop_ids
+                    if isinstance(terminal_stop_ids, set)
+                    else {s for s in terminal_stop_ids if s}
+                )
+                at_terminal = False
+                if flat_terminals:
+                    # Direct match: the live feed reports the vehicle at a known
+                    # terminal stop_id.  This is more reliable than coordinates
+                    # because it doesn't depend on GPS precision or stop placement.
+                    if latest.stop_id and latest.stop_id in flat_terminals:
+                        at_terminal = True
+                    # Geofence fallback: vehicle coordinates within 300 m of a
+                    # terminal stop.  Radius is intentionally generous — bus
+                    # layover bays can sit well away from the stop marker.
+                    if not at_terminal:
+                        for sid in flat_terminals:
+                            sc = stops_static.get(sid, {})
+                            slat = sc.get("stop_lat", 0.0)
+                            slon = sc.get("stop_lon", 0.0)
+                            if slat and slon and _haversine_m(lat0, lon0, slat, slon) < 300:
+                                at_terminal = True
+                                break
+                if at_terminal:
                     continue
 
         stop_info = stops_static.get(latest.stop_id or "", {})

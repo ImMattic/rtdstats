@@ -9,10 +9,11 @@ type SortKey = keyof Pick<
 >;
 type SortDir = "asc" | "desc";
 
-const PAGE_SIZE_OPTIONS = [15, 30, 50, 100] as const;
+const PAGE_SIZE = 15;
 
 interface Props {
   routes: FrequencyRouteStats[];
+  onRowClick?: (routeId: string) => void;
 }
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
@@ -43,11 +44,10 @@ function FrequencyBadge({ minutes }: { minutes: number }) {
   );
 }
 
-function FrequencyTable({ routes }: Props) {
+function FrequencyTable({ routes, onRowClick }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("avg_headway_minutes");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(15);
 
   const sorted = useMemo(() => {
     const copy = routes.filter((r) => r.avg_headway_minutes > 0);
@@ -62,8 +62,8 @@ function FrequencyTable({ routes }: Props) {
     return copy;
   }, [routes, sortKey, sortDir]);
 
-  const totalPages = Math.ceil(sorted.length / pageSize);
-  const pageRows = sorted.slice(page * pageSize, page * pageSize + pageSize);
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+  const pageRows = sorted.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
   function handleSort(key: SortKey) {
     if (key === sortKey) {
@@ -72,11 +72,6 @@ function FrequencyTable({ routes }: Props) {
       setSortKey(key);
       setSortDir("asc");
     }
-    setPage(0);
-  }
-
-  function handlePageSize(size: (typeof PAGE_SIZE_OPTIONS)[number]) {
-    setPageSize(size);
     setPage(0);
   }
 
@@ -122,11 +117,16 @@ function FrequencyTable({ routes }: Props) {
                 <SortIcon active={sortKey === "min_headway_minutes"} dir={sortDir} />
               </th>
               <th className="px-3 py-2 text-center">Frequency</th>
+              <th className="w-6"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {pageRows.map((r) => (
-              <tr key={r.route_id} className="hover:bg-gray-50">
+              <tr
+                key={r.route_id}
+                className={`group hover:bg-gray-50 ${onRowClick ? "cursor-pointer" : ""}`}
+                onClick={() => onRowClick?.(r.route_id)}
+              >
                 <td className="px-3 py-2 font-bold text-gray-900">{r.route_short_name}</td>
                 <td className="px-3 py-2 text-right">{r.vehicle_count}</td>
                 <td className="px-3 py-2 text-right">
@@ -142,33 +142,17 @@ function FrequencyTable({ routes }: Props) {
                 <td className="px-3 py-2 text-center">
                   <FrequencyBadge minutes={r.avg_headway_minutes} />
                 </td>
+                <td className="pr-3 text-gray-300 group-hover:text-gray-500 transition-colors select-none">›</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      <div className="flex items-center justify-between text-xs text-gray-500">
-        <div className="flex items-center gap-2">
-          <span>Rows per page:</span>
-          {PAGE_SIZE_OPTIONS.map((size) => (
-            <button
-              key={size}
-              onClick={() => handlePageSize(size)}
-              className={`px-2 py-0.5 rounded ${
-                pageSize === size
-                  ? "bg-gray-200 text-gray-800 font-semibold"
-                  : "hover:bg-gray-100"
-              }`}
-            >
-              {size}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-3">
+      {totalPages > 1 && (
+        <div className="flex items-center justify-end gap-3 text-xs text-gray-500">
           <span>
-            {page * pageSize + 1}–{Math.min(page * pageSize + pageSize, sorted.length)} of{" "}
+            {page * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE + PAGE_SIZE, sorted.length)} of{" "}
             {sorted.length}
           </span>
           <button
@@ -186,7 +170,7 @@ function FrequencyTable({ routes }: Props) {
             ›
           </button>
         </div>
-      </div>
+      )}
     </div>
   );
 }

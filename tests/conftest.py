@@ -72,12 +72,17 @@ def clear_module_caches():
     import app.api.v1.realtime as realtime_mod
     import app.api.v1.stats as stats_mod
     import app.services.ingestion as ingestion_mod
+    import app.services.gtfs_schedule as schedule_mod
+    import app.services.ontime as ontime_mod
 
     realtime_mod._vehicles_cache.clear()
     stats_mod._alerts_cache = None
     stats_mod._trip_endpoints = None
     ingestion_mod._routes_cache = None
     ingestion_mod._stops_cache = None
+    schedule_mod._schedule_cache = None
+    schedule_mod._trip_stop_schedule_cache = None
+    ontime_mod._recorded.clear()
     yield
 
 
@@ -93,6 +98,8 @@ def patch_gtfs_static():
         patch("app.api.v1.historical.load_gtfs_static_data", return_value=({}, {})),
         patch("app.api.v1.stats.load_gtfs_static_data", return_value=({}, {})),
         patch("app.api.v1.stats.load_trip_endpoint_sequences", return_value=({}, {})),
+        patch("app.api.v1.analytics.load_gtfs_static_data", return_value=({}, {})),
+        patch("app.api.v1.analytics.load_schedule_summary", return_value={}),
     ):
         yield
 

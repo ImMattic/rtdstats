@@ -3,7 +3,7 @@
 import L from "leaflet";
 import { memo, useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, Marker, Tooltip, Polyline, CircleMarker, useMap, useMapEvents } from "react-leaflet";
-import type { VehiclePosition, RailShape } from "@/lib/types";
+import type { VehiclePosition, RailShape, StopInfo } from "@/lib/types";
 import { useRailShapes, useRouteShape, useRouteStops } from "@/lib/hooks";
 import { headwayColor } from "@/lib/utils";
 
@@ -16,6 +16,7 @@ const DENVER_METRO_BOUNDS: L.LatLngBoundsExpression = [
 
 const DOWNTOWN_CENTER: [number, number] = [39.74948688769244, -104.99440656899203];
 const DOWNTOWN_ZOOM_THRESHOLD = 14;
+const STOP_MARKER_MIN_ZOOM = 13;
 // ~1 mile radius (0.0145° ≈ 1609m in latitude); covers Union Station and the
 // broader downtown core where stopped vehicles create a dense, unreadable cluster.
 const DOWNTOWN_RADIUS_SQ = 0.0145 * 0.0145;
@@ -34,6 +35,8 @@ interface Props {
   onVehicleClick: (v: VehiclePosition) => void;
   selectedVehicle?: VehiclePosition | null;
   flyTo?: FlyToCoords | null;
+  selectedStop?: StopInfo | null;
+  onStopClick?: (stopId: string) => void;
 }
 
 function iconPx(zoom: number): number {
@@ -56,19 +59,26 @@ const _iconCache = new Map<string, L.DivIcon>();
 function createVehicleIcon(
   bearing: number | null,
   fillColor: string,
-  strokeColor: string,
+  headwayStroke: string,
+  outlineColor: string,
   zoom: number,
   isRail: boolean,
 ): L.DivIcon {
   // Bucket bearing to 5° so the cache stays small (visually indistinguishable).
   const rot = Math.round((bearing ?? 0) / 5) * 5;
-  const cacheKey = `${isRail ? 1 : 0}|${fillColor || "888888"}|${strokeColor}|${zoom}|${rot}`;
+  const cacheKey = `${isRail ? 1 : 0}|${fillColor || "888888"}|${headwayStroke}|${outlineColor}|${zoom}|${rot}`;
   const cached = _iconCache.get(cacheKey);
   if (cached) return cached;
 
   const s   = iconPx(zoom);
   const cx  = s / 2;
   const sw  = Math.max(1.5, s / 14);
+  // Two-layer stroke: outer headway ring + inner black/white separator.
+  // swOuter is the combined width; swInner is just the outline layer.
+  // The visible headway ring = (swOuter - swInner) / 2 on each side of the path.
+  const swOuter = sw * 3.5;
+  const swInner = sw * 1.5;
+  const pad = Math.ceil(swOuter / 2); // SVG edge padding to avoid clipping
   const fill  = `#${fillColor || "888888"}`;
   let svgBody: string;
   let totalH: number;
@@ -83,10 +93,10 @@ function createVehicleIcon(
     const rx = Math.round(w * 0.32);
     const x0 = cx - w / 2;
     const x1 = cx + w / 2;
-    totalH  = nH + bH + Math.ceil(sw * 2);
+    totalH  = nH + bH + Math.ceil(pad * 2);
     anchorY = Math.round(nH + bH / 2);
     const path = [
-      `M ${cx} ${sw}`,
+      `M ${cx} ${pad}`,
       `L ${x1} ${nH}`,
       `L ${x1} ${nH + bH - rx}`,
       `Q ${x1} ${nH + bH} ${x1 - rx} ${nH + bH}`,
@@ -96,7 +106,8 @@ function createVehicleIcon(
       `Z`,
     ].join(" ");
     svgBody = `<svg width="${s}" height="${totalH}" viewBox="0 0 ${s} ${totalH}" xmlns="http://www.w3.org/2000/svg">
-      <path d="${path}" fill="${fill}" stroke="${strokeColor}" stroke-width="${sw}" stroke-linejoin="round"/>
+      <path d="${path}" fill="none" stroke="${headwayStroke}" stroke-width="${swOuter}" stroke-linejoin="round"/>
+      <path d="${path}" fill="${fill}" stroke="${outlineColor}" stroke-width="${swInner}" stroke-linejoin="round"/>
     </svg>`;
   } else {
     // Bus: circle with a small directional tip, single unified path, no seam.
@@ -107,18 +118,19 @@ function createVehicleIcon(
     const h    = r + tip;                          // tip-to-circle-center distance
     const ty   = Math.round(r * r / h);           // tangent point: pixels above center
     const tx   = Math.round(r * Math.sqrt(h * h - r * r) / h); // tangent point: horiz offset
-    const cy_c = sw + h;                           // circle center y
+    const cy_c = pad + h;                          // circle center y
     const tanY = cy_c - ty;                        // y of both tangent points
-    totalH  = Math.ceil(cy_c + r + sw);
+    totalH  = Math.ceil(cy_c + r + pad);
     anchorY = Math.round(cy_c);
     const path = [
-      `M ${cx} ${sw}`,                                      // tip
+      `M ${cx} ${pad}`,                                     // tip
       `L ${cx + tx} ${tanY}`,                               // right tangent point
       `A ${r} ${r} 0 1 1 ${cx - tx} ${tanY}`,              // arc through bottom (cw, large)
       `Z`,
     ].join(" ");
     svgBody = `<svg width="${s}" height="${totalH}" viewBox="0 0 ${s} ${totalH}" xmlns="http://www.w3.org/2000/svg">
-      <path d="${path}" fill="${fill}" stroke="${strokeColor}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${path}" fill="none" stroke="${headwayStroke}" stroke-width="${swOuter}" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${path}" fill="${fill}" stroke="${outlineColor}" stroke-width="${swInner}" stroke-linejoin="round" stroke-linecap="round"/>
     </svg>`;
   }
 
@@ -212,7 +224,8 @@ const VehicleMarkers = memo(function VehicleMarkers({ vehicles, onVehicleClick, 
               icon={createVehicleIcon(
                 v.bearing,
                 v.route_color,
-                isSelected ? "#FFFFFF" : headwayColor(v.headway_minutes),
+                headwayColor(v.headway_minutes),
+                isSelected ? "#FFFFFF" : "#000000",
                 zoom,
                 RAIL_TYPES.has(v.route_type),
               )}
@@ -276,33 +289,69 @@ function SelectedBusRouteLine({ selectedVehicle }: { selectedVehicle?: VehiclePo
   );
 }
 
-function RouteStopMarkers({ selectedVehicle }: { selectedVehicle?: VehiclePosition | null }) {
+function RouteStopMarkers({
+  selectedVehicle,
+  onStopClick,
+  selectedStopId,
+}: {
+  selectedVehicle?: VehiclePosition | null;
+  onStopClick?: (stopId: string) => void;
+  selectedStopId?: string | null;
+}) {
   const { data } = useRouteStops(selectedVehicle?.route_id);
+  const [zoom, setZoom] = useState(DEFAULT_ZOOM);
 
-  if (!data?.stops || !selectedVehicle) return null;
+  useMapEvents({ zoomend: (e) => setZoom((e.target as L.Map).getZoom()) });
+
+  if (!data?.stops || !selectedVehicle || zoom < STOP_MARKER_MIN_ZOOM) return null;
 
   const color = `#${selectedVehicle.route_color || "888888"}`;
   return (
     <>
-      {data.stops.map((stop) => (
-        <CircleMarker
-          key={stop.stop_id}
-          center={[stop.stop_lat, stop.stop_lon]}
-          radius={4}
-          pathOptions={{
-            color: "#ffffff",
-            weight: 1.5,
-            fillColor: color,
-            fillOpacity: 0.9,
-            opacity: 1,
-          }}
-        >
-          <Tooltip direction="top" offset={[0, -6]} opacity={1}>
-            <span className="text-xs">{stop.stop_name}</span>
-          </Tooltip>
-        </CircleMarker>
-      ))}
+      {data.stops.map((stop) => {
+        const isSelected = stop.stop_id === selectedStopId;
+        return (
+          <CircleMarker
+            key={stop.stop_id}
+            center={[stop.stop_lat, stop.stop_lon]}
+            radius={isSelected ? 6 : 4}
+            pathOptions={{
+              color: isSelected ? "#ffffff" : "#ffffff",
+              weight: isSelected ? 2 : 1.5,
+              fillColor: isSelected ? "#002F87" : color,
+              fillOpacity: 0.9,
+              opacity: 1,
+            }}
+            eventHandlers={onStopClick ? { click: () => onStopClick(stop.stop_id) } : {}}
+          >
+            <Tooltip direction="top" offset={[0, -6]} opacity={1}>
+              <span className="text-xs">{stop.stop_name}</span>
+            </Tooltip>
+          </CircleMarker>
+        );
+      })}
     </>
+  );
+}
+
+function SelectedStopMarker({ stop }: { stop: StopInfo }) {
+  return (
+    <CircleMarker
+      center={[stop.stop_lat, stop.stop_lon]}
+      radius={10}
+      pathOptions={{
+        color: "#ffffff",
+        weight: 3,
+        fillColor: "#002F87",
+        fillOpacity: 1,
+        opacity: 1,
+      }}
+    >
+      <Tooltip direction="top" offset={[0, -13]} opacity={1}>
+        <span className="font-semibold">{stop.stop_name}</span>
+        {stop.stop_desc && <><br /><span className="text-xs opacity-75">{stop.stop_desc}</span></>}
+      </Tooltip>
+    </CircleMarker>
   );
 }
 
@@ -316,7 +365,7 @@ function FlyToHandler({ flyTo }: { flyTo?: FlyToCoords | null }) {
   return null;
 }
 
-export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, flyTo }: Props) {
+export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, flyTo, selectedStop, onStopClick }: Props) {
   useEffect(() => {
     // @ts-expect-error – _getIconUrl is internal
     delete L.Icon.Default.prototype._getIconUrl;
@@ -346,7 +395,12 @@ export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, 
       <FlyToHandler flyTo={flyTo} />
       <RailLines />
       <SelectedBusRouteLine selectedVehicle={selectedVehicle} />
-      <RouteStopMarkers selectedVehicle={selectedVehicle} />
+      <RouteStopMarkers
+        selectedVehicle={selectedVehicle}
+        onStopClick={onStopClick}
+        selectedStopId={selectedStop?.stop_id}
+      />
+      {selectedStop && <SelectedStopMarker stop={selectedStop} />}
       <VehicleMarkers vehicles={vehicles} onVehicleClick={onVehicleClick} selectedVehicle={selectedVehicle} />
     </MapContainer>
   );

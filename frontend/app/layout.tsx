@@ -7,16 +7,30 @@ import Providers from "./providers";
 
 const inter = Inter({ subsets: ["latin"] });
 
+const description =
+  "Real-time vehicle positions, on-time performance, and delay tracking for Denver's RTD light rail, commuter rail, and bus network.";
+
 export const metadata: Metadata = {
-  title: "RTDstats - Denver RTD Tracking",
-  description:
-    "Real-time and historical tracking for Denver RTD — rail, bus, and Flatiron Flyer.",
+  title: "RTDstats – Denver RTD Live Tracker",
+  description,
   icons: {
     icon: [
       { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
       { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
     ],
     apple: "/apple-touch-icon.png",
+  },
+  openGraph: {
+    title: "RTDstats – Denver RTD Live Tracker",
+    description,
+    type: "website",
+    locale: "en_US",
+    siteName: "RTDstats",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "RTDstats – Denver RTD Live Tracker",
+    description,
   },
 };
 

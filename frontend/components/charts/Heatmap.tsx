@@ -1,0 +1,106 @@
+"use client";
+import { useMemo, useState } from "react";
+import type { HeatmapCell } from "@/lib/types";
+import { DOW_LABELS, formatHour, onTimeColor } from "@/lib/utils";
+
+interface Props {
+  cells: HeatmapCell[];
+  /** "ontime" colors by on-time %, "delay" by average delay. */
+  metric?: "ontime" | "delay";
+  onCellClick?: (cell: HeatmapCell) => void;
+}
+
+const HOURS = Array.from({ length: 24 }, (_, h) => h);
+const DOWS = [1, 2, 3, 4, 5, 6, 0]; // Mon..Sun for display
+
+function delayColor(seconds: number): string {
+  // green (early/on-time) → red (very late), centered around 0–300s.
+  if (seconds <= 0) return "#16a34a";
+  if (seconds <= 120) return "#65a30d";
+  if (seconds <= 300) return "#eab308";
+  if (seconds <= 600) return "#ea580c";
+  return "#dc2626";
+}
+
+export default function Heatmap({ cells, metric = "ontime", onCellClick }: Props) {
+  const [hover, setHover] = useState<HeatmapCell | null>(null);
+
+  const lookup = useMemo(() => {
+    const m = new Map<string, HeatmapCell>();
+    for (const c of cells) m.set(`${c.dow}-${c.hour}`, c);
+    return m;
+  }, [cells]);
+
+  if (!cells.length) {
+    return <p className="py-8 text-center text-sm text-gray-500">No heatmap data yet.</p>;
+  }
+
+  return (
+    <div>
+      <div className="overflow-x-auto">
+        <div className="inline-block min-w-full">
+          {/* Hour axis */}
+          <div className="flex pl-10">
+            {HOURS.map((h) => (
+              <div key={h} className="w-[18px] text-center text-[8px] text-gray-400">
+                {h % 3 === 0 ? formatHour(h) : ""}
+              </div>
+            ))}
+          </div>
+          {DOWS.map((dow) => (
+            <div key={dow} className="flex items-center">
+              <div className="w-10 pr-1 text-right text-[10px] font-medium text-gray-500">
+                {DOW_LABELS[dow]}
+              </div>
+              {HOURS.map((h) => {
+                const cell = lookup.get(`${dow}-${h}`);
+                const color = !cell
+                  ? "#f1f5f9"
+                  : metric === "ontime"
+                    ? onTimeColor(cell.on_time_pct)
+                    : delayColor(cell.avg_delay_seconds);
+                return (
+                  <div
+                    key={h}
+                    className={`m-[1px] h-[18px] w-[16px] rounded-sm transition-transform hover:scale-125 ${cell && onCellClick ? "cursor-pointer" : ""}`}
+                    style={{ backgroundColor: color, opacity: cell ? 1 : 0.4 }}
+                    onMouseEnter={() => cell && setHover(cell)}
+                    onMouseLeave={() => setHover(null)}
+                    onClick={() => cell && onCellClick?.(cell)}
+                  />
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+        <div className="h-4">
+          {hover && (
+            <span>
+              <span className="font-semibold text-gray-700">
+                {DOW_LABELS[hover.dow]} {formatHour(hover.hour)}
+              </span>{" "}
+              · {hover.on_time_pct.toFixed(0)}% on-time · {(hover.avg_delay_seconds / 60).toFixed(1)}m avg ·{" "}
+              {hover.observations.toLocaleString()} samples
+              {onCellClick && (
+                <span className="ml-2 font-medium text-blue-600">· Click to view trips →</span>
+              )}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          <span>{metric === "ontime" ? "worse" : "early"}</span>
+          {(metric === "ontime"
+            ? ["#dc2626", "#ea580c", "#16a34a"]
+            : ["#16a34a", "#eab308", "#dc2626"]
+          ).map((c) => (
+            <span key={c} className="h-3 w-3 rounded-sm" style={{ backgroundColor: c }} />
+          ))}
+          <span>{metric === "ontime" ? "better" : "late"}</span>
+        </div>
+      </div>
+    </div>
+  );
+}

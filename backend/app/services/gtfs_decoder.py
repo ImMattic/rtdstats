@@ -59,8 +59,29 @@ def _default_project_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
+def resolve_gtfs_static_root() -> Path:
+    """Locate the gtfs-static directory across local and container layouts.
+
+    In the Docker image the backend is copied to ``/app`` (so this file lives at
+    ``/app/app/services/...`` and ``parents[3]`` is ``/``), while the static
+    feeds are mounted at ``/app/gtfs-static``.  Locally ``parents[3]`` is the
+    repo root.  Check the container mount first, then the local layout, then
+    walk upward as a last resort.
+    """
+    current = Path(__file__).resolve()
+    candidates = [Path("/app/gtfs-static"), current.parents[3] / "gtfs-static"]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    for parent in current.parents:
+        candidate = parent / "gtfs-static"
+        if candidate.exists():
+            return candidate
+    return Path("/app/gtfs-static")
+
+
 def load_gtfs_static_data(gtfs_static_root: Path | None = None) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
-    root = gtfs_static_root or (_default_project_root() / "gtfs-static")
+    root = gtfs_static_root or resolve_gtfs_static_root()
     routes: dict[str, dict[str, Any]] = {}
     stops: dict[str, dict[str, Any]] = {}
 
@@ -111,7 +132,7 @@ def load_trip_endpoint_sequences(gtfs_static_root: Path | None = None) -> tuple[
 
     Used to exclude vehicles that are legitimately waiting at route terminals.
     """
-    root = gtfs_static_root or (_default_project_root() / "gtfs-static")
+    root = gtfs_static_root or resolve_gtfs_static_root()
     sequences: dict[str, tuple[int, int]] = {}
     stop_ids: dict[str, tuple[str | None, str | None]] = {}
 
@@ -159,7 +180,7 @@ def load_route_terminal_stops(gtfs_static_root: Path | None = None) -> dict[str,
     route.  Used as a fallback when a live trip_id is not present in the static
     schedule (e.g. RTD added/modified trips).
     """
-    root = gtfs_static_root or (_default_project_root() / "gtfs-static")
+    root = gtfs_static_root or resolve_gtfs_static_root()
 
     trip_route: dict[str, str] = {}
     for folder in TRANSIT_FOLDERS:
