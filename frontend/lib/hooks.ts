@@ -7,6 +7,8 @@ import {
   fetchRailShapes,
   fetchRouteShape,
   fetchRouteStops,
+  fetchStopsSearch,
+  fetchStopInfo,
   fetchHistorical,
   fetchOnTime,
   fetchFrequency,
@@ -215,5 +217,23 @@ export function useRouteStops(routeId?: string) {
     queryFn: () => fetchRouteStops(routeId!),
     staleTime: Infinity,
     enabled: Boolean(routeId),
+  });
+}
+
+export function useStopsSearch(query: string) {
+  return useQuery({
+    queryKey: ["stopsSearch", query],
+    queryFn: () => fetchStopsSearch(query),
+    staleTime: 60_000,
+    enabled: query.trim().length >= 2,
+  });
+}
+
+export function useStopInfo(stopId?: string) {
+  return useQuery({
+    queryKey: ["stopInfo", stopId],
+    queryFn: () => fetchStopInfo(stopId!),
+    staleTime: Infinity,
+    enabled: Boolean(stopId),
   });
 }

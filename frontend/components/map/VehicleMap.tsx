@@ -3,7 +3,7 @@
 import L from "leaflet";
 import { memo, useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, Marker, Tooltip, Polyline, CircleMarker, useMap, useMapEvents } from "react-leaflet";
-import type { VehiclePosition, RailShape } from "@/lib/types";
+import type { VehiclePosition, RailShape, StopInfo } from "@/lib/types";
 import { useRailShapes, useRouteShape, useRouteStops } from "@/lib/hooks";
 import { headwayColor } from "@/lib/utils";
 
@@ -35,6 +35,8 @@ interface Props {
   onVehicleClick: (v: VehiclePosition) => void;
   selectedVehicle?: VehiclePosition | null;
   flyTo?: FlyToCoords | null;
+  selectedStop?: StopInfo | null;
+  onStopClick?: (stopId: string) => void;
 }
 
 function iconPx(zoom: number): number {
@@ -277,7 +279,15 @@ function SelectedBusRouteLine({ selectedVehicle }: { selectedVehicle?: VehiclePo
   );
 }
 
-function RouteStopMarkers({ selectedVehicle }: { selectedVehicle?: VehiclePosition | null }) {
+function RouteStopMarkers({
+  selectedVehicle,
+  onStopClick,
+  selectedStopId,
+}: {
+  selectedVehicle?: VehiclePosition | null;
+  onStopClick?: (stopId: string) => void;
+  selectedStopId?: string | null;
+}) {
   const { data } = useRouteStops(selectedVehicle?.route_id);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
 
@@ -288,25 +298,50 @@ function RouteStopMarkers({ selectedVehicle }: { selectedVehicle?: VehiclePositi
   const color = `#${selectedVehicle.route_color || "888888"}`;
   return (
     <>
-      {data.stops.map((stop) => (
-        <CircleMarker
-          key={stop.stop_id}
-          center={[stop.stop_lat, stop.stop_lon]}
-          radius={4}
-          pathOptions={{
-            color: "#ffffff",
-            weight: 1.5,
-            fillColor: color,
-            fillOpacity: 0.9,
-            opacity: 1,
-          }}
-        >
-          <Tooltip direction="top" offset={[0, -6]} opacity={1}>
-            <span className="text-xs">{stop.stop_name}</span>
-          </Tooltip>
-        </CircleMarker>
-      ))}
+      {data.stops.map((stop) => {
+        const isSelected = stop.stop_id === selectedStopId;
+        return (
+          <CircleMarker
+            key={stop.stop_id}
+            center={[stop.stop_lat, stop.stop_lon]}
+            radius={isSelected ? 6 : 4}
+            pathOptions={{
+              color: isSelected ? "#ffffff" : "#ffffff",
+              weight: isSelected ? 2 : 1.5,
+              fillColor: isSelected ? "#002F87" : color,
+              fillOpacity: 0.9,
+              opacity: 1,
+            }}
+            eventHandlers={onStopClick ? { click: () => onStopClick(stop.stop_id) } : {}}
+          >
+            <Tooltip direction="top" offset={[0, -6]} opacity={1}>
+              <span className="text-xs">{stop.stop_name}</span>
+            </Tooltip>
+          </CircleMarker>
+        );
+      })}
     </>
+  );
+}
+
+function SelectedStopMarker({ stop }: { stop: StopInfo }) {
+  return (
+    <CircleMarker
+      center={[stop.stop_lat, stop.stop_lon]}
+      radius={10}
+      pathOptions={{
+        color: "#ffffff",
+        weight: 3,
+        fillColor: "#002F87",
+        fillOpacity: 1,
+        opacity: 1,
+      }}
+    >
+      <Tooltip direction="top" offset={[0, -13]} opacity={1}>
+        <span className="font-semibold">{stop.stop_name}</span>
+        {stop.stop_desc && <><br /><span className="text-xs opacity-75">{stop.stop_desc}</span></>}
+      </Tooltip>
+    </CircleMarker>
   );
 }
 
@@ -320,7 +355,7 @@ function FlyToHandler({ flyTo }: { flyTo?: FlyToCoords | null }) {
   return null;
 }
 
-export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, flyTo }: Props) {
+export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, flyTo, selectedStop, onStopClick }: Props) {
   useEffect(() => {
     // @ts-expect-error – _getIconUrl is internal
     delete L.Icon.Default.prototype._getIconUrl;
@@ -350,7 +385,12 @@ export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, 
       <FlyToHandler flyTo={flyTo} />
       <RailLines />
       <SelectedBusRouteLine selectedVehicle={selectedVehicle} />
-      <RouteStopMarkers selectedVehicle={selectedVehicle} />
+      <RouteStopMarkers
+        selectedVehicle={selectedVehicle}
+        onStopClick={onStopClick}
+        selectedStopId={selectedStop?.stop_id}
+      />
+      {selectedStop && <SelectedStopMarker stop={selectedStop} />}
       <VehicleMarkers vehicles={vehicles} onVehicleClick={onVehicleClick} selectedVehicle={selectedVehicle} />
     </MapContainer>
   );

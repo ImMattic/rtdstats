@@ -151,6 +151,29 @@ export interface RouteStopsResponse {
   stops: RouteStop[];
 }
 
+export interface StopRoute {
+  route_id: string;
+  short_name: string;
+  long_name: string;
+  color: string;
+  route_type: string;
+}
+
+export interface StopInfo {
+  stop_id: string;
+  stop_name: string;
+  stop_desc: string;
+  stop_lat: number;
+  stop_lon: number;
+  is_rail: boolean;
+  routes: StopRoute[];
+}
+
+export interface StopsSearchResponse {
+  query: string;
+  stops: StopInfo[];
+}
+
 // ── Deep analytics (api/v1/stats/* analytics endpoints) ─────────────────────
 
 export interface MetricWithDelta {

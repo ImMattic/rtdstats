@@ -16,6 +16,8 @@ import type {
   RoutesResponse,
   ScheduleFrequencyResponse,
   ServiceDeliveryResponse,
+  StopInfo,
+  StopsSearchResponse,
   TrendResponse,
   VehicleTripResponse,
   WorstStopsResponse,
@@ -61,6 +63,16 @@ export function fetchRouteShape(routeId: string): Promise<RouteShape> {
 
 export function fetchRouteStops(routeId: string): Promise<RouteStopsResponse> {
   return apiFetch(`/api/v1/routes/stops/${encodeURIComponent(routeId)}`);
+}
+
+// ── Stops ──────────────────────────────────────────────────────────────────
+
+export function fetchStopsSearch(q: string): Promise<StopsSearchResponse> {
+  return apiFetch(`/api/v1/stops/search?${new URLSearchParams({ q })}`);
+}
+
+export function fetchStopInfo(stopId: string): Promise<StopInfo> {
+  return apiFetch(`/api/v1/stops/${encodeURIComponent(stopId)}`);
 }
 
 // ── Historical ────────────────────────────────────────────────────────────

@@ -2,9 +2,10 @@
 import dynamic from "next/dynamic";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { useVehicles } from "@/lib/hooks";
-import type { VehiclePosition } from "@/lib/types";
+import { useVehicles, useStopInfo } from "@/lib/hooks";
+import type { StopInfo, VehiclePosition } from "@/lib/types";
 import VehicleDialog from "@/components/map/VehicleDialog";
+import StopDialog from "@/components/map/StopDialog";
 import VehicleSearch from "@/components/map/VehicleSearch";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { headwayColor } from "@/lib/utils";
@@ -18,8 +19,11 @@ const VehicleMap = dynamic(() => import("@/components/map/VehicleMap"), {
 function HomePageInner() {
   const { data, isLoading, isError, dataUpdatedAt } = useVehicles();
   const [selected, setSelected] = useState<VehiclePosition | null>(null);
+  const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
   const [searchFlyTo, setSearchFlyTo] = useState<{ lat: number; lng: number; zoom?: number } | null>(null);
   const searchParams = useSearchParams();
+
+  const { data: selectedStop } = useStopInfo(selectedStopId ?? undefined);
 
   const flyTo = useMemo(() => {
     const lat = searchParams.get("lat");
@@ -38,14 +42,28 @@ function HomePageInner() {
   }, [targetVehicleId, data?.vehicles]);
 
   const handleSearchSelect = useCallback((vehicle: VehiclePosition) => {
+    setSelectedStopId(null);
     setSelected(vehicle);
     if (vehicle.latitude !== null && vehicle.longitude !== null) {
       setSearchFlyTo({ lat: vehicle.latitude, lng: vehicle.longitude, zoom: 15 });
     }
   }, []);
 
+  const handleSearchStopSelect = useCallback((stop: StopInfo) => {
+    setSelected(null);
+    setSelectedStopId(stop.stop_id);
+    setSearchFlyTo({ lat: stop.stop_lat, lng: stop.stop_lon, zoom: 16 });
+  }, []);
+
+  // Clicking a stop marker on the map: keep the vehicle selected (so route stops
+  // remain visible) but surface the stop dialog. Clicking the same stop again closes it.
+  const handleMapStopClick = useCallback((stopId: string) => {
+    setSelectedStopId((prev: string | null) => (prev === stopId ? null : stopId));
+  }, []);
+
   // Stable identity so the memoized marker layer isn't rebuilt every render.
   const handleVehicleClick = useCallback((vehicle: VehiclePosition) => {
+    setSelectedStopId(null);
     setSelected((prev) => {
       if (!prev) return vehicle;
 
@@ -134,14 +152,28 @@ function HomePageInner() {
               onVehicleClick={handleVehicleClick}
               selectedVehicle={selected}
               flyTo={searchFlyTo ?? flyTo}
+              selectedStop={selectedStop}
+              onStopClick={handleMapStopClick}
             />
-            <VehicleSearch vehicles={vehicles} onSelect={handleSearchSelect} />
+            <VehicleSearch
+              vehicles={vehicles}
+              onSelect={handleSearchSelect}
+              onSelectStop={handleSearchStopSelect}
+            />
           </>
         )}
 
-        {/* Click-through dialog */}
-        {selected && (
+        {/* Vehicle dialog — hidden while a stop dialog is open */}
+        {selected && !selectedStop && (
           <VehicleDialog vehicle={selected} onClose={() => setSelected(null)} />
+        )}
+        {/* Stop dialog — closing it returns to vehicle dialog if one was open */}
+        {selectedStop && (
+          <StopDialog
+            stop={selectedStop}
+            vehicles={vehicles}
+            onClose={() => setSelectedStopId(null)}
+          />
         )}
       </div>
     </div>

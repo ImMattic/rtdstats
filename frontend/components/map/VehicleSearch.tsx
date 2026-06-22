@@ -1,21 +1,24 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRoutes } from "@/lib/hooks";
-import type { VehiclePosition } from "@/lib/types";
+import { useRoutes, useStopsSearch } from "@/lib/hooks";
+import type { StopInfo, VehiclePosition } from "@/lib/types";
 
 interface Props {
   vehicles: VehiclePosition[];
   onSelect: (vehicle: VehiclePosition) => void;
+  onSelectStop: (stop: StopInfo) => void;
 }
 
-export default function VehicleSearch({ vehicles, onSelect }: Props) {
+export default function VehicleSearch({ vehicles, onSelect, onSelectStop }: Props) {
   const routes = useRoutes();
   const [query, setQuery] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const { data: stopResults } = useStopsSearch(query);
 
   useEffect(() => {
     function handleOutsideClick(e: MouseEvent) {
@@ -51,7 +54,15 @@ export default function VehicleSearch({ vehicles, onSelect }: Props) {
     return { rail, bus, other };
   }, [sortedRoutes, query]);
 
-  function handleSelect(routeId: string) {
+  const stops = query.trim().length >= 2 ? (stopResults?.stops ?? []) : [];
+
+  const totalGroups =
+    groupedRoutes.rail.length +
+    groupedRoutes.bus.length +
+    groupedRoutes.other.length +
+    stops.length;
+
+  function handleSelectRoute(routeId: string) {
     const vehicle = vehicles.find((v) => v.route_id === routeId);
     if (vehicle) onSelect(vehicle);
     const route = sortedRoutes.find((r) => r.route_id === routeId);
@@ -59,13 +70,20 @@ export default function VehicleSearch({ vehicles, onSelect }: Props) {
     setDropdownOpen(false);
   }
 
+  function handleSelectStop(stop: StopInfo) {
+    onSelectStop(stop);
+    setQuery(stop.stop_name);
+    setDropdownOpen(false);
+    setMobileExpanded(false);
+  }
+
   function expandMobile() {
     setMobileExpanded(true);
     setTimeout(() => inputRef.current?.focus(), 50);
   }
 
-  const totalGroups =
-    groupedRoutes.rail.length + groupedRoutes.bus.length + groupedRoutes.other.length;
+  const hasRoutes =
+    groupedRoutes.rail.length + groupedRoutes.bus.length + groupedRoutes.other.length > 0;
 
   return (
     <div ref={containerRef} className="absolute top-3 right-3 z-[1000]">
@@ -74,7 +92,7 @@ export default function VehicleSearch({ vehicles, onSelect }: Props) {
         <button
           className="sm:hidden flex h-11 w-11 items-center justify-center rounded-full bg-gray-900/90 border border-gray-700 text-gray-300 shadow-lg backdrop-blur-sm"
           onClick={expandMobile}
-          aria-label="Search routes"
+          aria-label="Search routes and stations"
         >
           <SearchIcon />
         </button>
@@ -93,7 +111,7 @@ export default function VehicleSearch({ vehicles, onSelect }: Props) {
               setDropdownOpen(true);
             }}
             onFocus={() => setDropdownOpen(true)}
-            placeholder="Search route…"
+            placeholder="Search route or station…"
             className="flex-1 min-w-0 bg-transparent text-base sm:text-sm text-gray-200 placeholder-gray-500 outline-none"
           />
           <button
@@ -110,7 +128,8 @@ export default function VehicleSearch({ vehicles, onSelect }: Props) {
         </div>
 
         {dropdownOpen && (
-          <ul className="mt-1 max-h-72 overflow-y-auto rounded-lg border border-gray-700 bg-gray-900/95 shadow-lg backdrop-blur-sm">
+          <ul className="mt-1 max-h-80 overflow-y-auto rounded-lg border border-gray-700 bg-gray-900/95 shadow-lg backdrop-blur-sm">
+            {/* ── Routes ───────────────────────────────────────── */}
             {groupedRoutes.rail.length > 0 && (
               <>
                 <li className="px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -120,7 +139,7 @@ export default function VehicleSearch({ vehicles, onSelect }: Props) {
                   <li key={r.route_id}>
                     <button
                       onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => handleSelect(r.route_id)}
+                      onClick={() => handleSelectRoute(r.route_id)}
                       className="flex w-full items-center gap-3 border-t border-gray-800 px-3 py-2.5 text-left hover:bg-gray-800 transition-colors"
                     >
                       <span
@@ -145,7 +164,7 @@ export default function VehicleSearch({ vehicles, onSelect }: Props) {
                   <li key={r.route_id}>
                     <button
                       onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => handleSelect(r.route_id)}
+                      onClick={() => handleSelectRoute(r.route_id)}
                       className="flex w-full items-center gap-3 border-t border-gray-800 px-3 py-2.5 text-left hover:bg-gray-800 transition-colors"
                     >
                       <span
@@ -170,7 +189,7 @@ export default function VehicleSearch({ vehicles, onSelect }: Props) {
                   <li key={r.route_id}>
                     <button
                       onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => handleSelect(r.route_id)}
+                      onClick={() => handleSelectRoute(r.route_id)}
                       className="flex w-full items-center gap-3 border-t border-gray-800 px-3 py-2.5 text-left hover:bg-gray-800 transition-colors"
                     >
                       <span
@@ -186,8 +205,53 @@ export default function VehicleSearch({ vehicles, onSelect }: Props) {
                 ))}
               </>
             )}
+
+            {/* ── Stations ─────────────────────────────────────── */}
+            {stops.length > 0 && (
+              <>
+                <li className={`px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-500 ${hasRoutes ? "border-t border-gray-700" : ""}`}>
+                  Stations
+                </li>
+                {stops.map((stop) => (
+                  <li key={stop.stop_id}>
+                    <button
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => handleSelectStop(stop)}
+                      className="flex w-full items-center gap-3 border-t border-gray-800 px-3 py-2.5 text-left hover:bg-gray-800 transition-colors"
+                    >
+                      <span className="shrink-0 text-gray-500">
+                        <StationIcon />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-gray-100">{stop.stop_name}</p>
+                        <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                          {stop.stop_desc && (
+                            <span className="text-xs text-gray-400 mr-1">{stop.stop_desc}</span>
+                          )}
+                          {stop.routes.slice(0, 6).map((r) => (
+                            <span
+                              key={r.route_id}
+                              className="inline-block rounded px-1 py-px text-[10px] font-bold text-white leading-tight"
+                              style={{ backgroundColor: `#${r.color || "888888"}` }}
+                            >
+                              {r.short_name}
+                            </span>
+                          ))}
+                          {stop.routes.length > 6 && (
+                            <span className="text-[10px] text-gray-500">
+                              +{stop.routes.length - 6}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </>
+            )}
+
             {totalGroups === 0 && (
-              <li className="px-3 py-3 text-sm text-gray-500">No routes found</li>
+              <li className="px-3 py-3 text-sm text-gray-500">No routes or stations found</li>
             )}
           </ul>
         )}
@@ -217,6 +281,14 @@ function ClearIcon() {
   return (
     <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
       <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+    </svg>
+  );
+}
+
+function StationIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path fillRule="evenodd" d="M9.69 18.933l.003.001C9.89 19.02 10 19 10 19s.11.02.308-.066l.002-.001.006-.003.018-.008a5.741 5.741 0 00.281-.14c.186-.096.446-.24.757-.433.62-.384 1.445-.966 2.274-1.765C15.302 15.01 17 12.42 17 9A7 7 0 1 0 3 9c0 3.42 1.698 6.01 3.354 7.585.829.799 1.654 1.381 2.274 1.765.311.193.57.337.757.433a5.741 5.741 0 00.281.14l.018.008.006.003zM10 11.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" clipRule="evenodd" />
     </svg>
   );
 }
