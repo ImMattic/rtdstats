@@ -74,6 +74,7 @@ async def get_active_vehicles(
     routes_static, _ = load_gtfs_static_data()
     trip_ids = {r.trip_id for r in latest_rows if r.trip_id}
     delay_map = await _delay_map(db, start, end, trip_ids)
+    arrival_count_map = await _arrival_count_map(db, start, end, trip_ids)
 
     vehicles = []
     for r in latest_rows:
@@ -93,6 +94,7 @@ async def get_active_vehicles(
                 "last_occupancy_status": r.occupancy_status,
                 "last_delay_seconds": delay_map.get(r.trip_id or ""),
                 "observation_count": obs_count,
+                "stop_arrival_count": arrival_count_map.get(r.trip_id or "", 0),
             }
         )
 
@@ -234,6 +236,27 @@ async def get_vehicle_trip(
         "on_time_pct": on_time_pct,
         "observation_count": len(pos_rows),
     }
+
+
+async def _arrival_count_map(
+    db: AsyncSession,
+    start: datetime,
+    end: datetime,
+    trip_ids: set[str],
+) -> dict[str, int]:
+    if not trip_ids:
+        return {}
+    stmt = (
+        select(StopArrivalEvent.trip_id, func.count().label("arrival_count"))
+        .where(
+            StopArrivalEvent.trip_id.in_(trip_ids),
+            StopArrivalEvent.timestamp >= start,
+            StopArrivalEvent.timestamp <= end,
+        )
+        .group_by(StopArrivalEvent.trip_id)
+    )
+    result = await db.execute(stmt)
+    return {tid: cnt for tid, cnt in result.all() if tid is not None}
 
 
 async def _delay_map(

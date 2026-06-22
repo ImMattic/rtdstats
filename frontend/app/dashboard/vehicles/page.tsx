@@ -46,7 +46,15 @@ function VehiclesContent() {
   const end = searchParams.get("end") ?? undefined;
   const routeId = searchParams.get("route_id") ?? undefined;
 
-  const { data, isLoading, isError } = useActiveVehicles({ start, end, route_id: routeId });
+  const raw = useActiveVehicles({ start, end, route_id: routeId });
+  const { isLoading, isError } = raw;
+  const data = useMemo(() => {
+    if (!raw.data) return raw.data;
+    const vehicles = raw.data.vehicles.filter(
+      (v) => v.observation_count >= 10 && v.stop_arrival_count > 1,
+    );
+    return { ...raw.data, vehicles, vehicle_count: vehicles.length };
+  }, [raw.data]);
 
   const timeLabel = useMemo(() => {
     if (!start || !end) return "";

@@ -123,13 +123,14 @@ function FrequencyTable({ routes, onRowClick }: Props) {
                 <SortIcon active={sortKey === "min_headway_minutes"} dir={sortDir} />
               </th>
               <th className="px-3 py-2 text-center">Frequency</th>
+              <th className="w-6"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {pageRows.map((r) => (
               <tr
                 key={r.route_id}
-                className={`hover:bg-gray-50 ${onRowClick ? "cursor-pointer" : ""}`}
+                className={`group hover:bg-gray-50 ${onRowClick ? "cursor-pointer" : ""}`}
                 onClick={() => onRowClick?.(r.route_id)}
               >
                 <td className="px-3 py-2 font-bold text-gray-900">{r.route_short_name}</td>
@@ -147,6 +148,7 @@ function FrequencyTable({ routes, onRowClick }: Props) {
                 <td className="px-3 py-2 text-center">
                   <FrequencyBadge minutes={r.avg_headway_minutes} />
                 </td>
+                <td className="pr-3 text-gray-300 group-hover:text-gray-500 transition-colors select-none">›</td>
               </tr>
             ))}
           </tbody>

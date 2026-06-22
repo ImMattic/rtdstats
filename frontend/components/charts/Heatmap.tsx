@@ -7,6 +7,7 @@ interface Props {
   cells: HeatmapCell[];
   /** "ontime" colors by on-time %, "delay" by average delay. */
   metric?: "ontime" | "delay";
+  onCellClick?: (cell: HeatmapCell) => void;
 }
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
@@ -21,7 +22,7 @@ function delayColor(seconds: number): string {
   return "#dc2626";
 }
 
-export default function Heatmap({ cells, metric = "ontime" }: Props) {
+export default function Heatmap({ cells, metric = "ontime", onCellClick }: Props) {
   const [hover, setHover] = useState<HeatmapCell | null>(null);
 
   const lookup = useMemo(() => {
@@ -61,10 +62,11 @@ export default function Heatmap({ cells, metric = "ontime" }: Props) {
                 return (
                   <div
                     key={h}
-                    className="m-[1px] h-[18px] w-[16px] rounded-sm transition-transform hover:scale-125"
+                    className={`m-[1px] h-[18px] w-[16px] rounded-sm transition-transform hover:scale-125 ${cell && onCellClick ? "cursor-pointer" : ""}`}
                     style={{ backgroundColor: color, opacity: cell ? 1 : 0.4 }}
                     onMouseEnter={() => cell && setHover(cell)}
                     onMouseLeave={() => setHover(null)}
+                    onClick={() => cell && onCellClick?.(cell)}
                   />
                 );
               })}
@@ -82,6 +84,9 @@ export default function Heatmap({ cells, metric = "ontime" }: Props) {
               </span>{" "}
               · {hover.on_time_pct.toFixed(0)}% on-time · {(hover.avg_delay_seconds / 60).toFixed(1)}m avg ·{" "}
               {hover.observations.toLocaleString()} obs
+              {onCellClick && (
+                <span className="ml-2 font-medium text-blue-600">· Click to view trips →</span>
+              )}
             </span>
           )}
         </div>

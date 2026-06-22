@@ -348,6 +348,7 @@ export interface ActiveVehicle {
   last_occupancy_status: string | null;
   last_delay_seconds: number | null;
   observation_count: number;
+  stop_arrival_count: number;
 }
 
 export interface ActiveVehiclesResponse {

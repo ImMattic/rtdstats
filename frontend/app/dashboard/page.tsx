@@ -20,13 +20,14 @@ import FrequencyTable from "@/components/dashboard/FrequencyTable";
 import DelayIncidents from "@/components/dashboard/DelayIncidents";
 import TrendChart from "@/components/charts/TrendChart";
 import Heatmap from "@/components/charts/Heatmap";
+import type { HeatmapCell } from "@/lib/types";
 import DistributionChart from "@/components/charts/DistributionChart";
 import ScorecardTable from "@/components/charts/ScorecardTable";
 import HeadwayChart from "@/components/charts/HeadwayChart";
 import OccupancyChart from "@/components/charts/OccupancyChart";
 import WorstStopsTable from "@/components/charts/WorstStopsTable";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
-import { formatCompact, formatDelayMin } from "@/lib/utils";
+import { formatDelayMin } from "@/lib/utils";
 
 const DAY_OPTIONS = [1, 7, 14, 30, 90];
 
@@ -112,6 +113,33 @@ export default function DashboardPage() {
     const qs = new URLSearchParams({ start: start.toISOString(), end: end.toISOString() });
     if (routeId) qs.set("route_id", routeId);
     router.push(`/dashboard/vehicles?${qs}`);
+  }
+
+  function handleHeatmapCellClick(cell: HeatmapCell) {
+    const now = new Date();
+    const startOfHour = new Date(now);
+    startOfHour.setMinutes(0, 0, 0);
+    const dowMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    for (let hoursBack = 0; hoursBack < 7 * 24; hoursBack++) {
+      const candidate = new Date(startOfHour.getTime() - hoursBack * 3600 * 1000);
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/Denver",
+        weekday: "short",
+        hour: "numeric",
+        hour12: false,
+      }).formatToParts(candidate);
+      const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
+      const rawHour = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0", 10);
+      const hour = rawHour === 24 ? 0 : rawHour;
+      const dow = dowMap[weekday] ?? -1;
+      if (dow === cell.dow && hour === cell.hour) {
+        const end = new Date(candidate.getTime() + 3600 * 1000);
+        const qs = new URLSearchParams({ start: candidate.toISOString(), end: end.toISOString() });
+        if (routeId) qs.set("route_id", routeId);
+        router.push(`/dashboard/vehicles?${qs}`);
+        return;
+      }
+    }
   }
 
   function handleFrequencyRowClick(rowRouteId: string) {
@@ -250,17 +278,12 @@ export default function DashboardPage() {
               </button>
             ))}
           </div>
-          <button
-            onClick={() => typeof window !== "undefined" && window.print()}
-            className="rounded border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:border-rtd-blue print:hidden"
-          >
-            Print report
-          </button>
         </div>
       </div>
 
-      {/* Hero KPIs */}
+      {/* KPIs */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <KpiCard title="Routes Tracked" value={ov ? String(ov.routes_tracked) : "—"} subtitle="with delay data" />
         <KpiCard
           title="On-Time Rate"
           value={ov ? `${ov.on_time_pct.value.toFixed(1)}%` : "—"}
@@ -280,55 +303,10 @@ export default function DashboardPage() {
           subtitle={ov ? `±${(ov.delay_stddev_seconds / 60).toFixed(1)}m spread` : undefined}
         />
         <KpiCard
-          title="Monthly Ridership"
-          value={ov?.latest_ridership_total != null ? formatCompact(ov.latest_ridership_total) : "—"}
-          delta={
-            ov?.latest_ridership_total != null && ov?.prev_ridership_total != null && ov.prev_ridership_total > 0
-              ? ((ov.latest_ridership_total - ov.prev_ridership_total) / ov.prev_ridership_total) * 100
-              : null
-          }
-          deltaSuffix="%"
-          subtitle={ov?.latest_ridership_month ? `boardings · ${ov.latest_ridership_month}` : "no ridership data"}
-          accentColor="#002F87"
-        />
-        <KpiCard
-          title="Standing Room+"
-          value={occupancy.data?.reported ? `${(occupancy.data.standing_pct ?? 0).toFixed(0)}%` : "—"}
-          subtitle={
-            occupancy.data?.reported
-              ? `of observations · last ${days}d`
-              : "no occupancy data"
-          }
-          accentColor={
-            occupancy.data?.reported
-              ? (occupancy.data.standing_pct ?? 0) > 30
-                ? "#dc2626"
-                : (occupancy.data.standing_pct ?? 0) > 15
-                  ? "#ea580c"
-                  : "#16a34a"
-              : undefined
-          }
-        />
-      </div>
-
-      {/* Secondary KPI strip */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <KpiCard title="Routes Tracked" value={ov ? String(ov.routes_tracked) : "—"} subtitle="with delay data" />
-        <KpiCard
-          title="Observations"
-          value={ov ? formatCompact(ov.total_observations) : "—"}
-          subtitle={`last ${days}d`}
-        />
-        <KpiCard
           title="Stuck Alerts"
           value={alerts.isLoading ? "…" : String(alertCount)}
           subtitle="live"
           accentColor={alertCount > 0 ? "#dc2626" : "#16a34a"}
-        />
-        <KpiCard
-          title="Delay Consistency"
-          value={ov ? `±${(ov.delay_stddev_seconds / 60).toFixed(1)}m` : "—"}
-          subtitle="lower = predictable"
         />
       </div>
 
@@ -338,7 +316,7 @@ export default function DashboardPage() {
       <Card>
         <SectionHeading
           title="On-Time Performance Trend"
-          subtitle={`${granularity === "hour" ? "Hourly" : "Daily"} on-time rate (bars: avg delay) · 80% target line · click a point to see active vehicles`}
+          subtitle={`${granularity === "hour" ? "Hourly" : "Daily"} on-time rate (bars: avg delay) · 80% target line`}
         />
         {trend.isLoading ? <LoadingSpinner /> : <TrendChart points={trend.data?.points ?? []} granularity={granularity} onPointClick={handleTrendPointClick} />}
       </Card>
@@ -346,7 +324,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <SectionHeading title="When Is Service Reliable?" subtitle="On-time % by hour × day of week (Denver time)" />
-          {heatmap.isLoading ? <LoadingSpinner /> : <Heatmap cells={heatmap.data?.cells ?? []} metric="ontime" />}
+          {heatmap.isLoading ? <LoadingSpinner /> : <Heatmap cells={heatmap.data?.cells ?? []} metric="ontime" onCellClick={handleHeatmapCellClick} />}
         </Card>
         <Card>
           <SectionHeading
@@ -400,7 +378,7 @@ export default function DashboardPage() {
           )}
         </Card>
         <Card>
-          <SectionHeading title="Current Frequency (Live)" subtitle="Estimated headway from active vehicles · click a row to see vehicles" />
+          <SectionHeading title="Current Frequency (Live)" subtitle="Estimated headway from active vehicles" />
           {frequency.isLoading ? <LoadingSpinner /> : <FrequencyTable routes={frequency.data?.routes ?? []} onRowClick={handleFrequencyRowClick} />}
         </Card>
       </div>
