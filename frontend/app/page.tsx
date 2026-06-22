@@ -2,8 +2,8 @@
 import dynamic from "next/dynamic";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { useVehicles, useStopInfo } from "@/lib/hooks";
-import type { StopInfo, VehiclePosition } from "@/lib/types";
+import { useVehicles, useStopInfo, useAlerts } from "@/lib/hooks";
+import type { StopInfo, StuckAlert, VehiclePosition } from "@/lib/types";
 import VehicleDialog from "@/components/map/VehicleDialog";
 import StopDialog from "@/components/map/StopDialog";
 import VehicleSearch from "@/components/map/VehicleSearch";
@@ -18,6 +18,7 @@ const VehicleMap = dynamic(() => import("@/components/map/VehicleMap"), {
 
 function HomePageInner() {
   const { data, isLoading, isError, dataUpdatedAt } = useVehicles();
+  const { data: alertsData } = useAlerts();
   const [selected, setSelected] = useState<VehiclePosition | null>(null);
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
   const [searchFlyTo, setSearchFlyTo] = useState<{ lat: number; lng: number; zoom?: number } | null>(null);
@@ -165,7 +166,13 @@ function HomePageInner() {
 
         {/* Vehicle dialog — hidden while a stop dialog is open */}
         {selected && !selectedStop && (
-          <VehicleDialog vehicle={selected} onClose={() => setSelected(null)} />
+          <VehicleDialog
+            vehicle={selected}
+            onClose={() => setSelected(null)}
+            isStuck={alertsData?.alerts.some(
+              (a: StuckAlert) => a.vehicle_id === selected.vehicle_id || (a.vehicle_label && a.vehicle_label === selected.vehicle_label)
+            ) ?? false}
+          />
         )}
         {/* Stop dialog — closing it returns to vehicle dialog if one was open */}
         {selectedStop && (
