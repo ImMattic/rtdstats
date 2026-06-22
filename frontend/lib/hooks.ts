@@ -11,8 +11,20 @@ import {
   fetchOnTime,
   fetchFrequency,
   fetchAlerts,
+  fetchOverview,
+  fetchOnTimeTrend,
+  fetchHeatmap,
+  fetchDistribution,
+  fetchWorstStops,
+  fetchServiceDelivery,
+  fetchScheduleFrequency,
+  fetchOccupancy,
+  fetchRidership,
   type HistoricalParams,
 } from "./api";
+
+// Analytics rollups change slowly (hourly/daily aggregates) — refresh every 5 min.
+const ANALYTICS_INTERVAL = 300_000;
 
 // Poll interval for real-time data (ms). RTD's GTFS-RT protobuf feed refreshes
 // roughly every 30 seconds — fetching faster than the data changes is wasted work.
@@ -78,6 +90,85 @@ export function useAlerts() {
     queryFn: fetchAlerts,
     refetchInterval: 30_000,
     staleTime: 30_000,
+  });
+}
+
+export function useOverview(days = 7, routeId?: string) {
+  return useQuery({
+    queryKey: ["overview", days, routeId],
+    queryFn: () => fetchOverview(days, routeId),
+    refetchInterval: ANALYTICS_INTERVAL,
+    staleTime: ANALYTICS_INTERVAL,
+  });
+}
+
+export function useOnTimeTrend(days = 14, routeId?: string, granularity: "hour" | "day" = "day") {
+  return useQuery({
+    queryKey: ["ontimeTrend", days, routeId, granularity],
+    queryFn: () => fetchOnTimeTrend(days, routeId, granularity),
+    refetchInterval: ANALYTICS_INTERVAL,
+    staleTime: ANALYTICS_INTERVAL,
+  });
+}
+
+export function useHeatmap(days = 30, routeId?: string) {
+  return useQuery({
+    queryKey: ["heatmap", days, routeId],
+    queryFn: () => fetchHeatmap(days, routeId),
+    refetchInterval: ANALYTICS_INTERVAL,
+    staleTime: ANALYTICS_INTERVAL,
+  });
+}
+
+export function useDistribution(days = 7, routeId?: string) {
+  return useQuery({
+    queryKey: ["distribution", days, routeId],
+    queryFn: () => fetchDistribution(days, routeId),
+    refetchInterval: ANALYTICS_INTERVAL,
+    staleTime: ANALYTICS_INTERVAL,
+  });
+}
+
+export function useWorstStops(days = 14, routeId?: string, limit = 15) {
+  return useQuery({
+    queryKey: ["worstStops", days, routeId, limit],
+    queryFn: () => fetchWorstStops(days, routeId, limit),
+    refetchInterval: ANALYTICS_INTERVAL,
+    staleTime: ANALYTICS_INTERVAL,
+  });
+}
+
+export function useServiceDelivery(days = 7, routeId?: string) {
+  return useQuery({
+    queryKey: ["serviceDelivery", days, routeId],
+    queryFn: () => fetchServiceDelivery(days, routeId),
+    refetchInterval: ANALYTICS_INTERVAL,
+    staleTime: ANALYTICS_INTERVAL,
+  });
+}
+
+export function useScheduleFrequency(routeId?: string) {
+  return useQuery({
+    queryKey: ["scheduleFrequency", routeId],
+    queryFn: () => fetchScheduleFrequency(routeId),
+    staleTime: Infinity, // derived from static GTFS
+  });
+}
+
+export function useOccupancy(days = 7, routeId?: string, direction?: number) {
+  return useQuery({
+    queryKey: ["occupancy", days, routeId, direction],
+    queryFn: () => fetchOccupancy(days, routeId, direction),
+    refetchInterval: ANALYTICS_INTERVAL,
+    staleTime: ANALYTICS_INTERVAL,
+  });
+}
+
+export function useRidership(routeId?: string, months = 24) {
+  return useQuery({
+    queryKey: ["ridership", routeId, months],
+    queryFn: () => fetchRidership(routeId, months),
+    staleTime: ANALYTICS_INTERVAL,
   });
 }
 

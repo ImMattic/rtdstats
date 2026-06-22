@@ -41,11 +41,11 @@ router = APIRouter(prefix="/stats", tags=["stats"])
 _ONTIME_SQL = """
     SELECT
         route_id,
-        sum(on_time)::bigint     AS on_time,
-        sum(late)::bigint        AS late,
-        sum(early)::bigint       AS early,
-        sum(observations)::bigint AS observations,
-        sum(delay_sum)::bigint   AS delay_sum
+        sum(on_time)::bigint                                  AS on_time,
+        sum(slightly_late + late + very_late)::bigint        AS late,
+        sum(very_early + early)::bigint                       AS early,
+        sum(observations)::bigint                             AS observations,
+        sum(delay_sum)::bigint                               AS delay_sum
     FROM trip_ontime_hourly
     WHERE bucket >= :cutoff
       AND (:route_id IS NULL OR route_id = :route_id)

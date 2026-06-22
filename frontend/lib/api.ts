@@ -1,13 +1,22 @@
 import type {
   AlertsResponse,
+  DistributionResponse,
   FrequencyResponse,
+  HeatmapResponse,
   HistoricalResponse,
+  OccupancyResponse,
   OnTimeResponse,
+  OverviewResponse,
+  RidershipResponse,
   RouteShape,
   RouteStopsResponse,
   RailShapesResponse,
   RealtimeResponse,
   RoutesResponse,
+  ScheduleFrequencyResponse,
+  ServiceDeliveryResponse,
+  TrendResponse,
+  WorstStopsResponse,
 } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -90,6 +99,57 @@ export function fetchFrequency(routeId?: string): Promise<FrequencyResponse> {
 
 export function fetchAlerts(): Promise<AlertsResponse> {
   return apiFetch("/api/v1/stats/alerts");
+}
+
+// ── Analytics ────────────────────────────────────────────────────────────────
+
+function withParams(base: string, params: Record<string, string | number | undefined>): string {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== "") qs.set(k, String(v));
+  }
+  const query = qs.toString();
+  return query ? `${base}?${query}` : base;
+}
+
+export function fetchOverview(days = 7, routeId?: string): Promise<OverviewResponse> {
+  return apiFetch(withParams("/api/v1/stats/overview", { days, route_id: routeId }));
+}
+
+export function fetchOnTimeTrend(
+  days = 14,
+  routeId?: string,
+  granularity: "hour" | "day" = "day",
+): Promise<TrendResponse> {
+  return apiFetch(withParams("/api/v1/stats/ontime/trend", { days, route_id: routeId, granularity }));
+}
+
+export function fetchHeatmap(days = 30, routeId?: string): Promise<HeatmapResponse> {
+  return apiFetch(withParams("/api/v1/stats/ontime/heatmap", { days, route_id: routeId }));
+}
+
+export function fetchDistribution(days = 7, routeId?: string): Promise<DistributionResponse> {
+  return apiFetch(withParams("/api/v1/stats/delay/distribution", { days, route_id: routeId }));
+}
+
+export function fetchWorstStops(days = 14, routeId?: string, limit = 15): Promise<WorstStopsResponse> {
+  return apiFetch(withParams("/api/v1/stats/stops/worst", { days, route_id: routeId, limit }));
+}
+
+export function fetchServiceDelivery(days = 7, routeId?: string): Promise<ServiceDeliveryResponse> {
+  return apiFetch(withParams("/api/v1/stats/service-delivery", { days, route_id: routeId }));
+}
+
+export function fetchScheduleFrequency(routeId?: string): Promise<ScheduleFrequencyResponse> {
+  return apiFetch(withParams("/api/v1/stats/frequency/schedule", { route_id: routeId }));
+}
+
+export function fetchOccupancy(days = 7, routeId?: string, direction?: number): Promise<OccupancyResponse> {
+  return apiFetch(withParams("/api/v1/stats/occupancy", { days, route_id: routeId, direction }));
+}
+
+export function fetchRidership(routeId?: string, months = 24): Promise<RidershipResponse> {
+  return apiFetch(withParams("/api/v1/stats/ridership", { route_id: routeId, months }));
 }
 
 // ── Export ─────────────────────────────────────────────────────────────────

@@ -150,3 +150,182 @@ export interface RouteStopsResponse {
   route_id: string;
   stops: RouteStop[];
 }
+
+// ── Deep analytics (api/v1/stats/* analytics endpoints) ─────────────────────
+
+export interface MetricWithDelta {
+  value: number;
+  previous: number | null;
+}
+
+export interface OverviewResponse {
+  period_days: number;
+  on_time_pct: MetricWithDelta;
+  avg_delay_seconds: MetricWithDelta;
+  delay_stddev_seconds: number;
+  service_delivered_pct: MetricWithDelta;
+  observed_trips: number;
+  scheduled_trips: number;
+  routes_tracked: number;
+  total_observations: number;
+  latest_ridership_month: string | null;
+  latest_ridership_total: number | null;
+  prev_ridership_total: number | null;
+}
+
+export interface TrendPoint {
+  t: string;
+  on_time_pct: number;
+  avg_delay_seconds: number;
+  observations: number;
+}
+
+export interface TrendResponse {
+  period_days: number;
+  granularity: string;
+  route_id: string | null;
+  points: TrendPoint[];
+}
+
+export interface HeatmapCell {
+  dow: number; // 0=Sun … 6=Sat (local)
+  hour: number; // 0–23 (local)
+  on_time_pct: number;
+  avg_delay_seconds: number;
+  observations: number;
+}
+
+export interface HeatmapResponse {
+  period_days: number;
+  route_id: string | null;
+  cells: HeatmapCell[];
+}
+
+export interface DistributionBin {
+  key: string;
+  label: string;
+  count: number;
+  pct: number;
+}
+
+export interface DistributionResponse {
+  period_days: number;
+  route_id: string | null;
+  total: number;
+  avg_delay_seconds: number;
+  stddev_seconds: number;
+  bins: DistributionBin[];
+}
+
+export interface WorstStop {
+  stop_id: string;
+  stop_name: string | null;
+  route_id: string | null;
+  observations: number;
+  on_time_pct: number;
+  avg_delay_seconds: number;
+}
+
+export interface WorstStopsResponse {
+  period_days: number;
+  route_id: string | null;
+  stops: WorstStop[];
+}
+
+export interface ServiceDeliveryRoute {
+  route_id: string;
+  route_short_name: string;
+  observed_trips: number;
+  scheduled_trips: number;
+  delivered_pct: number;
+}
+
+export interface ServiceDeliveryResponse {
+  period_days: number;
+  observed_trips: number;
+  scheduled_trips: number;
+  delivered_pct: number;
+  routes: ServiceDeliveryRoute[];
+}
+
+export interface HourHeadway {
+  hour: number;
+  headway_minutes: number | null;
+}
+
+export interface ScheduleFrequencyRoute {
+  route_id: string;
+  route_short_name: string;
+  weekday_trips: number;
+  saturday_trips: number;
+  sunday_trips: number;
+  span_start: string | null;
+  span_end: string | null;
+  headways_by_hour: HourHeadway[];
+}
+
+export interface ScheduleFrequencyResponse {
+  route_id: string | null;
+  routes: ScheduleFrequencyRoute[];
+}
+
+export interface OccupancyHourPoint {
+  hour: number;
+  empty: number;
+  many_seats: number;
+  few_seats: number;
+  standing: number;
+  crushed: number;
+  full: number;
+  not_accepting: number;
+  unknown: number;
+  total: number;
+}
+
+export interface DirectionInfo {
+  direction_id: number;
+  headsign: string;
+}
+
+export interface OccupancyResponse {
+  period_days: number;
+  route_id: string | null;
+  direction: number | null;
+  reported: boolean;
+  empty: number;
+  many_seats: number;
+  few_seats: number;
+  standing: number;
+  crushed: number;
+  full: number;
+  not_accepting: number;
+  low: number;
+  medium: number;
+  high: number;
+  unknown: number;
+  samples: number;
+  standing_pct: number | null;
+  by_hour: OccupancyHourPoint[];
+  directions: DirectionInfo[];
+}
+
+export interface RidershipPoint {
+  month: string;
+  boardings: number;
+}
+
+export interface RidershipRoute {
+  route_id: string;
+  route_short_name: string;
+  boardings: number;
+}
+
+export interface RidershipResponse {
+  route_id: string | null;
+  available: boolean;
+  latest_month: string | null;
+  latest_total: number | null;
+  prev_total: number | null;
+  series: RidershipPoint[];
+  by_route_latest: RidershipRoute[];
+}

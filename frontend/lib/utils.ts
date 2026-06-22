@@ -45,3 +45,46 @@ export function formatDateTime(iso: string): string {
     minute: "2-digit",
   });
 }
+
+/** Color for an on-time percentage: green ≥80, orange ≥60, red below. */
+export function onTimeColor(pct: number): string {
+  if (pct >= 80) return "#16a34a";
+  if (pct >= 60) return "#ea580c";
+  return "#dc2626";
+}
+
+/** Compact integer with thousands separators (e.g. 12,345). */
+export function formatNumber(n: number | null | undefined): string {
+  if (n === null || n === undefined) return "—";
+  return n.toLocaleString("en-US");
+}
+
+/** Large numbers as short form: 1.2M, 34.5K. */
+export function formatCompact(n: number | null | undefined): string {
+  if (n === null || n === undefined) return "—";
+  return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(n);
+}
+
+/** Delay seconds → short signed minutes string, e.g. "+5.2m", "-1.0m", "on time". */
+export function formatDelayMin(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined) return "—";
+  const mins = seconds / 60;
+  if (Math.abs(mins) < 0.1) return "on time";
+  return `${mins > 0 ? "+" : ""}${mins.toFixed(1)}m`;
+}
+
+/** ISO date (YYYY-MM-DD) → "May 2026". */
+export function formatMonth(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+}
+
+/** Format hour 0–23 as "1 PM", "12 AM". */
+export function formatHour(hour: number): string {
+  const h = ((hour % 24) + 24) % 24;
+  if (h === 0) return "12a";
+  if (h === 12) return "12p";
+  return h < 12 ? `${h}a` : `${h - 12}p`;
+}
+
+export const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
