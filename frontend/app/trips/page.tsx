@@ -66,11 +66,16 @@ function TripsContent() {
   const [routeDropdownOpen, setRouteDropdownOpen] = useState(false);
   const routeComboRef = useRef<HTMLDivElement>(null);
 
+  const PAGE_SIZE_OPTIONS = [15, 30, 50, 100] as const;
+  const [pageSize, setPageSize] = useState<number>(15);
+  const [page, setPage] = useState(1);
+
   // Sync picker state when URL params change (e.g. after "Load trips" or browser back/forward)
   useEffect(() => {
     if (urlStart) setStartLocal(toDatetimeLocal(urlStart));
     if (urlEnd) setEndLocal(toDatetimeLocal(urlEnd));
     setRouteId(urlRouteId ?? "");
+    setPage(1);
   }, [urlStart, urlEnd, urlRouteId]);
 
   const defaultStart = useMemo(() => new Date(Date.now() - 3_600_000).toISOString(), []);
@@ -81,16 +86,13 @@ function TripsContent() {
   const fetchRouteId = urlRouteId ?? undefined;
 
   const routes = useRoutes();
-  const raw = useActiveVehicles({ start: fetchStart, end: fetchEnd, route_id: fetchRouteId });
-  const { isLoading, isError } = raw;
-
-  const data = useMemo(() => {
-    if (!raw.data) return raw.data;
-    const vehicles = raw.data.vehicles.filter(
-      (v) => v.observation_count >= 10 && v.stop_arrival_count > 1,
-    );
-    return { ...raw.data, vehicles, vehicle_count: vehicles.length };
-  }, [raw.data]);
+  const { data, isLoading, isError } = useActiveVehicles({
+    start: fetchStart,
+    end: fetchEnd,
+    route_id: fetchRouteId,
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+  });
 
   const sortedRoutes = useMemo(() => {
     const list = routes.data?.routes ?? [];
@@ -134,6 +136,7 @@ function TripsContent() {
   }, [startLocal, endLocal]);
 
   function handleLoad() {
+    setPage(1);
     const qs = new URLSearchParams({
       start: new Date(startLocal).toISOString(),
       end: new Date(endLocal).toISOString(),
@@ -397,66 +400,119 @@ function TripsContent() {
         )}
 
         {!isLoading && !isError && (data?.vehicles.length ?? 0) > 0 && (
-          <div className="overflow-x-auto rounded border border-gray-200">
-            <table className="min-w-full text-sm text-gray-800">
-              <thead className="bg-gray-50 text-xs uppercase text-gray-500">
-                <tr>
-                  <th className="px-3 py-2 text-left">Route</th>
-                  <th className="px-3 py-2 text-left">Vehicle</th>
-                  <th className="px-3 py-2 text-left">From → To</th>
-                  <th className="px-3 py-2 text-left">Start Time</th>
-                  <th className="px-3 py-2 text-left">End Time</th>
-                  <th className="px-3 py-2 text-right">Duration</th>
-                  <th className="px-3 py-2 text-left">Occupancy</th>
-                  <th className="px-3 py-2 text-right">Obs.</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {data!.vehicles.map((v, i) => (
-                  <tr
-                    key={`${v.vehicle_label ?? ""}-${v.trip_id ?? i}`}
-                    className="cursor-pointer hover:bg-blue-50"
-                    onClick={() => handleVehicleClick(v)}
-                  >
-                    <td className="px-3 py-2">
-                      <RouteBadge shortName={v.route_short_name} color={v.route_color} />
-                    </td>
-                    <td className="px-3 py-2 font-semibold">
-                      {v.vehicle_label ? `#${v.vehicle_label}` : "—"}
-                    </td>
-                    <td className="px-3 py-2 text-gray-600">
-                      <span className="whitespace-nowrap">
-                        {v.start_stop_name ?? "—"}
-                        <span className="px-1 text-gray-400">→</span>
-                        {v.end_stop_name ?? "—"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-gray-600">
-                      {new Date(v.start_time).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </td>
-                    <td className="px-3 py-2 text-gray-600">
-                      {new Date(v.end_time).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono text-gray-600">
-                      {formatDuration(v.start_time, v.end_time)}
-                    </td>
-                    <td className="px-3 py-2 text-gray-600">
-                      {OCCUPANCY_SHORT[v.last_occupancy_status ?? "UNKNOWN"] ?? "—"}
-                    </td>
-                    <td className="px-3 py-2 text-right text-gray-500">
-                      {v.observation_count}
-                    </td>
+          <>
+            <div className="overflow-x-auto rounded border border-gray-200">
+              <table className="min-w-full text-sm text-gray-800">
+                <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Route</th>
+                    <th className="px-3 py-2 text-left">Vehicle</th>
+                    <th className="px-3 py-2 text-left">From → To</th>
+                    <th className="px-3 py-2 text-left">Start Time</th>
+                    <th className="px-3 py-2 text-left">End Time</th>
+                    <th className="px-3 py-2 text-right">Duration</th>
+                    <th className="px-3 py-2 text-left">Occupancy</th>
+                    <th className="px-3 py-2 text-right">Obs.</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {data!.vehicles.map((v, i) => (
+                    <tr
+                      key={`${v.vehicle_label ?? ""}-${v.trip_id ?? i}`}
+                      className="cursor-pointer hover:bg-blue-50"
+                      onClick={() => handleVehicleClick(v)}
+                    >
+                      <td className="px-3 py-2">
+                        <RouteBadge shortName={v.route_short_name} color={v.route_color} />
+                      </td>
+                      <td className="px-3 py-2 font-semibold">
+                        {v.vehicle_label ? `#${v.vehicle_label}` : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-gray-600">
+                        <span className="whitespace-nowrap">
+                          {v.start_stop_name ?? "—"}
+                          <span className="px-1 text-gray-400">→</span>
+                          {v.end_stop_name ?? "—"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-gray-600">
+                        {new Date(v.start_time).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </td>
+                      <td className="px-3 py-2 text-gray-600">
+                        {new Date(v.end_time).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-gray-600">
+                        {formatDuration(v.start_time, v.end_time)}
+                      </td>
+                      <td className="px-3 py-2 text-gray-600">
+                        {OCCUPANCY_SHORT[v.last_occupancy_status ?? "UNKNOWN"] ?? "—"}
+                      </td>
+                      <td className="px-3 py-2 text-right text-gray-500">
+                        {v.observation_count}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination controls */}
+            {(() => {
+              const totalCount = data!.vehicle_count;
+              const totalPages = Math.ceil(totalCount / pageSize);
+              const start = (page - 1) * pageSize + 1;
+              const end = Math.min(page * pageSize, totalCount);
+              return (
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-gray-600">
+                  <span>
+                    {start}–{end} of {totalCount} trips
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-xs text-gray-500">Rows per page</label>
+                      <select
+                        value={pageSize}
+                        onChange={(e) => {
+                          setPageSize(Number(e.target.value));
+                          setPage(1);
+                        }}
+                        className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-rtd-blue"
+                      >
+                        {PAGE_SIZE_OPTIONS.map((n) => (
+                          <option key={n} value={n}>{n}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={page === 1}
+                        className="rounded border border-gray-200 px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-40 hover:bg-gray-50"
+                      >
+                        ‹ Prev
+                      </button>
+                      <span className="px-1 text-xs">
+                        Page {page} of {totalPages}
+                      </span>
+                      <button
+                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                        disabled={page >= totalPages}
+                        className="rounded border border-gray-200 px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-40 hover:bg-gray-50"
+                      >
+                        Next ›
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </>
         )}
       </Card>
     </div>

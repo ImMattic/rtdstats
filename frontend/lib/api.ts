@@ -172,10 +172,18 @@ export interface ActiveVehiclesParams {
   start?: string;
   end?: string;
   route_id?: string;
+  limit?: number;
+  offset?: number;
 }
 
 export function fetchActiveVehicles(params: ActiveVehiclesParams = {}): Promise<ActiveVehiclesResponse> {
-  return apiFetch(withParams("/api/v1/vehicles/active", { start: params.start, end: params.end, route_id: params.route_id }));
+  return apiFetch(withParams("/api/v1/vehicles/active", {
+    start: params.start,
+    end: params.end,
+    route_id: params.route_id,
+    limit: params.limit,
+    offset: params.offset,
+  }));
 }
 
 export interface VehicleTripParams {
