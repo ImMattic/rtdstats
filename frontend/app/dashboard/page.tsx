@@ -287,8 +287,6 @@ export default function DashboardPage() {
         <KpiCard
           title="On-Time Rate"
           value={ov ? `${ov.on_time_pct.value.toFixed(1)}%` : "—"}
-          delta={delta(ov?.on_time_pct)}
-          deltaSuffix="pts"
           accentColor={
             ov ? (ov.on_time_pct.value >= 80 ? "#16a34a" : ov.on_time_pct.value >= 60 ? "#ea580c" : "#dc2626") : undefined
           }
@@ -296,8 +294,6 @@ export default function DashboardPage() {
         <KpiCard
           title="Avg Delay"
           value={ov ? formatDelayMin(ov.avg_delay_seconds.value) : "—"}
-          delta={delta(ov?.avg_delay_seconds) != null ? (delta(ov?.avg_delay_seconds) as number) / 60 : null}
-          deltaSuffix="m"
           lowerIsBetter
         />
         <KpiCard

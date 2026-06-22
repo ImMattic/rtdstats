@@ -1,7 +1,6 @@
 "use client";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import { useActiveVehicles, useRoutes } from "@/lib/hooks";
 import { Card, SectionHeading } from "@/components/ui/Card";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
@@ -182,15 +181,6 @@ function TripsContent() {
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 text-gray-900">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-gray-500">
-        <Link href="/dashboard" className="hover:text-rtd-blue">
-          Dashboard
-        </Link>
-        <span>/</span>
-        <span className="text-gray-700">Trips</span>
-      </div>
-
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Trip Explorer</h1>

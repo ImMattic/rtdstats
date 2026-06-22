@@ -87,10 +87,6 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 text-gray-900">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500">
-        <Link href="/dashboard" className="hover:text-rtd-blue">
-          Dashboard
-        </Link>
-        <span>/</span>
         <Link href={backHref} className="hover:text-rtd-blue">
           Trips
         </Link>
