@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useOverview,
   useOnTime,
@@ -48,6 +48,9 @@ export default function DashboardPage() {
   const [days, setDays] = useState(7);
   const [routeId, setRouteId] = useState<string>("");
   const [occDirection, setOccDirection] = useState<number | undefined>(undefined);
+  const [routeSearch, setRouteSearch] = useState("");
+  const [routeDropdownOpen, setRouteDropdownOpen] = useState(false);
+  const routeComboRef = useRef<HTMLDivElement>(null);
   const rid = routeId || undefined;
   const granularity = days <= 2 ? "hour" : "day";
 
@@ -62,6 +65,39 @@ export default function DashboardPage() {
   const frequency = useFrequency(rid);
   const scheduleFreq = useScheduleFrequency(rid);
   const occupancy = useOccupancy(days, rid, occDirection);
+
+  const sortedRoutes = useMemo(() => {
+    const list = routes.data?.routes ?? [];
+    return [...list].sort((a, b) =>
+      a.short_name.localeCompare(b.short_name, undefined, { numeric: true })
+    );
+  }, [routes.data]);
+
+  const groupedRoutes = useMemo(() => {
+    const q = routeSearch.toLowerCase().trim();
+    const filtered = q
+      ? sortedRoutes.filter(
+          (r) =>
+            r.short_name.toLowerCase().includes(q) ||
+            r.long_name.toLowerCase().includes(q)
+        )
+      : sortedRoutes;
+    const rail = filtered.filter((r) => r.type_name !== "bus" && r.type_name !== "other");
+    const bus = filtered.filter((r) => r.type_name === "bus");
+    const other = filtered.filter((r) => r.type_name === "other");
+    return { rail, bus, other };
+  }, [sortedRoutes, routeSearch]);
+
+  useEffect(() => {
+    function handleOutsideClick(e: MouseEvent) {
+      if (routeComboRef.current && !routeComboRef.current.contains(e.target as Node)) {
+        setRouteDropdownOpen(false);
+        setRouteSearch("");
+      }
+    }
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
 
   const ov = overview.data;
   const alertCount = alerts.data?.alerts.length ?? 0;
@@ -80,18 +116,99 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <select
-            value={routeId}
-            onChange={(e) => setRouteId(e.target.value)}
-            className="rounded border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-rtd-blue"
-          >
-            <option value="">All routes</option>
-            {routes.data?.routes.map((r) => (
-              <option key={r.route_id} value={r.route_id}>
-                {r.short_name} — {r.long_name}
-              </option>
-            ))}
-          </select>
+          <div ref={routeComboRef} className="relative">
+            <div className="flex items-center gap-1 rounded border border-gray-200 px-2 py-1.5 text-sm focus-within:ring-2 focus-within:ring-rtd-blue bg-white">
+              <svg className="h-3.5 w-3.5 shrink-0 text-gray-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clipRule="evenodd" />
+              </svg>
+              <input
+                type="text"
+                value={routeDropdownOpen ? routeSearch : ""}
+                placeholder={selectedRouteName ? `Route ${selectedRouteName}` : "All routes"}
+                onChange={(e) => setRouteSearch(e.target.value)}
+                onFocus={() => setRouteDropdownOpen(true)}
+                className="w-44 bg-transparent outline-none placeholder-gray-700"
+              />
+              {routeId && (
+                <button
+                  onClick={() => { setRouteId(""); setRouteSearch(""); setRouteDropdownOpen(false); }}
+                  aria-label="Clear route filter"
+                  className="shrink-0 text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            {routeDropdownOpen && (
+              <ul className="absolute left-0 top-full z-50 mt-1 max-h-64 w-64 overflow-y-auto rounded border border-gray-200 bg-white shadow-lg">
+                <li>
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => { setRouteId(""); setRouteSearch(""); setRouteDropdownOpen(false); }}
+                    className="w-full px-3 py-2 text-left text-sm text-gray-500 hover:bg-gray-50"
+                  >
+                    All routes
+                  </button>
+                </li>
+                {groupedRoutes.rail.length > 0 && (
+                  <>
+                    <li className="border-t border-gray-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Rail</li>
+                    {groupedRoutes.rail.map((r) => (
+                      <li key={r.route_id}>
+                        <button
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => { setRouteId(r.route_id); setRouteSearch(""); setRouteDropdownOpen(false); }}
+                          className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ${r.route_id === routeId ? "bg-blue-50 font-medium text-rtd-blue" : "text-gray-700"}`}
+                        >
+                          <span className="font-medium">{r.short_name}</span>
+                          <span className="ml-1.5 text-gray-400">— {r.long_name}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </>
+                )}
+                {groupedRoutes.bus.length > 0 && (
+                  <>
+                    <li className="border-t border-gray-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Bus</li>
+                    {groupedRoutes.bus.map((r) => (
+                      <li key={r.route_id}>
+                        <button
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => { setRouteId(r.route_id); setRouteSearch(""); setRouteDropdownOpen(false); }}
+                          className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ${r.route_id === routeId ? "bg-blue-50 font-medium text-rtd-blue" : "text-gray-700"}`}
+                        >
+                          <span className="font-medium">{r.short_name}</span>
+                          <span className="ml-1.5 text-gray-400">— {r.long_name}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </>
+                )}
+                {groupedRoutes.other.length > 0 && (
+                  <>
+                    <li className="border-t border-gray-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Other</li>
+                    {groupedRoutes.other.map((r) => (
+                      <li key={r.route_id}>
+                        <button
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => { setRouteId(r.route_id); setRouteSearch(""); setRouteDropdownOpen(false); }}
+                          className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ${r.route_id === routeId ? "bg-blue-50 font-medium text-rtd-blue" : "text-gray-700"}`}
+                        >
+                          <span className="font-medium">{r.short_name}</span>
+                          <span className="ml-1.5 text-gray-400">— {r.long_name}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </>
+                )}
+                {groupedRoutes.rail.length === 0 && groupedRoutes.bus.length === 0 && groupedRoutes.other.length === 0 && (
+                  <li className="px-3 py-2 text-sm text-gray-400">No routes found</li>
+                )}
+              </ul>
+            )}
+          </div>
           <div className="flex items-center gap-1 text-sm">
             {DAY_OPTIONS.map((d) => (
               <button
