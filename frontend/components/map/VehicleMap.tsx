@@ -16,7 +16,7 @@ const DENVER_METRO_BOUNDS: L.LatLngBoundsExpression = [
 
 const DOWNTOWN_CENTER: [number, number] = [39.74948688769244, -104.99440656899203];
 const DOWNTOWN_ZOOM_THRESHOLD = 14;
-const STOP_MARKER_MIN_ZOOM = 14;
+const STOP_MARKER_MIN_ZOOM = 13;
 // ~1 mile radius (0.0145° ≈ 1609m in latitude); covers Union Station and the
 // broader downtown core where stopped vehicles create a dense, unreadable cluster.
 const DOWNTOWN_RADIUS_SQ = 0.0145 * 0.0145;
