@@ -29,7 +29,7 @@ import WorstStopsTable from "@/components/charts/WorstStopsTable";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { formatDelayMin } from "@/lib/utils";
 
-const DAY_OPTIONS = [1, 7, 14, 30, 90];
+const DAY_OPTIONS = [1, 7];
 
 function fmtSpan(hhmm: string | null | undefined): string {
   if (!hhmm) return "—";
@@ -283,13 +283,12 @@ export default function DashboardPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KpiCard title="Routes Tracked" value={ov ? String(ov.routes_tracked) : "—"} subtitle="with delay data" />
+        <KpiCard title="Routes Tracked" value={ov ? String(ov.routes_tracked) : "—"} />
         <KpiCard
           title="On-Time Rate"
           value={ov ? `${ov.on_time_pct.value.toFixed(1)}%` : "—"}
           delta={delta(ov?.on_time_pct)}
           deltaSuffix="pts"
-          subtitle={`vs prior ${days}d`}
           accentColor={
             ov ? (ov.on_time_pct.value >= 80 ? "#16a34a" : ov.on_time_pct.value >= 60 ? "#ea580c" : "#dc2626") : undefined
           }
@@ -300,12 +299,10 @@ export default function DashboardPage() {
           delta={delta(ov?.avg_delay_seconds) != null ? (delta(ov?.avg_delay_seconds) as number) / 60 : null}
           deltaSuffix="m"
           lowerIsBetter
-          subtitle={ov ? `±${(ov.delay_stddev_seconds / 60).toFixed(1)}m spread` : undefined}
         />
         <KpiCard
           title="Stuck Alerts"
           value={alerts.isLoading ? "…" : String(alertCount)}
-          subtitle="live"
           accentColor={alertCount > 0 ? "#dc2626" : "#16a34a"}
         />
       </div>
@@ -392,7 +389,7 @@ export default function DashboardPage() {
           subtitle={
             routeId && scheduleFreq.data?.routes[0]
               ? `GTFS-RT occupancy · Service ${fmtSpan(scheduleFreq.data.routes[0].span_start)} – ${fmtSpan(scheduleFreq.data.routes[0].span_end)}`
-              : "GTFS-RT occupancy status codes · % of observations by hour"
+              : "GTFS-RT occupancy status codes · % of samples by hour"
           }
         />
         {occupancy.isLoading ? (

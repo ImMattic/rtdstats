@@ -6,7 +6,7 @@ import { useActiveVehicles, useRoutes } from "@/lib/hooks";
 import { Card, SectionHeading } from "@/components/ui/Card";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ExportButton from "@/components/ui/ExportButton";
-import { formatDelay, formatDateTime, routeColor } from "@/lib/utils";
+import { formatDateTime, routeColor } from "@/lib/utils";
 import type { ActiveVehicle } from "@/lib/types";
 
 const OCCUPANCY_SHORT: Record<string, string> = {
@@ -20,11 +20,12 @@ const OCCUPANCY_SHORT: Record<string, string> = {
   UNKNOWN: "—",
 };
 
-function delayBg(seconds: number | null): string {
-  if (seconds === null) return "text-gray-400";
-  if (seconds > 120) return "text-red-600 font-semibold";
-  if (seconds < -120) return "text-blue-600 font-semibold";
-  return "text-green-600 font-semibold";
+function formatDuration(startIso: string, endIso: string): string {
+  const mins = Math.round((new Date(endIso).getTime() - new Date(startIso).getTime()) / 60_000);
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
 function RouteBadge({ shortName, color }: { shortName: string | null; color: string | null }) {
@@ -415,7 +416,7 @@ function TripsContent() {
                   <th className="px-3 py-2 text-left">From → To</th>
                   <th className="px-3 py-2 text-left">Start Time</th>
                   <th className="px-3 py-2 text-left">End Time</th>
-                  <th className="px-3 py-2 text-right">Delay</th>
+                  <th className="px-3 py-2 text-right">Duration</th>
                   <th className="px-3 py-2 text-left">Occupancy</th>
                   <th className="px-3 py-2 text-right">Obs.</th>
                 </tr>
@@ -452,10 +453,8 @@ function TripsContent() {
                         minute: "2-digit",
                       })}
                     </td>
-                    <td className={`px-3 py-2 text-right ${delayBg(v.last_delay_seconds)}`}>
-                      {v.last_delay_seconds !== null
-                        ? formatDelay(v.last_delay_seconds) || "On time"
-                        : "—"}
+                    <td className="px-3 py-2 text-right font-mono text-gray-600">
+                      {formatDuration(v.start_time, v.end_time)}
                     </td>
                     <td className="px-3 py-2 text-gray-600">
                       {OCCUPANCY_SHORT[v.last_occupancy_status ?? "UNKNOWN"] ?? "—"}

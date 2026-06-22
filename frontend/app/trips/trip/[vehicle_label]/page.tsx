@@ -159,7 +159,7 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
               sub="last known"
             />
             <StatBox
-              label="Observations"
+              label="Samples"
               value={String(data.observation_count)}
               sub="position snapshots"
             />

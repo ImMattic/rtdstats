@@ -117,7 +117,7 @@ function OccupancyChart({ data, direction, onDirectionChange }: Props) {
             </span>
           );
         })}
-        <span className="ml-auto text-gray-400">{total.toLocaleString()} observations</span>
+        <span className="ml-auto text-gray-400">{total.toLocaleString()} samples</span>
       </div>
 
       <ResponsiveContainer width="100%" height={240}>

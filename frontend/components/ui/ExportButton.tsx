@@ -26,7 +26,7 @@ export default function ExportButton({ routeId, start, end }: Props) {
       </button>
       <button
         onClick={() => handleExport("json")}
-        className="rounded border border-rtd-blue px-3 py-1.5 text-sm font-medium text-rtd-blue hover:bg-rtd-blue/10 transition-colors"
+        className="rounded bg-rtd-blue px-3 py-1.5 text-sm font-medium text-white hover:bg-rtd-blue/90 transition-colors"
       >
         Export JSON
       </button>

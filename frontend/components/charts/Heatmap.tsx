@@ -83,7 +83,7 @@ export default function Heatmap({ cells, metric = "ontime", onCellClick }: Props
                 {DOW_LABELS[hover.dow]} {formatHour(hover.hour)}
               </span>{" "}
               · {hover.on_time_pct.toFixed(0)}% on-time · {(hover.avg_delay_seconds / 60).toFixed(1)}m avg ·{" "}
-              {hover.observations.toLocaleString()} obs
+              {hover.observations.toLocaleString()} samples
               {onCellClick && (
                 <span className="ml-2 font-medium text-blue-600">· Click to view trips →</span>
               )}
