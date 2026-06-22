@@ -47,7 +47,7 @@ export default function HistoricalPage() {
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 text-gray-900">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Historical Analysis</h1>
+        <h1 className="text-2xl font-bold text-white">Historical Analysis</h1>
         <div className="flex rounded-lg border border-gray-200 bg-white p-0.5 text-sm">
           {(["performance", "raw"] as Mode[]).map((m) => (
             <button

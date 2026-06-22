@@ -89,7 +89,7 @@ function VehiclesContent() {
       </div>
 
       <div>
-        <h1 className="text-2xl font-bold">Active Vehicles</h1>
+        <h1 className="text-2xl font-bold text-white">Active Vehicles</h1>
         <p className="text-sm text-gray-500">
           {timeLabel ? `${timeLabel} · ` : ""}
           {isLoading ? "Loading…" : `${data?.vehicle_count ?? 0} vehicles`}

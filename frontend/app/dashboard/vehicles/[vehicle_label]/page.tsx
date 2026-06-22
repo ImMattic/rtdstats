@@ -91,7 +91,7 @@ function VehicleDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
       {/* Header */}
       <div>
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-bold">Vehicle #{vehicleLabel}</h1>
+          <h1 className="text-2xl font-bold text-white">Vehicle #{vehicleLabel}</h1>
           {data?.route_short_name && (
             <span
               className="rounded px-2.5 py-1 text-sm font-bold text-white"

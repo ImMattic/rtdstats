@@ -135,7 +135,7 @@ export default function DashboardPage() {
       {/* Header + controls */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Transit Performance Dashboard</h1>
+          <h1 className="text-2xl font-bold text-white">Transit Performance Dashboard</h1>
           <p className="text-sm text-gray-500">
             Reliability, frequency, service delivery &amp; demand across RTD
             {selectedRouteName ? ` · Route ${selectedRouteName}` : " · all routes"}
