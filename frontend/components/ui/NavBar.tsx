@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 const NAV_LINKS = [
   { href: "/", label: "Live Map" },
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/historical", label: "Historical" },
+  { href: "/trips", label: "Trips" },
 ];
 
 export default function NavBar() {

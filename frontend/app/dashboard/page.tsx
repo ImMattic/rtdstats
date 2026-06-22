@@ -112,7 +112,7 @@ export default function DashboardPage() {
     }
     const qs = new URLSearchParams({ start: start.toISOString(), end: end.toISOString() });
     if (routeId) qs.set("route_id", routeId);
-    router.push(`/dashboard/vehicles?${qs}`);
+    router.push(`/trips?${qs}`);
   }
 
   function handleHeatmapCellClick(cell: HeatmapCell) {
@@ -136,7 +136,7 @@ export default function DashboardPage() {
         const end = new Date(candidate.getTime() + 3600 * 1000);
         const qs = new URLSearchParams({ start: candidate.toISOString(), end: end.toISOString() });
         if (routeId) qs.set("route_id", routeId);
-        router.push(`/dashboard/vehicles?${qs}`);
+        router.push(`/trips?${qs}`);
         return;
       }
     }
@@ -150,7 +150,7 @@ export default function DashboardPage() {
       end: end.toISOString(),
       route_id: rowRouteId,
     });
-    router.push(`/dashboard/vehicles?${qs}`);
+    router.push(`/trips?${qs}`);
   }
 
   const ov = overview.data;
