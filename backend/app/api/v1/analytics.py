@@ -516,9 +516,9 @@ _OCC_HOUR_SQL = f"""
     FROM vehicle_positions
     WHERE timestamp >= :cutoff
       AND (:route_id IS NULL OR route_id = :route_id)
-    GROUP BY hour
-    ORDER BY hour
 """
+
+_OCC_HOUR_SQL_TAIL = "    GROUP BY 1\n    ORDER BY 1\n"
 
 
 def _occ_trip_ids(route_id: str | None, direction: int | None) -> list[str] | None:
@@ -587,7 +587,7 @@ async def occupancy(
     high = standing + crushed + full_cnt + not_accepting
     total_known = low + medium + high
 
-    hour_sql = _add_trip_filter(_OCC_HOUR_SQL)
+    hour_sql = _add_trip_filter(_OCC_HOUR_SQL) + _OCC_HOUR_SQL_TAIL
     hour_rows = (await db.execute(
         text(hour_sql).bindparams(
             bindparam("cutoff"), bindparam("route_id", type_=String), *trip_bp,
