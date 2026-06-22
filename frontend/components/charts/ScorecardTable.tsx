@@ -3,6 +3,8 @@ import { useMemo, useState } from "react";
 import type { OnTimeRouteStats } from "@/lib/types";
 import { cn, formatDelayMin, formatNumber, onTimeColor } from "@/lib/utils";
 
+const PAGE_SIZE = 10;
+
 interface Props {
   routes: OnTimeRouteStats[];
   onSelectRoute?: (routeId: string) => void;
@@ -13,6 +15,7 @@ type SortKey = "route" | "on_time_pct" | "avg_delay_seconds" | "total_observatio
 export default function ScorecardTable({ routes, onSelectRoute }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("on_time_pct");
   const [asc, setAsc] = useState(false);
+  const [page, setPage] = useState(0);
 
   const sorted = useMemo(() => {
     const copy = [...routes];
@@ -28,12 +31,16 @@ export default function ScorecardTable({ routes, onSelectRoute }: Props) {
     return copy;
   }, [routes, sortKey, asc]);
 
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+  const pageRows = sorted.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+
   function toggle(key: SortKey) {
     if (key === sortKey) setAsc((v) => !v);
     else {
       setSortKey(key);
       setAsc(key === "route");
     }
+    setPage(0);
   }
 
   if (!routes.length) {
@@ -53,50 +60,75 @@ export default function ScorecardTable({ routes, onSelectRoute }: Props) {
   );
 
   return (
-    <div className="max-h-[420px] overflow-auto">
-      <table className="min-w-full text-sm text-gray-800">
-        <thead className="sticky top-0 bg-gray-50">
-          <tr>
-            <Header k="route" label="Route" align="left" />
-            <Header k="on_time_pct" label="On-time" />
-            <Header k="avg_delay_seconds" label="Avg delay" />
-            <Header k="total_observations" label="Samples" />
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100">
-          {sorted.map((r) => (
-            <tr
-              key={r.route_id}
-              className={cn("hover:bg-gray-50", onSelectRoute && "cursor-pointer")}
-              onClick={() => onSelectRoute?.(r.route_id)}
-            >
-              <td className="px-3 py-2 font-bold text-gray-900">{r.route_short_name}</td>
-              <td className="px-3 py-2 text-right">
-                <span className="inline-flex items-center gap-2 justify-end">
-                  <span
-                    className="inline-block h-2 w-2 rounded-full"
-                    style={{ backgroundColor: onTimeColor(r.on_time_pct) }}
-                  />
-                  <span className="font-mono font-semibold" style={{ color: onTimeColor(r.on_time_pct) }}>
-                    {r.on_time_pct.toFixed(1)}%
-                  </span>
-                </span>
-              </td>
-              <td
-                className={cn(
-                  "px-3 py-2 text-right font-mono",
-                  r.avg_delay_seconds > 300 ? "text-red-600" : "text-gray-600",
-                )}
-              >
-                {formatDelayMin(r.avg_delay_seconds)}
-              </td>
-              <td className="px-3 py-2 text-right font-mono text-gray-400">
-                {formatNumber(r.total_observations)}
-              </td>
+    <div className="space-y-2">
+      <div className="overflow-x-auto rounded border border-gray-200">
+        <table className="min-w-full text-sm text-gray-800">
+          <thead className="bg-gray-50">
+            <tr>
+              <Header k="route" label="Route" align="left" />
+              <Header k="on_time_pct" label="On-time" />
+              <Header k="avg_delay_seconds" label="Avg delay" />
+              <Header k="total_observations" label="Samples" />
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {pageRows.map((r) => (
+              <tr
+                key={r.route_id}
+                className={cn("hover:bg-gray-50", onSelectRoute && "cursor-pointer")}
+                onClick={() => onSelectRoute?.(r.route_id)}
+              >
+                <td className="px-3 py-2 font-bold text-gray-900">{r.route_short_name}</td>
+                <td className="px-3 py-2 text-right">
+                  <span className="inline-flex items-center gap-2 justify-end">
+                    <span
+                      className="inline-block h-2 w-2 rounded-full"
+                      style={{ backgroundColor: onTimeColor(r.on_time_pct) }}
+                    />
+                    <span className="font-mono font-semibold" style={{ color: onTimeColor(r.on_time_pct) }}>
+                      {r.on_time_pct.toFixed(1)}%
+                    </span>
+                  </span>
+                </td>
+                <td
+                  className={cn(
+                    "px-3 py-2 text-right font-mono",
+                    r.avg_delay_seconds > 300 ? "text-red-600" : "text-gray-600",
+                  )}
+                >
+                  {formatDelayMin(r.avg_delay_seconds)}
+                </td>
+                <td className="px-3 py-2 text-right font-mono text-gray-400">
+                  {formatNumber(r.total_observations)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-end gap-3 text-xs text-gray-500">
+          <span>
+            {page * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE + PAGE_SIZE, sorted.length)} of{" "}
+            {sorted.length}
+          </span>
+          <button
+            onClick={() => setPage((p) => p - 1)}
+            disabled={page === 0}
+            className="px-2 py-0.5 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            ‹
+          </button>
+          <button
+            onClick={() => setPage((p) => p + 1)}
+            disabled={page >= totalPages - 1}
+            className="px-2 py-0.5 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            ›
+          </button>
+        </div>
+      )}
     </div>
   );
 }
