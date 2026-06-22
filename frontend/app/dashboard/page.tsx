@@ -27,7 +27,7 @@ import HeadwayChart from "@/components/charts/HeadwayChart";
 import OccupancyChart from "@/components/charts/OccupancyChart";
 import WorstStopsTable from "@/components/charts/WorstStopsTable";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
-import { formatDelayMin } from "@/lib/utils";
+import { formatDelayMin, onTimeColor } from "@/lib/utils";
 
 const DAY_OPTIONS = [1, 7];
 
@@ -64,7 +64,7 @@ export default function DashboardPage() {
   const heatmap = useHeatmap(Math.max(days, 14), rid);
   const distribution = useDistribution(days, rid);
   const scorecard = useOnTime(days, rid);
-  const worstStops = useWorstStops(days, rid);
+  const worstStops = useWorstStops(days, rid, 10);
   const frequency = useFrequency(rid);
   const scheduleFreq = useScheduleFrequency(rid);
   const occupancy = useOccupancy(days, rid, occDirection);
@@ -287,9 +287,7 @@ export default function DashboardPage() {
         <KpiCard
           title="On-Time Rate"
           value={ov ? `${ov.on_time_pct.value.toFixed(1)}%` : "—"}
-          accentColor={
-            ov ? (ov.on_time_pct.value >= 80 ? "#16a34a" : ov.on_time_pct.value >= 60 ? "#ea580c" : "#dc2626") : undefined
-          }
+          accentColor={ov ? onTimeColor(ov.on_time_pct.value) : undefined}
         />
         <KpiCard
           title="Avg Delay"
@@ -299,7 +297,7 @@ export default function DashboardPage() {
         <KpiCard
           title="Stuck Alerts"
           value={alerts.isLoading ? "…" : String(alertCount)}
-          accentColor={alertCount > 0 ? "#dc2626" : "#16a34a"}
+          accentColor={alertCount > 0 ? "#111827" : "#16a34a"}
         />
       </div>
 

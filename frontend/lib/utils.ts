@@ -46,11 +46,13 @@ export function formatDateTime(iso: string): string {
   });
 }
 
-/** Color for an on-time percentage: green ≥80, orange ≥60, red below. */
+/** Color for an on-time percentage across five tiers. */
 export function onTimeColor(pct: number): string {
-  if (pct >= 80) return "#16a34a";
-  if (pct >= 60) return "#ea580c";
-  return "#dc2626";
+  if (pct >= 80) return "#16a34a"; // green
+  if (pct >= 60) return "#84cc16"; // yellow-green
+  if (pct >= 40) return "#eab308"; // yellow
+  if (pct >= 20) return "#f97316"; // orange
+  return "#dc2626";                // red
 }
 
 /** Compact integer with thousands separators (e.g. 12,345). */
