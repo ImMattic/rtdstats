@@ -16,6 +16,7 @@ const DENVER_METRO_BOUNDS: L.LatLngBoundsExpression = [
 
 const DOWNTOWN_CENTER: [number, number] = [39.74948688769244, -104.99440656899203];
 const DOWNTOWN_ZOOM_THRESHOLD = 14;
+const STOP_MARKER_MIN_ZOOM = 14;
 // ~1 mile radius (0.0145° ≈ 1609m in latitude); covers Union Station and the
 // broader downtown core where stopped vehicles create a dense, unreadable cluster.
 const DOWNTOWN_RADIUS_SQ = 0.0145 * 0.0145;
@@ -278,8 +279,11 @@ function SelectedBusRouteLine({ selectedVehicle }: { selectedVehicle?: VehiclePo
 
 function RouteStopMarkers({ selectedVehicle }: { selectedVehicle?: VehiclePosition | null }) {
   const { data } = useRouteStops(selectedVehicle?.route_id);
+  const [zoom, setZoom] = useState(DEFAULT_ZOOM);
 
-  if (!data?.stops || !selectedVehicle) return null;
+  useMapEvents({ zoomend: (e) => setZoom((e.target as L.Map).getZoom()) });
+
+  if (!data?.stops || !selectedVehicle || zoom < STOP_MARKER_MIN_ZOOM) return null;
 
   const color = `#${selectedVehicle.route_color || "888888"}`;
   return (
