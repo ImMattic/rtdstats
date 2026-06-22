@@ -309,6 +309,68 @@ export interface OccupancyResponse {
   directions: DirectionInfo[];
 }
 
+// ── Vehicle drill-down ───────────────────────────────────────────────────────
+
+export interface ActiveVehicle {
+  vehicle_label: string | null;
+  vehicle_id: string | null;
+  trip_id: string | null;
+  route_id: string;
+  route_short_name: string | null;
+  route_color: string | null;
+  first_seen: string;
+  last_seen: string;
+  last_latitude: number | null;
+  last_longitude: number | null;
+  last_occupancy_status: string | null;
+  last_delay_seconds: number | null;
+  observation_count: number;
+}
+
+export interface ActiveVehiclesResponse {
+  start: string;
+  end: string;
+  vehicle_count: number;
+  vehicles: ActiveVehicle[];
+}
+
+export interface VehicleStopEvent {
+  stop_id: string;
+  stop_name: string | null;
+  stop_lat: number | null;
+  stop_lon: number | null;
+  stop_sequence: number;
+  scheduled_time: string;
+  actual_time: string;
+  delay_seconds: number;
+}
+
+export interface VehiclePositionTrack {
+  latitude: number;
+  longitude: number;
+  bearing: number | null;
+  timestamp: string;
+  current_status: number | null;
+  occupancy_status: string | null;
+}
+
+export interface VehicleTripResponse {
+  vehicle_label: string | null;
+  vehicle_id: string | null;
+  trip_id: string | null;
+  route_id: string | null;
+  route_short_name: string | null;
+  route_long_name: string | null;
+  route_color: string | null;
+  start: string;
+  end: string;
+  stops: VehicleStopEvent[];
+  positions: VehiclePositionTrack[];
+  avg_delay_seconds: number | null;
+  on_time_pct: number | null;
+  observation_count: number;
+}
+
 export interface RidershipPoint {
   month: string;
   boardings: number;

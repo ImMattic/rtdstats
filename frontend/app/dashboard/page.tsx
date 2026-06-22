@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   useOverview,
   useOnTime,
@@ -45,6 +46,7 @@ function delta(m?: { value: number; previous: number | null }): number | null {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [days, setDays] = useState(7);
   const [routeId, setRouteId] = useState<string>("");
   const [occDirection, setOccDirection] = useState<number | undefined>(undefined);
@@ -98,6 +100,30 @@ export default function DashboardPage() {
     document.addEventListener("mousedown", handleOutsideClick);
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
+
+  function handleTrendPointClick(point: { t: string }) {
+    const start = new Date(point.t);
+    const end = new Date(point.t);
+    if (granularity === "hour") {
+      end.setHours(end.getHours() + 1);
+    } else {
+      end.setDate(end.getDate() + 1);
+    }
+    const qs = new URLSearchParams({ start: start.toISOString(), end: end.toISOString() });
+    if (routeId) qs.set("route_id", routeId);
+    router.push(`/dashboard/vehicles?${qs}`);
+  }
+
+  function handleFrequencyRowClick(rowRouteId: string) {
+    const end = new Date();
+    const start = new Date(Date.now() - 60 * 60 * 1000);
+    const qs = new URLSearchParams({
+      start: start.toISOString(),
+      end: end.toISOString(),
+      route_id: rowRouteId,
+    });
+    router.push(`/dashboard/vehicles?${qs}`);
+  }
 
   const ov = overview.data;
   const alertCount = alerts.data?.alerts.length ?? 0;
@@ -312,9 +338,9 @@ export default function DashboardPage() {
       <Card>
         <SectionHeading
           title="On-Time Performance Trend"
-          subtitle={`${granularity === "hour" ? "Hourly" : "Daily"} on-time rate (bars: avg delay) · 80% target line`}
+          subtitle={`${granularity === "hour" ? "Hourly" : "Daily"} on-time rate (bars: avg delay) · 80% target line · click a point to see active vehicles`}
         />
-        {trend.isLoading ? <LoadingSpinner /> : <TrendChart points={trend.data?.points ?? []} granularity={granularity} />}
+        {trend.isLoading ? <LoadingSpinner /> : <TrendChart points={trend.data?.points ?? []} granularity={granularity} onPointClick={handleTrendPointClick} />}
       </Card>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -374,8 +400,8 @@ export default function DashboardPage() {
           )}
         </Card>
         <Card>
-          <SectionHeading title="Current Frequency (Live)" subtitle="Estimated headway from active vehicles" />
-          {frequency.isLoading ? <LoadingSpinner /> : <FrequencyTable routes={frequency.data?.routes ?? []} />}
+          <SectionHeading title="Current Frequency (Live)" subtitle="Estimated headway from active vehicles · click a row to see vehicles" />
+          {frequency.isLoading ? <LoadingSpinner /> : <FrequencyTable routes={frequency.data?.routes ?? []} onRowClick={handleFrequencyRowClick} />}
         </Card>
       </div>
 

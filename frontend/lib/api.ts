@@ -1,4 +1,5 @@
 import type {
+  ActiveVehiclesResponse,
   AlertsResponse,
   DistributionResponse,
   FrequencyResponse,
@@ -16,6 +17,7 @@ import type {
   ScheduleFrequencyResponse,
   ServiceDeliveryResponse,
   TrendResponse,
+  VehicleTripResponse,
   WorstStopsResponse,
 } from "./types";
 
@@ -150,6 +152,28 @@ export function fetchOccupancy(days = 7, routeId?: string, direction?: number): 
 
 export function fetchRidership(routeId?: string, months = 24): Promise<RidershipResponse> {
   return apiFetch(withParams("/api/v1/stats/ridership", { route_id: routeId, months }));
+}
+
+// ── Vehicle drill-down ────────────────────────────────────────────────────────
+
+export interface ActiveVehiclesParams {
+  start?: string;
+  end?: string;
+  route_id?: string;
+}
+
+export function fetchActiveVehicles(params: ActiveVehiclesParams = {}): Promise<ActiveVehiclesResponse> {
+  return apiFetch(withParams("/api/v1/vehicles/active", { start: params.start, end: params.end, route_id: params.route_id }));
+}
+
+export interface VehicleTripParams {
+  trip_id?: string;
+  start?: string;
+  end?: string;
+}
+
+export function fetchVehicleTrip(vehicleLabel: string, params: VehicleTripParams = {}): Promise<VehicleTripResponse> {
+  return apiFetch(withParams(`/api/v1/vehicles/${encodeURIComponent(vehicleLabel)}/trip`, { trip_id: params.trip_id, start: params.start, end: params.end }));
 }
 
 // ── Export ─────────────────────────────────────────────────────────────────

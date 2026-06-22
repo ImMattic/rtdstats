@@ -13,6 +13,7 @@ const PAGE_SIZE_OPTIONS = [15, 30, 50, 100] as const;
 
 interface Props {
   routes: FrequencyRouteStats[];
+  onRowClick?: (routeId: string) => void;
 }
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
@@ -43,7 +44,7 @@ function FrequencyBadge({ minutes }: { minutes: number }) {
   );
 }
 
-function FrequencyTable({ routes }: Props) {
+function FrequencyTable({ routes, onRowClick }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("avg_headway_minutes");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [page, setPage] = useState(0);
@@ -126,7 +127,11 @@ function FrequencyTable({ routes }: Props) {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {pageRows.map((r) => (
-              <tr key={r.route_id} className="hover:bg-gray-50">
+              <tr
+                key={r.route_id}
+                className={`hover:bg-gray-50 ${onRowClick ? "cursor-pointer" : ""}`}
+                onClick={() => onRowClick?.(r.route_id)}
+              >
                 <td className="px-3 py-2 font-bold text-gray-900">{r.route_short_name}</td>
                 <td className="px-3 py-2 text-right">{r.vehicle_count}</td>
                 <td className="px-3 py-2 text-right">

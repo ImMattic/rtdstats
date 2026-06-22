@@ -20,7 +20,11 @@ import {
   fetchScheduleFrequency,
   fetchOccupancy,
   fetchRidership,
+  fetchActiveVehicles,
+  fetchVehicleTrip,
   type HistoricalParams,
+  type ActiveVehiclesParams,
+  type VehicleTripParams,
 } from "./api";
 
 // Analytics rollups change slowly (hourly/daily aggregates) — refresh every 5 min.
@@ -169,6 +173,22 @@ export function useRidership(routeId?: string, months = 24) {
     queryKey: ["ridership", routeId, months],
     queryFn: () => fetchRidership(routeId, months),
     staleTime: ANALYTICS_INTERVAL,
+  });
+}
+
+export function useActiveVehicles(params: ActiveVehiclesParams) {
+  return useQuery({
+    queryKey: ["activeVehicles", params],
+    queryFn: () => fetchActiveVehicles(params),
+    enabled: Boolean(params.start || params.end),
+  });
+}
+
+export function useVehicleTrip(vehicleLabel: string, params: VehicleTripParams) {
+  return useQuery({
+    queryKey: ["vehicleTrip", vehicleLabel, params],
+    queryFn: () => fetchVehicleTrip(vehicleLabel, params),
+    enabled: Boolean(vehicleLabel),
   });
 }
 

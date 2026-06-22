@@ -16,6 +16,7 @@ import type { TrendPoint } from "@/lib/types";
 interface Props {
   points: TrendPoint[];
   granularity: string;
+  onPointClick?: (point: TrendPoint) => void;
 }
 
 function fmtTick(t: string, granularity: string): string {
@@ -26,7 +27,7 @@ function fmtTick(t: string, granularity: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function TrendChart({ points, granularity }: Props) {
+function TrendChart({ points, granularity, onPointClick }: Props) {
   const data = useMemo(
     () => points.map((p) => ({ ...p, label: fmtTick(p.t, granularity) })),
     [points, granularity],
@@ -38,7 +39,19 @@ function TrendChart({ points, granularity }: Props) {
 
   return (
     <ResponsiveContainer width="100%" height={280}>
-      <ComposedChart data={data} margin={{ left: 4, right: 8, top: 8 }}>
+      <ComposedChart
+        data={data}
+        margin={{ left: 4, right: 8, top: 8 }}
+        style={onPointClick ? { cursor: "pointer" } : undefined}
+        onClick={
+          onPointClick
+            ? (chartData) => {
+                const pt = chartData?.activePayload?.[0]?.payload as TrendPoint | undefined;
+                if (pt) onPointClick(pt);
+              }
+            : undefined
+        }
+      >
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
         <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#64748b" }} minTickGap={24} />
         <YAxis

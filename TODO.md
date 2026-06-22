@@ -71,7 +71,7 @@
 - [X] Change the bus and train icons to look a bit more modern and visually appealing. The current icons are pretty basic and could be improved to make the map look nicer.
 - [X] Max zoom out to the entire Denver metro area, so that users can't zoom out to the point where the map is just a tiny dot in the middle of the screen.
 - [ ] Fix: The on-time tag in the Vehicle Dialog box isn't corresponding to the status in the Dashboard (namely the stuck status).
-- [ ] Fix: The search functionality needs some tweaking as it isn't able to pull up the trains by typing in "Route [x]".
+- [X] Fix: The search functionality needs some tweaking as it isn't able to pull up the trains by typing in "Route [x]".
 - [ ] Feat: Add station dialog boxes with more information about a station. The stations will still not appear on the map like they do now, but you can search for a station and click on it to see more information about it. The dialog box should include the station name, the lines that stop at the station, the next arrival times for each line, and any other relevant information. The dialog box should also include a link to the RTD website for more information about the station (RTD formats the link as so: https://app.rtd-denver.com/nextride/stop/{stop ID}).
 - [ ] Feat: from the dashboard, I want to be able to drill down into individual vehicles (ex FF #1505) by clicking on the timeslot and seeing all the vehicles that were active for that timeslot. Then, when you click on the vehicle from that page, you'll be presented with a line showing the vehicle's route and all the stops it made, along with the times it arrived at each stop and other stats like occupancy, delay status, etc. This will allow users to see the performance of individual vehicles in more detail and identify any patterns or issues with specific vehicles.
-- [ ] Feat: add search to drop down menu on the Dashboard.
+- [X] Feat: add search to drop down menu on the Dashboard.
