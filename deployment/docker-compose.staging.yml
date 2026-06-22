@@ -65,6 +65,7 @@ services:
       - "3000:3000"
     environment:
       BACKEND_URL: http://backend:8000
+      NEXT_PUBLIC_SITE_URL: https://${STAGING_DOMAIN:?STAGING_DOMAIN is required}
     depends_on:
       - backend
     deploy:
