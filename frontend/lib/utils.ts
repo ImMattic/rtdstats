@@ -49,7 +49,7 @@ export function formatDateTime(iso: string): string {
 /** Color for an on-time percentage across five tiers. */
 export function onTimeColor(pct: number): string {
   if (pct >= 80) return "#16a34a"; // green
-  if (pct >= 65) return "#84cc16"; // chartreuse
+  if (pct >= 65) return "#c8d614"; // chartreuse (yellow-leaning)
   if (pct >= 50) return "#eab308"; // yellow
   if (pct >= 35) return "#f97316"; // orange
   return "#dc2626";                // red

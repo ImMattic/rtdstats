@@ -93,7 +93,7 @@ export default function Heatmap({ cells, metric = "ontime", onCellClick }: Props
         <div className="flex items-center gap-1">
           <span>{metric === "ontime" ? "worse" : "early"}</span>
           {(metric === "ontime"
-            ? ["#dc2626", "#f97316", "#eab308", "#84cc16", "#16a34a"]
+            ? ["#dc2626", "#f97316", "#eab308", "#c8d614", "#16a34a"]
             : ["#16a34a", "#eab308", "#dc2626"]
           ).map((c) => (
             <span key={c} className="h-3 w-3 rounded-sm" style={{ backgroundColor: c }} />
