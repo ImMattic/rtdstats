@@ -146,8 +146,16 @@ function TripsContent() {
     if (!v.vehicle_label) return;
     const qs = new URLSearchParams();
     if (v.trip_id) qs.set("trip_id", v.trip_id);
-    qs.set("start", fetchStart);
-    qs.set("end", fetchEnd);
+    // Fetch the *full* leg: pad the trip's own start/end by a couple minutes so
+    // the very first/last snapshot is captured, while still bounding to this
+    // single occurrence of the trip_id.
+    const pad = 2 * 60_000;
+    qs.set("start", new Date(new Date(v.start_time).getTime() - pad).toISOString());
+    qs.set("end", new Date(new Date(v.end_time).getTime() + pad).toISOString());
+    // Preserve the list's window so the breadcrumb returns to the same view.
+    qs.set("ret_start", fetchStart);
+    qs.set("ret_end", fetchEnd);
+    if (fetchRouteId) qs.set("ret_route_id", fetchRouteId);
     router.push(`/trips/trip/${encodeURIComponent(v.vehicle_label)}?${qs}`);
   }
 
@@ -404,9 +412,9 @@ function TripsContent() {
                 <tr>
                   <th className="px-3 py-2 text-left">Route</th>
                   <th className="px-3 py-2 text-left">Vehicle</th>
-                  <th className="px-3 py-2 text-left">Trip ID</th>
-                  <th className="px-3 py-2 text-left">First seen</th>
-                  <th className="px-3 py-2 text-left">Last seen</th>
+                  <th className="px-3 py-2 text-left">From → To</th>
+                  <th className="px-3 py-2 text-left">Start Time</th>
+                  <th className="px-3 py-2 text-left">End Time</th>
                   <th className="px-3 py-2 text-right">Delay</th>
                   <th className="px-3 py-2 text-left">Occupancy</th>
                   <th className="px-3 py-2 text-right">Obs.</th>
@@ -425,19 +433,21 @@ function TripsContent() {
                     <td className="px-3 py-2 font-semibold">
                       {v.vehicle_label ? `#${v.vehicle_label}` : "—"}
                     </td>
-                    <td className="px-3 py-2 font-mono text-xs text-gray-500">
-                      {v.trip_id
-                        ? v.trip_id.slice(0, 12) + (v.trip_id.length > 12 ? "…" : "")
-                        : "—"}
+                    <td className="px-3 py-2 text-gray-600">
+                      <span className="whitespace-nowrap">
+                        {v.start_stop_name ?? "—"}
+                        <span className="px-1 text-gray-400">→</span>
+                        {v.end_stop_name ?? "—"}
+                      </span>
                     </td>
                     <td className="px-3 py-2 text-gray-600">
-                      {new Date(v.first_seen).toLocaleTimeString([], {
+                      {new Date(v.start_time).toLocaleTimeString([], {
                         hour: "2-digit",
                         minute: "2-digit",
                       })}
                     </td>
                     <td className="px-3 py-2 text-gray-600">
-                      {new Date(v.last_seen).toLocaleTimeString([], {
+                      {new Date(v.end_time).toLocaleTimeString([], {
                         hour: "2-digit",
                         minute: "2-digit",
                       })}

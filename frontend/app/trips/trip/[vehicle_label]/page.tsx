@@ -50,6 +50,7 @@ function StatBox({ label, value, sub }: { label: string; value: string; sub?: st
 function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
   const searchParams = useSearchParams();
   const tripId = searchParams.get("trip_id") ?? undefined;
+  // start/end bound the full extent of this single trip leg (set by the list).
   const start = searchParams.get("start") ?? undefined;
   const end = searchParams.get("end") ?? undefined;
 
@@ -59,10 +60,14 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
     end,
   });
 
+  // The breadcrumb returns to the originating list window, not this leg's bounds.
+  const retStart = searchParams.get("ret_start");
+  const retEnd = searchParams.get("ret_end");
+  const retRouteId = searchParams.get("ret_route_id");
   const backQs = new URLSearchParams();
-  if (start) backQs.set("start", start);
-  if (end) backQs.set("end", end);
-  if (data?.route_id) backQs.set("route_id", data.route_id);
+  if (retStart) backQs.set("start", retStart);
+  if (retEnd) backQs.set("end", retEnd);
+  if (retRouteId) backQs.set("route_id", retRouteId);
   const backHref = `/trips${backQs.toString() ? `?${backQs}` : ""}`;
 
   const routeHex = routeColor(data?.route_color ?? "888888");
@@ -70,6 +75,13 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
   const lastOccupancy = data?.positions.length
     ? data.positions[data.positions.length - 1].occupancy_status
     : null;
+
+  // Prefer the trip's actual extent (first→last snapshot) over the padded
+  // query bounds for the header timestamp.
+  const tripStart = data?.positions.length ? data.positions[0].timestamp : start;
+  const tripEnd = data?.positions.length
+    ? data.positions[data.positions.length - 1].timestamp
+    : end;
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 text-gray-900">
@@ -102,14 +114,17 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
         {data?.route_long_name && (
           <p className="mt-0.5 text-sm text-gray-500">{data.route_long_name}</p>
         )}
-        {(start || end) && (
+        {(tripStart || tripEnd) && (
           <p className="mt-0.5 text-xs text-gray-400">
-            {start
-              ? new Date(start).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+            {tripStart
+              ? new Date(tripStart).toLocaleString([], {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })
               : ""}
-            {start && end ? " – " : ""}
-            {end
-              ? new Date(end).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+            {tripStart && tripEnd ? " – " : ""}
+            {tripEnd
+              ? new Date(tripEnd).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
               : ""}
           </p>
         )}
@@ -176,6 +191,7 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
                         <th className="px-3 py-2 text-right">Scheduled</th>
                         <th className="px-3 py-2 text-right">Actual</th>
                         <th className="px-3 py-2 text-right">Delay</th>
+                        <th className="px-3 py-2 text-left">Occupancy</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -206,6 +222,9 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
                             >
                               {formatDelay(stop.delay_seconds) || "On time"}
                             </span>
+                          </td>
+                          <td className="px-3 py-2 text-gray-600">
+                            {OCCUPANCY_LABELS[stop.occupancy_status ?? "UNKNOWN"] ?? "—"}
                           </td>
                         </tr>
                       ))}

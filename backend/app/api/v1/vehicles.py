@@ -12,9 +12,27 @@ from app.database import get_db
 from app.models.vehicle_position import VehiclePosition
 from app.models.stop_arrival import StopArrivalEvent
 from app.models.trip_update import TripUpdate
-from app.services.gtfs_decoder import load_gtfs_static_data
+from app.services.gtfs_decoder import load_gtfs_static_data, load_trip_endpoint_sequences
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
+
+# A trip can begin before / end after the requested window.  We scan this much
+# extra on each side so each trip's *true* first→last position is captured and
+# we can decide whether its start or end lands in the window.  3h comfortably
+# covers RTD's longest routes.
+_MAX_TRIP_DURATION = timedelta(hours=3)
+
+# {trip_id: (first_stop_id, last_stop_id)} from the static schedule.  Parsing
+# stop_times.txt is expensive, so cache it at module level (same pattern as
+# stats.py) and load lazily on first use.
+_TRIP_ENDPOINT_STOPS: dict[str, tuple[str | None, str | None]] | None = None
+
+
+def _trip_endpoint_stops() -> dict[str, tuple[str | None, str | None]]:
+    global _TRIP_ENDPOINT_STOPS
+    if _TRIP_ENDPOINT_STOPS is None:
+        _, _TRIP_ENDPOINT_STOPS = load_trip_endpoint_sequences()
+    return _TRIP_ENDPOINT_STOPS
 
 
 @router.get("/active")
@@ -24,19 +42,29 @@ async def get_active_vehicles(
     end: Annotated[datetime | None, Query()] = None,
     route_id: Annotated[str | None, Query()] = None,
 ) -> dict:
-    """Distinct vehicles that had a position update in [start, end]."""
+    """Trips whose start or end falls within [start, end].
+
+    A *trip* is one ``(vehicle_label, trip_id)`` leg.  We scan a window padded
+    by ``_MAX_TRIP_DURATION`` on each side so a trip's full extent
+    (first→last position) is captured even when it begins before / ends after
+    the requested window, then keep only trips whose start or end timestamp is
+    actually inside ``[start, end]``.
+    """
     now = datetime.now(tz=timezone.utc)
     end = end or now
     start = start or (end - timedelta(hours=1))
 
+    scan_start = start - _MAX_TRIP_DURATION
+    scan_end = end + _MAX_TRIP_DURATION
+
     base_filter = [
-        VehiclePosition.timestamp >= start,
-        VehiclePosition.timestamp <= end,
+        VehiclePosition.timestamp >= scan_start,
+        VehiclePosition.timestamp <= scan_end,
     ]
     if route_id:
         base_filter.append(VehiclePosition.route_id == route_id)
 
-    # Latest row per vehicle_label via DISTINCT ON
+    # Latest row per (vehicle_label, trip_id) — for route / occupancy / position.
     latest_stmt = (
         select(
             VehiclePosition.vehicle_label,
@@ -46,39 +74,55 @@ async def get_active_vehicles(
             VehiclePosition.latitude,
             VehiclePosition.longitude,
             VehiclePosition.occupancy_status,
-            VehiclePosition.timestamp.label("last_seen"),
         )
         .where(*base_filter)
-        .distinct(VehiclePosition.vehicle_label)
-        .order_by(VehiclePosition.vehicle_label, VehiclePosition.timestamp.desc())
+        .distinct(VehiclePosition.vehicle_label, VehiclePosition.trip_id)
+        .order_by(
+            VehiclePosition.vehicle_label,
+            VehiclePosition.trip_id,
+            VehiclePosition.timestamp.desc(),
+        )
     )
 
-    # first_seen + observation count per vehicle
+    # start_time / end_time / observation count per (vehicle_label, trip_id).
     agg_stmt = (
         select(
             VehiclePosition.vehicle_label,
-            func.min(VehiclePosition.timestamp).label("first_seen"),
+            VehiclePosition.trip_id,
+            func.min(VehiclePosition.timestamp).label("start_time"),
+            func.max(VehiclePosition.timestamp).label("end_time"),
             func.count().label("observation_count"),
         )
         .where(*base_filter)
-        .group_by(VehiclePosition.vehicle_label)
+        .group_by(VehiclePosition.vehicle_label, VehiclePosition.trip_id)
     )
 
     latest_rows = (await db.execute(latest_stmt)).all()
     agg_rows = (await db.execute(agg_stmt)).all()
 
-    agg_map: dict[str | None, tuple[datetime, int]] = {
-        r.vehicle_label: (r.first_seen, r.observation_count) for r in agg_rows
+    agg_map: dict[tuple[str | None, str | None], tuple[datetime, datetime, int]] = {
+        (r.vehicle_label, r.trip_id): (r.start_time, r.end_time, r.observation_count)
+        for r in agg_rows
     }
 
-    routes_static, _ = load_gtfs_static_data()
+    routes_static, stops_static = load_gtfs_static_data()
+    endpoint_stops = _trip_endpoint_stops()
     trip_ids = {r.trip_id for r in latest_rows if r.trip_id}
-    delay_map = await _delay_map(db, start, end, trip_ids)
-    arrival_count_map = await _arrival_count_map(db, start, end, trip_ids)
+    delay_map = await _delay_map(db, scan_start, scan_end, trip_ids)
+    arrival_count_map = await _arrival_count_map(db, scan_start, scan_end, trip_ids)
 
     vehicles = []
     for r in latest_rows:
-        first_seen, obs_count = agg_map.get(r.vehicle_label, (r.last_seen, 1))
+        agg = agg_map.get((r.vehicle_label, r.trip_id))
+        if agg is None:
+            continue
+        trip_start, trip_end, obs_count = agg
+
+        # Keep only legs that start or end inside the requested window.
+        if not (start <= trip_start <= end or start <= trip_end <= end):
+            continue
+
+        first_sid, last_sid = endpoint_stops.get(r.trip_id or "", (None, None))
         vehicles.append(
             {
                 "vehicle_label": r.vehicle_label,
@@ -87,8 +131,14 @@ async def get_active_vehicles(
                 "route_id": r.route_id,
                 "route_short_name": routes_static.get(r.route_id, {}).get("route_short_name"),
                 "route_color": routes_static.get(r.route_id, {}).get("route_color"),
-                "first_seen": first_seen.isoformat(),
-                "last_seen": r.last_seen.isoformat(),
+                "start_time": trip_start.isoformat(),
+                "end_time": trip_end.isoformat(),
+                "start_stop_name": (
+                    stops_static.get(first_sid, {}).get("stop_name") if first_sid else None
+                ),
+                "end_stop_name": (
+                    stops_static.get(last_sid, {}).get("stop_name") if last_sid else None
+                ),
                 "last_latitude": r.latitude,
                 "last_longitude": r.longitude,
                 "last_occupancy_status": r.occupancy_status,
@@ -98,7 +148,7 @@ async def get_active_vehicles(
             }
         )
 
-    vehicles.sort(key=lambda v: (v["route_short_name"] or "", v["vehicle_label"] or ""))
+    vehicles.sort(key=lambda v: (v["start_time"], v["route_short_name"] or ""))
 
     return {
         "start": start.isoformat(),
@@ -173,6 +223,19 @@ async def get_vehicle_trip(
     routes_static, stops_static = load_gtfs_static_data()
     route_info = routes_static.get(resolved_route_id, {})
 
+    # Occupancy timeline from the position snapshots, used to label each stop
+    # with the occupancy reported closest in time to the observed arrival.
+    occ_timeline = [
+        (r.timestamp, r.occupancy_status)
+        for r in pos_rows
+        if r.occupancy_status is not None
+    ]
+
+    def _occupancy_at(t: datetime) -> str | None:
+        if not occ_timeline:
+            return None
+        return min(occ_timeline, key=lambda pair: abs((pair[0] - t).total_seconds()))[1]
+
     stops_list: list[dict] = []
     if resolved_trip_id:
         arrival_stmt = (
@@ -196,6 +259,7 @@ async def get_vehicle_trip(
                     "scheduled_time": ev.scheduled_time.isoformat(),
                     "actual_time": ev.actual_time.isoformat(),
                     "delay_seconds": ev.delay_seconds,
+                    "occupancy_status": _occupancy_at(ev.actual_time),
                 }
             )
 

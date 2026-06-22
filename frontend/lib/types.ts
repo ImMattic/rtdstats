@@ -341,8 +341,10 @@ export interface ActiveVehicle {
   route_id: string;
   route_short_name: string | null;
   route_color: string | null;
-  first_seen: string;
-  last_seen: string;
+  start_time: string;
+  end_time: string;
+  start_stop_name: string | null;
+  end_stop_name: string | null;
   last_latitude: number | null;
   last_longitude: number | null;
   last_occupancy_status: string | null;
@@ -367,6 +369,7 @@ export interface VehicleStopEvent {
   scheduled_time: string;
   actual_time: string;
   delay_seconds: number;
+  occupancy_status: string | null;
 }
 
 export interface VehiclePositionTrack {
