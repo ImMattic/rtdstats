@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # update-gtfs.sh — Download and replace the five RTD GTFS static feeds.
 #
 # RTD publishes a new service period roughly every 3 months.  When trip IDs
@@ -12,32 +12,25 @@
 #   docker compose restart backend
 #   docker compose exec backend python -m scripts.backfill_ontime
 
-set -euo pipefail
+set -eu
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GTFS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)/gtfs-static"
-
-declare -A FEEDS=(
-    ["light_rail"]="https://www.rtd-denver.com/files/gtfs/RTD_Denver_Direct_Operated_Light_Rail_GTFS.zip"
-    ["op_commuter_rail"]="https://www.rtd-denver.com/files/gtfs/RTD_Denver_Direct_Operated_Commuter_Rail_GTFS.zip"
-    ["op_motorbus"]="https://www.rtd-denver.com/files/gtfs/RTD_Denver_Direct_Operated_Motorbus_GTFS.zip"
-    ["pur_commuter_rail"]="https://www.rtd-denver.com/files/gtfs/RTD_Denver_Purchased_Transportation_Commuter_Rail_GTFS.zip"
-    ["pur_motorbus"]="https://www.rtd-denver.com/files/gtfs/RTD_Denver_Direct_Purchased_Transportation_Motorbus_GTFS.zip"
-)
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-echo "Updating RTD GTFS static feeds → $GTFS_ROOT"
+echo "Updating RTD GTFS static feeds -> $GTFS_ROOT"
 echo ""
 
-for folder in "${!FEEDS[@]}"; do
-    url="${FEEDS[$folder]}"
+download_feed() {
+    folder="$1"
+    url="$2"
     dest="$GTFS_ROOT/$folder"
     zip="$TMP_DIR/${folder}.zip"
     extract_dir="$TMP_DIR/${folder}_extract"
 
-    echo "  ↓ $folder"
+    echo "  -> $folder"
     curl -fsSL --progress-bar "$url" -o "$zip"
 
     mkdir -p "$extract_dir"
@@ -50,9 +43,15 @@ for folder in "${!FEEDS[@]}"; do
 
     feed_end=$(grep -m1 "feed_end_date" "$dest/feed_info.txt" 2>/dev/null | tr -d '"' | awk -F',' '{print $NF}' || echo "unknown")
     trip_count=$(( $(wc -l < "$dest/trips.txt") - 1 ))
-    echo "    ✓ feed_end_date=$feed_end  trips=$trip_count"
+    echo "    feed_end_date=$feed_end  trips=$trip_count"
     echo ""
-done
+}
+
+download_feed light_rail        "https://www.rtd-denver.com/files/gtfs/RTD_Denver_Direct_Operated_Light_Rail_GTFS.zip"
+download_feed op_commuter_rail  "https://www.rtd-denver.com/files/gtfs/RTD_Denver_Direct_Operated_Commuter_Rail_GTFS.zip"
+download_feed op_motorbus       "https://www.rtd-denver.com/files/gtfs/RTD_Denver_Direct_Operated_Motorbus_GTFS.zip"
+download_feed pur_commuter_rail "https://www.rtd-denver.com/files/gtfs/RTD_Denver_Direct_Operated_Commuter_Rail_GTFS.zip"
+download_feed pur_motorbus      "https://www.rtd-denver.com/files/gtfs/RTD_Denver_Direct_Purchased_Transportation_Motorbus_GTFS.zip"
 
 echo "All feeds updated."
 echo ""
