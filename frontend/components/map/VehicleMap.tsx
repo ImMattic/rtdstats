@@ -59,19 +59,26 @@ const _iconCache = new Map<string, L.DivIcon>();
 function createVehicleIcon(
   bearing: number | null,
   fillColor: string,
-  strokeColor: string,
+  headwayStroke: string,
+  outlineColor: string,
   zoom: number,
   isRail: boolean,
 ): L.DivIcon {
   // Bucket bearing to 5° so the cache stays small (visually indistinguishable).
   const rot = Math.round((bearing ?? 0) / 5) * 5;
-  const cacheKey = `${isRail ? 1 : 0}|${fillColor || "888888"}|${strokeColor}|${zoom}|${rot}`;
+  const cacheKey = `${isRail ? 1 : 0}|${fillColor || "888888"}|${headwayStroke}|${outlineColor}|${zoom}|${rot}`;
   const cached = _iconCache.get(cacheKey);
   if (cached) return cached;
 
   const s   = iconPx(zoom);
   const cx  = s / 2;
   const sw  = Math.max(1.5, s / 14);
+  // Two-layer stroke: outer headway ring + inner black/white separator.
+  // swOuter is the combined width; swInner is just the outline layer.
+  // The visible headway ring = (swOuter - swInner) / 2 on each side of the path.
+  const swOuter = sw * 3.5;
+  const swInner = sw * 1.5;
+  const pad = Math.ceil(swOuter / 2); // SVG edge padding to avoid clipping
   const fill  = `#${fillColor || "888888"}`;
   let svgBody: string;
   let totalH: number;
@@ -86,10 +93,10 @@ function createVehicleIcon(
     const rx = Math.round(w * 0.32);
     const x0 = cx - w / 2;
     const x1 = cx + w / 2;
-    totalH  = nH + bH + Math.ceil(sw * 2);
+    totalH  = nH + bH + Math.ceil(pad * 2);
     anchorY = Math.round(nH + bH / 2);
     const path = [
-      `M ${cx} ${sw}`,
+      `M ${cx} ${pad}`,
       `L ${x1} ${nH}`,
       `L ${x1} ${nH + bH - rx}`,
       `Q ${x1} ${nH + bH} ${x1 - rx} ${nH + bH}`,
@@ -99,7 +106,8 @@ function createVehicleIcon(
       `Z`,
     ].join(" ");
     svgBody = `<svg width="${s}" height="${totalH}" viewBox="0 0 ${s} ${totalH}" xmlns="http://www.w3.org/2000/svg">
-      <path d="${path}" fill="${fill}" stroke="${strokeColor}" stroke-width="${sw}" stroke-linejoin="round"/>
+      <path d="${path}" fill="none" stroke="${headwayStroke}" stroke-width="${swOuter}" stroke-linejoin="round"/>
+      <path d="${path}" fill="${fill}" stroke="${outlineColor}" stroke-width="${swInner}" stroke-linejoin="round"/>
     </svg>`;
   } else {
     // Bus: circle with a small directional tip, single unified path, no seam.
@@ -110,18 +118,19 @@ function createVehicleIcon(
     const h    = r + tip;                          // tip-to-circle-center distance
     const ty   = Math.round(r * r / h);           // tangent point: pixels above center
     const tx   = Math.round(r * Math.sqrt(h * h - r * r) / h); // tangent point: horiz offset
-    const cy_c = sw + h;                           // circle center y
+    const cy_c = pad + h;                          // circle center y
     const tanY = cy_c - ty;                        // y of both tangent points
-    totalH  = Math.ceil(cy_c + r + sw);
+    totalH  = Math.ceil(cy_c + r + pad);
     anchorY = Math.round(cy_c);
     const path = [
-      `M ${cx} ${sw}`,                                      // tip
+      `M ${cx} ${pad}`,                                     // tip
       `L ${cx + tx} ${tanY}`,                               // right tangent point
       `A ${r} ${r} 0 1 1 ${cx - tx} ${tanY}`,              // arc through bottom (cw, large)
       `Z`,
     ].join(" ");
     svgBody = `<svg width="${s}" height="${totalH}" viewBox="0 0 ${s} ${totalH}" xmlns="http://www.w3.org/2000/svg">
-      <path d="${path}" fill="${fill}" stroke="${strokeColor}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${path}" fill="none" stroke="${headwayStroke}" stroke-width="${swOuter}" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${path}" fill="${fill}" stroke="${outlineColor}" stroke-width="${swInner}" stroke-linejoin="round" stroke-linecap="round"/>
     </svg>`;
   }
 
@@ -215,7 +224,8 @@ const VehicleMarkers = memo(function VehicleMarkers({ vehicles, onVehicleClick, 
               icon={createVehicleIcon(
                 v.bearing,
                 v.route_color,
-                isSelected ? "#FFFFFF" : headwayColor(v.headway_minutes),
+                headwayColor(v.headway_minutes),
+                isSelected ? "#FFFFFF" : "#000000",
                 zoom,
                 RAIL_TYPES.has(v.route_type),
               )}
