@@ -314,7 +314,7 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
-          <SectionHeading title="When Is Service Reliable?" subtitle="On-time % by hour × day of week (Denver time)" />
+          <SectionHeading title="Service Reliability" subtitle="On-time % by hour × day of week (Denver time)" />
           {heatmap.isLoading ? <LoadingSpinner /> : <Heatmap cells={heatmap.data?.cells ?? []} metric="ontime" onCellClick={handleHeatmapCellClick} />}
         </Card>
         <Card>
