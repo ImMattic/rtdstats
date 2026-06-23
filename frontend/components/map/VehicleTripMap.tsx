@@ -9,8 +9,8 @@ import { createVehicleIcon } from "./vehicleIcon";
 const DENVER_CENTER: [number, number] = [39.7392, -104.9903];
 
 function stopDelayColor(seconds: number): string {
-  if (seconds > 120) return "#dc2626";  // red — late
-  if (seconds < -120) return "#2563eb"; // blue — early
+  if (seconds > 300) return "#dc2626";  // red — late
+  if (seconds < -300) return "#2563eb"; // blue — early
   return "#16a34a";                     // green — on time
 }
 

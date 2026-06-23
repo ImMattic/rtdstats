@@ -28,9 +28,9 @@ from app.config import get_settings
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
-# On-time classification thresholds (>5 min late, <1 min early) now live in the
-# trip_ontime_hourly continuous aggregate (migration 002); changing them there
-# requires re-refreshing the aggregate.
+# On-time classification thresholds (on-time = within ±5 min of schedule) live in
+# the trip_ontime_hourly continuous aggregate (latest definition: migration 006);
+# changing them there requires re-refreshing the aggregate.
 
 
 # ── On-time performance ────────────────────────────────────────────────────

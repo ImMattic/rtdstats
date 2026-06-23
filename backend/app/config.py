@@ -36,7 +36,8 @@ class Settings(BaseSettings):
     # of it; the observed arrival time is then compared to the scheduled time.
     arrival_radius_m: int = 100
     # An arrival within ±this many seconds of schedule is "on time".
-    ontime_threshold_seconds: int = 120
+    # RTD defines on-time as within 5 minutes.
+    ontime_threshold_seconds: int = 300
     # Sanity guard: if the best schedule match is off by more than this, the
     # live trip_id probably doesn't match the static schedule for that day —
     # drop the event rather than record a bogus delay.

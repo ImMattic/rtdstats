@@ -56,8 +56,8 @@ describe("VehicleDialog", () => {
     expect(screen.getByText("Late")).toBeInTheDocument();
   });
 
-  it("shows Early badge when delay < -60s", () => {
-    render(<VehicleDialog vehicle={makeVehicle({ delay_seconds: -90 })} onClose={() => {}} />);
+  it("shows Early badge when delay < -300s", () => {
+    render(<VehicleDialog vehicle={makeVehicle({ delay_seconds: -400 })} onClose={() => {}} />);
     expect(screen.getByText("Early")).toBeInTheDocument();
   });
 

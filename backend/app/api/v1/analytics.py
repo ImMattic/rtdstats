@@ -51,15 +51,15 @@ router = APIRouter(prefix="/stats", tags=["analytics"])
 
 _TZ = "America/Denver"
 
-# Fine delay bins exposed by the distribution endpoint (matches migration 004:
-# observed delay vs. schedule, on-time = ±2 min).
+# Fine delay bins exposed by the distribution endpoint (matches migration 006:
+# observed delay vs. schedule, on-time = ±5 min).
 _DELAY_BINS = [
-    ("very_early", "Very early (>5m)"),
-    ("early", "Early (2–5m)"),
-    ("on_time", "On time (±2m)"),
-    ("slightly_late", "Slightly late (2–5m)"),
-    ("late", "Late (5–10m)"),
-    ("very_late", "Very late (>10m)"),
+    ("very_early", "Very early (>10m)"),
+    ("early", "Early (5–10m)"),
+    ("on_time", "On time (±5m)"),
+    ("slightly_late", "Slightly late (5–10m)"),
+    ("late", "Late (10–15m)"),
+    ("very_late", "Very late (>15m)"),
 ]
 
 

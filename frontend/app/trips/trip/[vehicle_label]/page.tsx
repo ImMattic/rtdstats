@@ -26,15 +26,15 @@ const OCCUPANCY_LABELS: Record<string, string> = {
 };
 
 function delayClass(seconds: number): string {
-  if (seconds > 120) return "text-red-600 font-semibold";
-  if (seconds < -120) return "text-blue-600 font-semibold";
+  if (seconds > 300) return "text-red-600 font-semibold";
+  if (seconds < -300) return "text-blue-600 font-semibold";
   return "text-green-600";
 }
 
 function delayBadge(seconds: number): string {
-  if (seconds > 300) return "bg-red-100 text-red-700";
-  if (seconds > 120) return "bg-orange-100 text-orange-700";
-  if (seconds < -120) return "bg-blue-100 text-blue-700";
+  if (seconds > 600) return "bg-red-100 text-red-700";
+  if (seconds > 300) return "bg-orange-100 text-orange-700";
+  if (seconds < -300) return "bg-blue-100 text-blue-700";
   return "bg-green-100 text-green-700";
 }
 
@@ -151,7 +151,7 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
             <StatBox
               label="On-Time Rate"
               value={data.on_time_pct !== null ? `${data.on_time_pct}%` : "—"}
-              sub="±2 min window"
+              sub="±5 min window"
             />
             <StatBox
               label="Occupancy"

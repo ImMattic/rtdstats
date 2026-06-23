@@ -304,7 +304,7 @@ async def get_vehicle_trip(
     if stops_list:
         delays = [s["delay_seconds"] for s in stops_list]
         avg_delay = sum(delays) / len(delays)
-        on_time_count = sum(1 for d in delays if abs(d) <= 120)
+        on_time_count = sum(1 for d in delays if abs(d) <= 300)
         on_time_pct = round(on_time_count / len(delays) * 100, 1)
 
     positions = [
