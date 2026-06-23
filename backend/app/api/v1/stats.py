@@ -1,6 +1,8 @@
 """On-time performance, frequency, and stuck-vehicle alert endpoints."""
 from __future__ import annotations
 
+import math
+import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
@@ -8,10 +10,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import String, bindparam, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from app.database import get_db
 from app.models.vehicle_position import VehiclePosition
-from app.models.trip_update import TripUpdate
 from app.schemas.stats import (
     AlertsResponse,
     FrequencyResponse,
@@ -21,16 +23,35 @@ from app.schemas.stats import (
     OverallOnTime,
     StuckAlert,
 )
-from app.services.gtfs_decoder import load_gtfs_static_data
+from app.services.gtfs_decoder import load_gtfs_static_data, load_route_terminal_stops, load_trip_endpoint_sequences
 from app.config import get_settings
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
-_LATE_THRESHOLD_SEC = 300   # >5 min = late
-_EARLY_THRESHOLD_SEC = -60  # <-1 min = early
+# On-time classification thresholds (>5 min late, <1 min early) now live in the
+# trip_ontime_hourly continuous aggregate (migration 002); changing them there
+# requires re-refreshing the aggregate.
 
 
 # ── On-time performance ────────────────────────────────────────────────────
+
+# Aggregate the pre-computed hourly buckets (trip_ontime_hourly, migration 002)
+# down to per-route totals over the requested window. This reads a few hundred
+# rollup rows instead of millions of raw trip_updates rows.
+_ONTIME_SQL = """
+    SELECT
+        route_id,
+        sum(on_time)::bigint                                  AS on_time,
+        sum(slightly_late + late + very_late)::bigint        AS late,
+        sum(very_early + early)::bigint                       AS early,
+        sum(observations)::bigint                             AS observations,
+        sum(delay_sum)::bigint                               AS delay_sum
+    FROM trip_ontime_hourly
+    WHERE bucket >= :cutoff
+      AND (:route_id IS NULL OR route_id = :route_id)
+    GROUP BY route_id
+"""
+
 
 @router.get("/ontime", response_model=OnTimeResponse)
 async def ontime_performance(
@@ -40,58 +61,43 @@ async def ontime_performance(
 ) -> OnTimeResponse:
     cutoff = datetime.now(tz=timezone.utc) - timedelta(days=days)
 
-    stmt = select(
-        TripUpdate.route_id,
-        TripUpdate.arrival_delay,
-    ).where(
-        TripUpdate.timestamp >= cutoff,
-        TripUpdate.arrival_delay.is_not(None),
+    result = await db.execute(
+        text(_ONTIME_SQL).bindparams(
+            bindparam("cutoff"),
+            bindparam("route_id", type_=String),
+        ),
+        {"cutoff": cutoff, "route_id": route_id},
     )
-    if route_id:
-        stmt = stmt.where(TripUpdate.route_id == route_id)
-
-    result = await db.execute(stmt)
     rows = result.all()
-
-    # Aggregate per route
-    buckets: dict[str, dict] = defaultdict(lambda: {"on_time": 0, "late": 0, "early": 0, "delays": []})
-    for rid, delay in rows:
-        b = buckets[rid]
-        b["delays"].append(delay)
-        if delay > _LATE_THRESHOLD_SEC:
-            b["late"] += 1
-        elif delay < _EARLY_THRESHOLD_SEC:
-            b["early"] += 1
-        else:
-            b["on_time"] += 1
 
     routes_static, _ = load_gtfs_static_data()
 
     route_stats: list[OnTimeRouteStats] = []
-    for rid, b in sorted(buckets.items()):
-        total = b["on_time"] + b["late"] + b["early"]
-        pct = round(100 * b["on_time"] / total, 1) if total else 0.0
-        avg_delay = round(sum(b["delays"]) / len(b["delays"]), 1) if b["delays"] else 0.0
+    total_on_time = 0
+    total_obs = 0
+    total_delay_sum = 0
+    for rid, on_time, late, early, observations, delay_sum in sorted(rows):
+        total = (on_time or 0) + (late or 0) + (early or 0)
+        pct = round(100 * (on_time or 0) / total, 1) if total else 0.0
+        avg_delay = round((delay_sum or 0) / observations, 1) if observations else 0.0
+        total_on_time += on_time or 0
+        total_obs += observations or 0
+        total_delay_sum += delay_sum or 0
         route_stats.append(
             OnTimeRouteStats(
                 route_id=rid,
                 route_short_name=routes_static.get(rid, {}).get("route_short_name", rid),
                 total_observations=total,
-                on_time=b["on_time"],
-                late=b["late"],
-                early=b["early"],
+                on_time=on_time or 0,
+                late=late or 0,
+                early=early or 0,
                 on_time_pct=pct,
                 avg_delay_seconds=avg_delay,
             )
         )
 
-    all_delays = [d for b in buckets.values() for d in b["delays"]]
-    overall_pct = (
-        round(100 * sum(1 for d in all_delays if _EARLY_THRESHOLD_SEC <= d <= _LATE_THRESHOLD_SEC) / len(all_delays), 1)
-        if all_delays
-        else 0.0
-    )
-    overall_avg = round(sum(all_delays) / len(all_delays), 1) if all_delays else 0.0
+    overall_pct = round(100 * total_on_time / total_obs, 1) if total_obs else 0.0
+    overall_avg = round(total_delay_sum / total_obs, 1) if total_obs else 0.0
 
     return OnTimeResponse(
         period_days=days,
@@ -190,10 +196,23 @@ async def frequency_stats(
 
 # ── Stuck-vehicle alerts ───────────────────────────────────────────────────
 
+# Stuck-alert detection scans a 15-min window and is polled every 30s by every
+# client; cache the assembled response briefly so concurrent tabs share one scan.
+_ALERTS_CACHE_TTL_SECONDS = 10.0
+_alerts_cache: tuple[float, AlertsResponse] | None = None
+_trip_endpoint_stops: dict[str, tuple[str | None, str | None]] | None = None
+_route_terminal_stops: dict[str, set[str]] | None = None
+
+
 @router.get("/alerts", response_model=AlertsResponse)
 async def stuck_vehicle_alerts(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AlertsResponse:
+    global _alerts_cache, _trip_endpoint_stops, _route_terminal_stops
+    mono = time.monotonic()
+    if _alerts_cache is not None and mono - _alerts_cache[0] < _ALERTS_CACHE_TTL_SECONDS:
+        return _alerts_cache[1]
+
     settings = get_settings()
     threshold = timedelta(minutes=settings.stuck_vehicle_minutes)
     window = threshold * 3  # look back far enough to check for movement
@@ -202,6 +221,19 @@ async def stuck_vehicle_alerts(
 
     stmt = (
         select(VehiclePosition)
+        .options(
+            load_only(
+                VehiclePosition.vehicle_id,
+                VehiclePosition.vehicle_label,
+                VehiclePosition.trip_id,
+                VehiclePosition.route_id,
+                VehiclePosition.latitude,
+                VehiclePosition.longitude,
+                VehiclePosition.current_status,
+                VehiclePosition.stop_id,
+                VehiclePosition.timestamp,
+            )
+        )
         .where(VehiclePosition.timestamp >= cutoff)
         .order_by(VehiclePosition.vehicle_id, VehiclePosition.timestamp.desc())
     )
@@ -213,6 +245,10 @@ async def stuck_vehicle_alerts(
     for r in rows:
         veh_rows[r.vehicle_id or r.trip_id or ""].append(r)
 
+    if _trip_endpoint_stops is None:
+        _, _trip_endpoint_stops = load_trip_endpoint_sequences()
+    if _route_terminal_stops is None:
+        _route_terminal_stops = load_route_terminal_stops()
     routes_static, stops_static = load_gtfs_static_data()
 
     now = datetime.now(tz=timezone.utc)
@@ -223,6 +259,11 @@ async def stuck_vehicle_alerts(
             continue
         latest = history[0]
         lat0, lon0 = latest.latitude, latest.longitude
+
+        # Skip vehicles with invalid GPS coordinates (e.g. tracker defaulting to 0,0).
+        if lat0 is None or lon0 is None or (abs(lat0) < 0.001 and abs(lon0) < 0.001):
+            continue
+
         earliest_same_pos = latest.timestamp
 
         # Walk backwards (history is already ordered newest-first) and collect
@@ -246,6 +287,43 @@ async def stuck_vehicle_alerts(
         if streak_statuses and streak_statuses <= {1}:
             continue
 
+        # Skip vehicles at or near the first/last stop of their trip.
+        # Fall back to route-level terminal stops when the live trip_id isn't
+        # in the static schedule (e.g. RTD added/modified trips).
+        if lat0 is not None and lon0 is not None:
+            terminal_stop_ids: set[str] | tuple[str | None, str | None] | None = None
+            if latest.trip_id and _trip_endpoint_stops is not None:
+                terminal_stop_ids = _trip_endpoint_stops.get(latest.trip_id)
+            if terminal_stop_ids is None and latest.route_id and _route_terminal_stops is not None:
+                terminal_stop_ids = _route_terminal_stops.get(latest.route_id)
+            if terminal_stop_ids:
+                # Normalize to a flat set of non-None stop IDs for uniform handling.
+                flat_terminals: set[str] = (
+                    terminal_stop_ids
+                    if isinstance(terminal_stop_ids, set)
+                    else {s for s in terminal_stop_ids if s}
+                )
+                at_terminal = False
+                if flat_terminals:
+                    # Direct match: the live feed reports the vehicle at a known
+                    # terminal stop_id.  This is more reliable than coordinates
+                    # because it doesn't depend on GPS precision or stop placement.
+                    if latest.stop_id and latest.stop_id in flat_terminals:
+                        at_terminal = True
+                    # Geofence fallback: vehicle coordinates within 300 m of a
+                    # terminal stop.  Radius is intentionally generous — bus
+                    # layover bays can sit well away from the stop marker.
+                    if not at_terminal:
+                        for sid in flat_terminals:
+                            sc = stops_static.get(sid, {})
+                            slat = sc.get("stop_lat", 0.0)
+                            slon = sc.get("stop_lon", 0.0)
+                            if slat and slon and _haversine_m(lat0, lon0, slat, slon) < 300:
+                                at_terminal = True
+                                break
+                if at_terminal:
+                    continue
+
         stop_info = stops_static.get(latest.stop_id or "", {})
         route_info = routes_static.get(latest.route_id, {})
         alerts.append(
@@ -263,7 +341,19 @@ async def stuck_vehicle_alerts(
             )
         )
 
-    return AlertsResponse(computed_at=now, alerts=alerts)
+    response = AlertsResponse(computed_at=now, alerts=alerts)
+    _alerts_cache = (mono, response)
+    return response
+
+
+def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Return great-circle distance in meters between two lat/lon points."""
+    R = 6_371_000
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlam = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
 def _positions_equal(

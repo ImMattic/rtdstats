@@ -11,6 +11,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
     # ── Database ──────────────────────────────────────────────────────────────
@@ -25,10 +26,21 @@ class Settings(BaseSettings):
     )
 
     # ── Ingestion scheduler ───────────────────────────────────────────────────
-    polling_interval_seconds: int = 10
+    polling_interval_seconds: int = 30
 
     # ── Alert thresholds ─────────────────────────────────────────────────────
     stuck_vehicle_minutes: int = 12
+
+    # ── On-time performance (observed position vs. static schedule) ──────────
+    # A vehicle counts as "arrived" at a timepoint when within this many metres
+    # of it; the observed arrival time is then compared to the scheduled time.
+    arrival_radius_m: int = 100
+    # An arrival within ±this many seconds of schedule is "on time".
+    ontime_threshold_seconds: int = 120
+    # Sanity guard: if the best schedule match is off by more than this, the
+    # live trip_id probably doesn't match the static schedule for that day —
+    # drop the event rather than record a bogus delay.
+    arrival_max_delay_seconds: int = 10800
 
     # ── CORS ──────────────────────────────────────────────────────────────────
     cors_origins: list[str] = ["http://localhost:3000"]

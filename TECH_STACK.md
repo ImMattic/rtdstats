@@ -12,7 +12,7 @@
 - **TypeScript**
 - **Tailwind CSS** for styling
 - **TanStack Query (React Query)** for data fetching
-- **Polling** every 5–10 seconds for real-time updates; **SSE/WebSockets** for later
+- **Polling** every 30 seconds for real-time updates; **SSE/WebSockets** for later
 
 ---
 

@@ -39,4 +39,7 @@ class TripUpdate(Base):
     __table_args__ = (
         Index("ix_tu_route_ts", "route_id", "timestamp"),
         Index("ix_tu_trip_stop", "trip_id", "stop_sequence"),
+        # Latest-delay-per-trip lookups (realtime + historical) and the
+        # trip_ontime_hourly continuous aggregate (see migration 002).
+        Index("ix_tu_trip_ts", "trip_id", "timestamp"),
     )

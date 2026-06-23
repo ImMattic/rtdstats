@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RTD Stats — Contributing Guide</title>
+  <style>
+    :root {
+      --bg:         #0d1117;
+      --surface:    #161b22;
+      --border:     #30363d;
+      --accent:     #2f81f7;
+      --accent-dim: #1a4a8a;
+      --text:       #e6edf3;
+      --muted:      #8b949e;
+      --green:      #3fb950;
+      --yellow:     #d29922;
+      --red:        #f85149;
+      --code-bg:    #1e2736;
+      --rtd-blue:   #0052a5;
+      --rtd-orange: #f79239;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Layout ────────────────────────────────────────────────────── */
+    .page-wrap {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    aside {
+      width: 240px;
+      flex-shrink: 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 2rem 1.25rem;
+    }
+
+    .sidebar-logo {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 0.25rem;
+    }
+
+    .sidebar-subtitle {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 1.75rem;
+    }
+
+    .nav-section {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-top: 1.25rem;
+      margin-bottom: 0.4rem;
+    }
+
+    aside ul { list-style: none; }
+    aside ul li a {
+      display: block;
+      padding: 0.28rem 0.5rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+      border-radius: 4px;
+      transition: color 0.15s, background 0.15s;
+    }
+    aside ul li a:hover {
+      color: var(--text);
+      background: rgba(255,255,255,0.05);
+      text-decoration: none;
+    }
+
+    main {
+      flex: 1;
+      min-width: 0;
+      padding: 3rem clamp(1.5rem, 5vw, 4rem);
+      max-width: 860px;
+    }
+
+    /* ── Hero ──────────────────────────────────────────────────────── */
+    .hero {
+      border-left: 4px solid var(--rtd-blue);
+      padding: 1.25rem 1.5rem;
+      background: var(--surface);
+      border-radius: 0 8px 8px 0;
+      margin-bottom: 3rem;
+    }
+
+    .hero h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+
+    .hero p { color: var(--muted); font-size: 0.95rem; }
+
+    /* ── Sections ──────────────────────────────────────────────────── */
+    section { margin-bottom: 3.5rem; }
+
+    h2 {
+      font-size: 1.35rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin: 1.5rem 0 0.5rem;
+    }
+
+    p { margin-bottom: 0.8rem; color: #c9d1d9; }
+
+    ul, ol {
+      padding-left: 1.5rem;
+      margin-bottom: 0.8rem;
+    }
+
+    li { margin-bottom: 0.3rem; color: #c9d1d9; }
+
+    /* ── Code ──────────────────────────────────────────────────────── */
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 0.85em;
+      background: var(--code-bg);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      color: #e6edf3;
+    }
+
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.1rem 1.25rem;
+      overflow-x: auto;
+      margin: 0.75rem 0 1rem;
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: 0.875rem;
+      line-height: 1.6;
+    }
+
+    /* ── Branch cards ──────────────────────────────────────────────── */
+    .branch-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin: 1rem 0;
+    }
+
+    .branch-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.1rem;
+    }
+
+    .branch-card .branch-name {
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .badge {
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.15em 0.55em;
+      border-radius: 20px;
+    }
+
+    .badge-green  { background: rgba(63,185,80,0.2);  color: var(--green); }
+    .badge-yellow { background: rgba(210,153,34,0.2); color: var(--yellow); }
+    .badge-blue   { background: rgba(47,129,247,0.2); color: var(--accent); }
+
+    .branch-card p { font-size: 0.85rem; margin: 0; color: var(--muted); }
+
+    /* ── Step list ─────────────────────────────────────────────────── */
+    .steps { counter-reset: step; list-style: none; padding: 0; }
+    .steps li {
+      counter-increment: step;
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .steps li::before {
+      content: counter(step);
+      flex-shrink: 0;
+      width: 1.75rem;
+      height: 1.75rem;
+      background: var(--accent-dim);
+      color: var(--accent);
+      font-size: 0.8rem;
+      font-weight: 700;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 0.15rem;
+    }
+
+    /* ── Callouts ──────────────────────────────────────────────────── */
+    .callout {
+      display: flex;
+      gap: 0.75rem;
+      border-radius: 8px;
+      padding: 0.9rem 1.1rem;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+
+    .callout-icon { flex-shrink: 0; font-size: 1.1rem; line-height: 1.6; }
+
+    .callout-info  { background: rgba(47,129,247,0.1); border: 1px solid rgba(47,129,247,0.3); }
+    .callout-tip   { background: rgba(63,185,80,0.1);  border: 1px solid rgba(63,185,80,0.3); }
+    .callout-warn  { background: rgba(210,153,34,0.1); border: 1px solid rgba(210,153,34,0.3); }
+
+    .callout p { margin: 0; color: var(--text); }
+
+    /* ── Stack badges ──────────────────────────────────────────────── */
+    .stack-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 0.75rem 0;
+    }
+
+    .stack-badge {
+      font-size: 0.8rem;
+      padding: 0.25em 0.75em;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      color: var(--muted);
+    }
+
+    /* ── Responsive ────────────────────────────────────────────────── */
+    @media (max-width: 720px) {
+      .page-wrap { flex-direction: column; }
+      aside {
+        width: 100%;
+        height: auto;
+        position: static;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        padding: 1rem 1.25rem;
+      }
+      main { padding: 1.75rem 1.25rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <!-- ── Sidebar ─────────────────────────────────────────────────── -->
+  <aside>
+    <div class="sidebar-logo">RTD Stats</div>
+    <div class="sidebar-subtitle">Contributing Guide</div>
+
+    <div class="nav-section">Overview</div>
+    <ul>
+      <li><a href="#about">What is RTD Stats?</a></li>
+      <li><a href="#stack">Tech Stack</a></li>
+    </ul>
+
+    <div class="nav-section">Contributing</div>
+    <ul>
+      <li><a href="#branches">Branch Strategy</a></li>
+      <li><a href="#quickstart">Local Setup</a></li>
+      <li><a href="#workflow">PR Workflow</a></li>
+      <li><a href="#testing">Running Tests</a></li>
+      <li><a href="#migrations">DB Migrations</a></li>
+    </ul>
+
+    <div class="nav-section">Guidelines</div>
+    <ul>
+      <li><a href="#guidelines">Contributor Guidelines</a></li>
+      <li><a href="#ai">AI Contributions</a></li>
+      <li><a href="#style">Code Style</a></li>
+    </ul>
+
+    <div class="nav-section">Links</div>
+    <ul>
+      <li><a href="https://github.com/ImMattic/rtdstats/issues" target="_blank" rel="noopener">Issues &amp; Bug Reports</a></li>
+      <li><a href="https://github.com/ImMattic/rtdstats" target="_blank" rel="noopener">GitHub Repository</a></li>
+    </ul>
+  </aside>
+
+  <!-- ── Main ────────────────────────────────────────────────────── -->
+  <main>
+
+    <div class="hero">
+      <h1>Contributing to RTD Stats</h1>
+      <p>
+        RTD Stats is an open-source real-time and historical transit tracker for Denver's
+        RTD network. Contributions of all kinds are welcome — bug fixes, new features,
+        documentation, and more.
+      </p>
+    </div>
+
+    <!-- ABOUT ──────────────────────────────────────────────────────── -->
+    <section id="about">
+      <h2>What is RTD Stats?</h2>
+      <p>
+        RTD Stats polls RTD's GTFS-RT protobuf feeds every 30 seconds, stores all vehicle
+        positions and trip updates in <strong>TimescaleDB</strong>, and serves a live map and
+        analytics dashboard. The goal is to give Denver riders and transit enthusiasts a
+        transparent look at real-time performance data that RTD doesn't surface anywhere else.
+      </p>
+      <p>Key features:</p>
+      <ul>
+        <li>Live map of all RTD light rail, commuter rail, and Flatiron Flyer buses</li>
+        <li>On-time performance tracking and delay alerts</li>
+        <li>Historical trip drill-down by line, vehicle, and time window</li>
+        <li>Frequency and headway analytics dashboard</li>
+      </ul>
+    </section>
+
+    <!-- STACK ──────────────────────────────────────────────────────── -->
+    <section id="stack">
+      <h2>Tech Stack</h2>
+
+      <h3>Frontend</h3>
+      <div class="stack-grid">
+        <span class="stack-badge">Next.js 14 (App Router)</span>
+        <span class="stack-badge">React 18</span>
+        <span class="stack-badge">TypeScript</span>
+        <span class="stack-badge">Tailwind CSS</span>
+        <span class="stack-badge">TanStack Query</span>
+        <span class="stack-badge">Leaflet</span>
+        <span class="stack-badge">Recharts</span>
+        <span class="stack-badge">Vitest</span>
+      </div>
+
+      <h3>Backend</h3>
+      <div class="stack-grid">
+        <span class="stack-badge">Python 3.13</span>
+        <span class="stack-badge">FastAPI</span>
+        <span class="stack-badge">SQLAlchemy 2.0 (async)</span>
+        <span class="stack-badge">Alembic</span>
+        <span class="stack-badge">APScheduler</span>
+        <span class="stack-badge">GTFS-RT (protobuf)</span>
+        <span class="stack-badge">pytest</span>
+      </div>
+
+      <h3>Database & Infrastructure</h3>
+      <div class="stack-grid">
+        <span class="stack-badge">PostgreSQL + TimescaleDB</span>
+        <span class="stack-badge">Docker Compose</span>
+        <span class="stack-badge">Docker Hub</span>
+        <span class="stack-badge">Alpine Linux / Proxmox</span>
+        <span class="stack-badge">Caddy (reverse proxy)</span>
+      </div>
+    </section>
+
+    <!-- BRANCHES ───────────────────────────────────────────────────── -->
+    <section id="branches">
+      <h2>Branch Strategy</h2>
+      <p>
+        The project uses three long-lived branches. All contributor work should start from
+        <code>dev</code> and be submitted back to <code>dev</code>.
+      </p>
+
+      <div class="branch-grid">
+        <div class="branch-card">
+          <div class="branch-name">
+            main
+            <span class="badge badge-green">Production</span>
+          </div>
+          <p>
+            Auto-deploys to the live site on every push. Docker images are tagged
+            <code>:latest</code>. Do not open PRs directly to <code>main</code>.
+          </p>
+        </div>
+
+        <div class="branch-card">
+          <div class="branch-name">
+            staging
+            <span class="badge badge-yellow">Staging</span>
+          </div>
+          <p>
+            Auto-deploys to the staging environment. Docker images are tagged
+            <code>:staging</code>. Used to verify changes in a production-like
+            environment before merging to <code>main</code>.
+          </p>
+        </div>
+
+        <div class="branch-card">
+          <div class="branch-name">
+            dev
+            <span class="badge badge-blue">Development</span>
+          </div>
+          <p>
+            Local testing only — no auto-deploy. This is where new features and bug
+            fixes land first. <strong>All contributor PRs should target
+            <code>dev</code>.</strong>
+          </p>
+        </div>
+      </div>
+
+      <h3>Feature &amp; fix branches</h3>
+      <p>
+        Branch off <code>dev</code> using a descriptive name that signals intent:
+      </p>
+      <pre><code># New feature
+git checkout -b feat/trip-drill-down dev
+
+# Bug fix
+git checkout -b fix/stuck-vehicle-endpoint-logic dev
+
+# Documentation
+git checkout -b docs/contributing-guide dev</code></pre>
+    </section>
+
+    <!-- QUICKSTART ─────────────────────────────────────────────────── -->
+    <section id="quickstart">
+      <h2>Local Setup</h2>
+
+      <h3>Prerequisites</h3>
+      <ul>
+        <li><strong>Docker + Docker Compose</strong> (recommended — handles DB, backend, and frontend together)</li>
+        <li><strong>Node 20+</strong> (for frontend-only work)</li>
+        <li><strong>Python 3.13</strong> (for backend-only work)</li>
+      </ul>
+
+      <h3>Full stack (recommended)</h3>
+      <p>This is the fastest way to get everything running:</p>
+      <pre><code>git clone https://github.com/ImMattic/rtdstats.git
+cd rtdstats
+git checkout dev
+docker compose up --build</code></pre>
+      <p>
+        The backend auto-runs Alembic migrations and starts the GTFS-RT polling loop on
+        startup. The frontend is available at <code>http://localhost:3000</code> and the
+        API at <code>http://localhost:8000</code>.
+      </p>
+
+      <h3>Frontend only</h3>
+      <pre><code>cd frontend
+npm install
+BACKEND_URL=http://localhost:8000 npm run dev</code></pre>
+
+      <h3>Backend only (no Docker)</h3>
+      <pre><code>cd backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r ../requirements.txt
+export DATABASE_URL=postgresql+asyncpg://rtdstats:rtdstats@localhost:5432/rtdstats
+alembic upgrade head
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000</code></pre>
+
+      <div class="callout callout-info">
+        <div class="callout-icon">ℹ️</div>
+        <p>
+          <strong>GTFS static data</strong> — the <code>gtfs-static/</code> directory
+          contains bundled RTD feed CSVs (routes, stops, shapes). These expire roughly
+          quarterly. If on-time performance shows 0% across the board, the feeds likely
+          need refreshing.
+        </p>
+      </div>
+    </section>
+
+    <!-- WORKFLOW ───────────────────────────────────────────────────── -->
+    <section id="workflow">
+      <h2>PR Workflow</h2>
+      <ol class="steps">
+        <li>
+          <div>
+            <strong>Fork or clone the repo</strong>, then check out <code>dev</code> as
+            your base branch.
+          </div>
+        </li>
+        <li>
+          <div>
+            <strong>Create a branch</strong> with a descriptive name following the
+            <code>feat/</code> or <code>fix/</code> convention described above.
+          </div>
+        </li>
+        <li>
+          <div>
+            <strong>Make your changes.</strong> Keep commits focused — one logical change
+            per commit makes review easier.
+          </div>
+        </li>
+        <li>
+          <div>
+            <strong>Test locally.</strong> Run the full stack and manually verify your
+            change works as expected. See <a href="#testing">Running Tests</a> below.
+          </div>
+        </li>
+        <li>
+          <div>
+            <strong>Open a pull request targeting <code>dev</code>.</strong> Describe what
+            you changed and why. If it fixes a bug, link the relevant issue or describe
+            the repro steps.
+          </div>
+        </li>
+        <li>
+          <div>
+            <strong>CI must pass</strong> — the GitHub Actions workflow runs backend
+            pytest, frontend lint, TypeScript type-check, and Vitest on every PR.
+          </div>
+        </li>
+      </ol>
+
+      <div class="callout callout-warn">
+        <div class="callout-icon">⚠️</div>
+        <p>
+          Do <strong>not</strong> open PRs directly against <code>main</code> or
+          <code>staging</code>. Both are managed by the project maintainers after changes
+          have been validated on <code>dev</code>.
+        </p>
+      </div>
+    </section>
+
+    <!-- TESTING ────────────────────────────────────────────────────── -->
+    <section id="testing">
+      <h2>Running Tests</h2>
+
+      <h3>Backend (pytest)</h3>
+      <p>Tests run with an in-memory SQLite database — no running Postgres needed:</p>
+      <pre><code>python -m pytest tests/ -v --tb=short</code></pre>
+      <p>Or via Docker:</p>
+      <pre><code>docker compose exec backend pytest tests/ -v --tb=short</code></pre>
+
+      <h3>Frontend (lint + type-check + Vitest)</h3>
+      <pre><code>cd frontend
+
+# Lint
+npm run lint
+
+# TypeScript type check
+npx tsc --noEmit
+
+# Unit tests
+npm test</code></pre>
+
+      <div class="callout callout-tip">
+        <div class="callout-icon">✅</div>
+        <p>
+          All three frontend checks (<code>lint</code>, <code>tsc</code>,
+          <code>vitest</code>) and backend pytest run automatically via GitHub Actions on
+          every push and pull request. A passing CI is required before merging.
+        </p>
+      </div>
+    </section>
+
+    <!-- MIGRATIONS ─────────────────────────────────────────────────── -->
+    <section id="migrations">
+      <h2>Database Migrations</h2>
+      <p>
+        The project uses <strong>Alembic</strong> for schema migrations. If you change any
+        SQLAlchemy models, generate and commit a migration file:
+      </p>
+      <pre><code># Generate a migration after editing models
+docker compose exec backend alembic revision --autogenerate -m "describe your change"
+
+# Apply all pending migrations
+docker compose exec backend alembic upgrade head</code></pre>
+      <p>
+        Migration files live in <code>backend/alembic/versions/</code>. Always review
+        auto-generated migrations before committing — Alembic doesn't always detect
+        every change correctly, especially TimescaleDB-specific constructs.
+      </p>
+    </section>
+
+    <!-- GUIDELINES ─────────────────────────────────────────────────── -->
+    <section id="guidelines">
+      <h2>Contributor Guidelines</h2>
+      <p>
+        RTD Stats is a community project. To keep things running smoothly, please follow
+        these guidelines:
+      </p>
+
+      <h3>Reporting bugs &amp; requesting features</h3>
+      <p>
+        Before writing any code, please check the
+        <a href="https://github.com/ImMattic/rtdstats/issues" target="_blank" rel="noopener">GitHub Issues tab</a>
+        to see if your bug or feature request has already been reported.
+      </p>
+      <ul>
+        <li>
+          <strong>Bug reports</strong> — open an issue with a clear title, steps to
+          reproduce, what you expected, and what actually happened. Include your browser
+          and OS if it's a frontend issue.
+        </li>
+        <li>
+          <strong>Feature requests</strong> — open an issue describing the feature and
+          the problem it solves. Discussing the idea first avoids duplicate effort and
+          ensures it fits the project's direction before anyone writes code.
+        </li>
+        <li>
+          If you're planning to work on something yourself, comment on the issue to
+          claim it so others know it's being handled.
+        </li>
+      </ul>
+
+      <h3>General</h3>
+      <ul>
+        <li>
+          <strong>Test in a local environment before opening a PR.</strong> Running
+          <code>docker compose up --build</code> and verifying your change in a browser
+          is the minimum bar. Don't rely solely on "it compiles" — check the golden path
+          and any affected edge cases.
+        </li>
+        <li>
+          Keep pull requests focused. A PR that fixes one bug is easier to review than
+          one that fixes a bug <em>and</em> refactors half the codebase.
+        </li>
+        <li>
+          Write clear PR descriptions. Explain the <em>why</em>, not just the what.
+          Screenshots or short screen recordings for UI changes are appreciated.
+        </li>
+        <li>
+          If you're picking up an existing issue or TODO item, mention it in your PR
+          description and link the issue number.
+        </li>
+        <li>Be respectful and constructive in code review. We're all here to build
+          something useful for Denver transit riders.</li>
+      </ul>
+
+      <h3>Scope</h3>
+      <ul>
+        <li>
+          RTD Stats explicitly has <strong>no user accounts or authentication</strong>
+          — please don't add any.
+        </li>
+        <li>
+          Changes to CI/CD pipelines, deployment configs, or infrastructure files
+          (<code>docker-compose.yml</code>, <code>.github/workflows/</code>) should be
+          discussed in an issue first.
+        </li>
+        <li>
+          If you're unsure whether a feature fits the project's direction, open a
+          GitHub issue to discuss before writing code.
+        </li>
+      </ul>
+    </section>
+
+    <!-- AI ─────────────────────────────────────────────────────────── -->
+    <section id="ai">
+      <h2>AI Contributions</h2>
+
+      <div class="callout callout-tip">
+        <div class="callout-icon">🤖</div>
+        <p>
+          <strong>AI contributions are welcomed and encouraged.</strong> A significant
+          portion of this codebase was written with the assistance of AI tools. If you use
+          an AI coding assistant (Claude, Copilot, Cursor, etc.) to help write or review
+          your contribution, that's great — just hold it to the same standard as
+          human-written code.
+        </p>
+      </div>
+
+      <p>When using AI assistance, please:</p>
+      <ul>
+        <li>
+          <strong>Always test AI-generated code in a real local environment</strong>
+          before submitting. AI tools can produce code that looks correct but subtly
+          breaks existing behavior — catching that requires actually running the app.
+        </li>
+        <li>
+          Review AI-generated diffs before staging them. You're responsible for what
+          goes in your PR, regardless of who (or what) wrote it.
+        </li>
+        <li>
+          Don't blindly apply large AI-generated refactors outside the scope of your
+          change. Keep PRs focused.
+        </li>
+        <li>
+          If an AI tool suggests a change to a migration, a CI workflow, or an
+          infrastructure file, double-check it carefully — these are the areas where
+          subtle errors have the most impact.
+        </li>
+      </ul>
+    </section>
+
+    <!-- STYLE ──────────────────────────────────────────────────────── -->
+    <section id="style">
+      <h2>Code Style</h2>
+
+      <h3>Frontend (TypeScript / React)</h3>
+      <ul>
+        <li>TypeScript strict mode — no <code>any</code> without a good reason</li>
+        <li>ESLint enforced via <code>npm run lint</code></li>
+        <li>Tailwind CSS for styling; avoid inline styles</li>
+        <li>Prefer server components where possible; use <code>"use client"</code>
+            only when needed (interactivity, browser APIs)</li>
+        <li>TanStack Query for all data fetching — don't call
+            <code>fetch</code> directly in components</li>
+      </ul>
+
+      <h3>Backend (Python)</h3>
+      <ul>
+        <li>Python 3.13+ — use modern syntax (<code>match</code>, union types, etc.)</li>
+        <li>Async everywhere — all database calls go through
+            <code>AsyncSession</code></li>
+        <li>Pydantic schemas for request/response validation</li>
+        <li>No linter is enforced in CI yet, but <code>ruff</code> and
+            <code>mypy</code> are recommended locally</li>
+      </ul>
+
+      <h3>Commits</h3>
+      <ul>
+        <li>Use the imperative mood: <em>"Add trip drill-down endpoint"</em> not
+            <em>"Added…"</em></li>
+        <li>Prefix with <code>fix:</code>, <code>feat:</code>, <code>docs:</code>,
+            <code>refactor:</code>, or <code>chore:</code> when it helps clarity</li>
+        <li>Keep the subject line under 72 characters</li>
+      </ul>
+    </section>
+
+  </main>
+</div>
+</body>
+</html>

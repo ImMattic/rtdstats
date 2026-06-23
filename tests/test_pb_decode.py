@@ -16,7 +16,7 @@ sys.modules['google.transit'] = fake_transit
 sys.modules['google.transit.gtfs_realtime_pb2'] = fake_gtfs
 
 # Load pb-decode.py (filename contains a hyphen so import by path)
-pb_path = Path(__file__).resolve().parents[1] / "pb-decode.py"
+pb_path = Path(__file__).resolve().parents[1] / "gtfs-realtime" / "pb-decode.py"
 spec = importlib.util.spec_from_file_location("pb_decode", str(pb_path))
 pb = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(pb)

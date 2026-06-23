@@ -1,0 +1,77 @@
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: rtdstats-db
+    restart: unless-stopped
+    # Tuned for the small staging VM (~4 GB RAM). See docker-compose.yml.
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=768MB"
+      - "-c"
+      - "effective_cache_size=2GB"
+      - "-c"
+      - "work_mem=16MB"
+      - "-c"
+      - "maintenance_work_mem=128MB"
+      - "-c"
+      - "max_connections=50"
+    environment:
+      POSTGRES_DB: rtdstats
+      POSTGRES_USER: rtdstats
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rtdstats -d rtdstats"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+        reservations:
+          memory: 768M
+
+  backend:
+    image: aggiematt/rtdstats-backend:staging
+    container_name: rtdstats-backend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://rtdstats:${DB_PASSWORD}@db:5432/rtdstats
+      GTFS_RT_VEHICLE_URL: https://www.rtd-denver.com/files/gtfs-rt/VehiclePosition.pb
+      GTFS_RT_TRIP_URL: https://www.rtd-denver.com/files/gtfs-rt/TripUpdate.pb
+      POLLING_INTERVAL_SECONDS: "10"
+      STUCK_VEHICLE_MINUTES: "5"
+      CORS_ORIGINS: '["https://${STAGING_DOMAIN:?STAGING_DOMAIN is required}"]'
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ../gtfs-static:/app/gtfs-static:ro
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+
+  frontend:
+    image: aggiematt/rtdstats-frontend:staging
+    container_name: rtdstats-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      BACKEND_URL: http://backend:8000
+      NEXT_PUBLIC_SITE_URL: https://${STAGING_DOMAIN:?STAGING_DOMAIN is required}
+    depends_on:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+volumes:
+  pgdata:

@@ -25,6 +25,27 @@ VEHICLE_TYPE_MAP = {
     "3": "bus",
 }
 
+# Manual overrides for new RTD lines not yet present in the bundled GTFS static feeds.
+# These supplement (or replace) anything loaded from the CSV files.
+_ROUTE_OVERRIDES: dict[str, dict[str, str]] = {
+    "101C": {
+        "route_id": "101C",
+        "route_short_name": "C",
+        "route_long_name": "C Line",
+        "route_type": "0",
+        "route_color": "f79239",
+        "agency_id": "RTD",
+    },
+    "101T": {
+        "route_id": "101T",
+        "route_short_name": "T",
+        "route_long_name": "T Line",
+        "route_type": "0",
+        "route_color": "b71318",
+        "agency_id": "RTD",
+    },
+}
+
 
 def _safe_has_field(message: Any, field_name: str) -> bool:
     try:
@@ -38,8 +59,29 @@ def _default_project_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
+def resolve_gtfs_static_root() -> Path:
+    """Locate the gtfs-static directory across local and container layouts.
+
+    In the Docker image the backend is copied to ``/app`` (so this file lives at
+    ``/app/app/services/...`` and ``parents[3]`` is ``/``), while the static
+    feeds are mounted at ``/app/gtfs-static``.  Locally ``parents[3]`` is the
+    repo root.  Check the container mount first, then the local layout, then
+    walk upward as a last resort.
+    """
+    current = Path(__file__).resolve()
+    candidates = [Path("/app/gtfs-static"), current.parents[3] / "gtfs-static"]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    for parent in current.parents:
+        candidate = parent / "gtfs-static"
+        if candidate.exists():
+            return candidate
+    return Path("/app/gtfs-static")
+
+
 def load_gtfs_static_data(gtfs_static_root: Path | None = None) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
-    root = gtfs_static_root or (_default_project_root() / "gtfs-static")
+    root = gtfs_static_root or resolve_gtfs_static_root()
     routes: dict[str, dict[str, Any]] = {}
     stops: dict[str, dict[str, Any]] = {}
 
@@ -74,7 +116,54 @@ def load_gtfs_static_data(gtfs_static_root: Path | None = None) -> tuple[dict[st
                         "stop_lon": float(row.get("stop_lon") or 0.0),
                     }
 
+    routes.update(_ROUTE_OVERRIDES)
     return routes, stops
+
+
+def load_trip_endpoint_sequences(gtfs_static_root: Path | None = None) -> tuple[
+    dict[str, tuple[int, int]],
+    dict[str, tuple[str | None, str | None]],
+]:
+    """Return endpoint data for all trips.
+
+    Returns a pair:
+      sequences — {trip_id: (min_stop_sequence, max_stop_sequence)}
+      stop_ids  — {trip_id: (first_stop_id, last_stop_id)}
+
+    Used to exclude vehicles that are legitimately waiting at route terminals.
+    """
+    root = gtfs_static_root or resolve_gtfs_static_root()
+    sequences: dict[str, tuple[int, int]] = {}
+    stop_ids: dict[str, tuple[str | None, str | None]] = {}
+
+    for folder in TRANSIT_FOLDERS:
+        f = root / folder / "stop_times.txt"
+        if not f.exists():
+            continue
+        with f.open("r", encoding="utf-8", newline="") as handle:
+            for row in csv.DictReader(handle):
+                trip_id = row.get("trip_id")
+                seq_str = row.get("stop_sequence")
+                stop_id = row.get("stop_id", "").strip() or None
+                if not trip_id or not seq_str:
+                    continue
+                try:
+                    seq = int(seq_str)
+                except ValueError:
+                    continue
+                if trip_id in sequences:
+                    lo, hi = sequences[trip_id]
+                    first_sid, last_sid = stop_ids[trip_id]
+                    if seq < lo:
+                        sequences[trip_id] = (seq, hi)
+                        stop_ids[trip_id] = (stop_id, last_sid)
+                    elif seq > hi:
+                        sequences[trip_id] = (lo, seq)
+                        stop_ids[trip_id] = (first_sid, stop_id)
+                else:
+                    sequences[trip_id] = (seq, seq)
+                    stop_ids[trip_id] = (stop_id, stop_id)
+    return sequences, stop_ids
 
 
 def _extract_occupancy(vehicle_pos: Any) -> str:
@@ -82,6 +171,42 @@ def _extract_occupancy(vehicle_pos: Any) -> str:
         enum_value = int(vehicle_pos.occupancy_status)
         return gtfs_realtime_pb2.VehiclePosition.OccupancyStatus.Name(enum_value)
     return "UNKNOWN"
+
+
+def load_route_terminal_stops(gtfs_static_root: Path | None = None) -> dict[str, set[str]]:
+    """Return {route_id: {terminal_stop_ids}} for all routes.
+
+    Terminal stops are the first and last stop of every scheduled trip for that
+    route.  Used as a fallback when a live trip_id is not present in the static
+    schedule (e.g. RTD added/modified trips).
+    """
+    root = gtfs_static_root or resolve_gtfs_static_root()
+
+    trip_route: dict[str, str] = {}
+    for folder in TRANSIT_FOLDERS:
+        f = root / folder / "trips.txt"
+        if not f.exists():
+            continue
+        with f.open("r", encoding="utf-8", newline="") as handle:
+            for row in csv.DictReader(handle):
+                tid = row.get("trip_id")
+                rid = row.get("route_id")
+                if tid and rid:
+                    trip_route[tid] = rid
+
+    _, stop_ids = load_trip_endpoint_sequences(gtfs_static_root)
+
+    route_terminals: dict[str, set[str]] = defaultdict(set)
+    for trip_id, (first_sid, last_sid) in stop_ids.items():
+        route_id = trip_route.get(trip_id)
+        if not route_id:
+            continue
+        if first_sid:
+            route_terminals[route_id].add(first_sid)
+        if last_sid:
+            route_terminals[route_id].add(last_sid)
+
+    return dict(route_terminals)
 
 
 def format_line_info(entities: Any, routes: dict[str, dict[str, Any]], stops: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
