@@ -287,6 +287,7 @@ export default function DashboardPage() {
         <KpiCard
           title="On-Time Rate"
           value={ov ? `${ov.on_time_pct.value.toFixed(1)}%` : "—"}
+          subtitle="± 5 mins"
           accentColor={ov ? onTimeColor(ov.on_time_pct.value) : undefined}
         />
         <KpiCard

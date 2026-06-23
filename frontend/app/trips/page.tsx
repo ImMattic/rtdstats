@@ -52,6 +52,7 @@ function TripsContent() {
   const urlStart = searchParams.get("start");
   const urlEnd = searchParams.get("end");
   const urlRouteId = searchParams.get("route_id");
+  const urlStrict = searchParams.get("strict") === "true";
 
   const [startLocal, setStartLocal] = useState(() =>
     urlStart
@@ -62,6 +63,7 @@ function TripsContent() {
     urlEnd ? toDatetimeLocal(urlEnd) : toDatetimeLocal(new Date().toISOString()),
   );
   const [routeId, setRouteId] = useState(urlRouteId ?? "");
+  const [strict, setStrict] = useState(urlStrict);
   const [routeSearch, setRouteSearch] = useState("");
   const [routeDropdownOpen, setRouteDropdownOpen] = useState(false);
   const routeComboRef = useRef<HTMLDivElement>(null);
@@ -75,8 +77,9 @@ function TripsContent() {
     if (urlStart) setStartLocal(toDatetimeLocal(urlStart));
     if (urlEnd) setEndLocal(toDatetimeLocal(urlEnd));
     setRouteId(urlRouteId ?? "");
+    setStrict(urlStrict);
     setPage(1);
-  }, [urlStart, urlEnd, urlRouteId]);
+  }, [urlStart, urlEnd, urlRouteId, urlStrict]);
 
   const defaultStart = useMemo(() => new Date(Date.now() - 3_600_000).toISOString(), []);
   const defaultEnd = useMemo(() => new Date().toISOString(), []);
@@ -90,6 +93,7 @@ function TripsContent() {
     start: fetchStart,
     end: fetchEnd,
     route_id: fetchRouteId,
+    strict: urlStrict,
     limit: pageSize,
     offset: (page - 1) * pageSize,
   });
@@ -142,6 +146,7 @@ function TripsContent() {
       end: new Date(endLocal).toISOString(),
     });
     if (routeId) qs.set("route_id", routeId);
+    if (strict) qs.set("strict", "true");
     router.push(`/trips?${qs}`);
   }
 
@@ -376,6 +381,16 @@ function TripsContent() {
             Load trips
           </button>
         </div>
+
+        <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-gray-600">
+          <input
+            type="checkbox"
+            checked={strict}
+            onChange={(e) => setStrict(e.target.checked)}
+            className="h-4 w-4 rounded border-gray-300 text-rtd-blue focus:ring-rtd-blue"
+          />
+          Only include trips strictly within this timeframe
+        </label>
       </Card>
 
       {/* Vehicles table */}

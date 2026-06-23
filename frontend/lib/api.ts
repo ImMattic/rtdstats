@@ -172,6 +172,7 @@ export interface ActiveVehiclesParams {
   start?: string;
   end?: string;
   route_id?: string;
+  strict?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -181,6 +182,7 @@ export function fetchActiveVehicles(params: ActiveVehiclesParams = {}): Promise<
     start: params.start,
     end: params.end,
     route_id: params.route_id,
+    strict: params.strict ? "true" : undefined,
     limit: params.limit,
     offset: params.offset,
   }));
