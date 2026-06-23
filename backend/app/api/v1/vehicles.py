@@ -293,6 +293,9 @@ async def get_vehicle_trip(
                     "actual_time": ev.actual_time.isoformat(),
                     "delay_seconds": ev.delay_seconds,
                     "occupancy_status": _occupancy_at(ev.actual_time),
+                    "actual_lat": ev.actual_lat,
+                    "actual_lon": ev.actual_lon,
+                    "actual_bearing": ev.actual_bearing,
                 }
             )
 
@@ -325,6 +328,7 @@ async def get_vehicle_trip(
         "route_short_name": route_info.get("route_short_name"),
         "route_long_name": route_info.get("route_long_name"),
         "route_color": route_info.get("route_color"),
+        "route_type": route_info.get("route_type"),
         "start": start.isoformat(),
         "end": end.isoformat(),
         "stops": stops_list,

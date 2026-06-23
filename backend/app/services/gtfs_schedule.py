@@ -318,3 +318,79 @@ def load_route_direction_info(
     if _direction_info_cache is None:
         _direction_info_cache = _build_direction_info(gtfs_static_root)
     return _direction_info_cache
+
+
+# ── Route-corridor schedule: timepoints with cumulative inter-stop distances ──
+# {trip_id: [(stop_sequence, stop_id, arrival_secs, stop_lat, stop_lon, dist_m)]}
+# dist_m is the cumulative haversine distance from the trip's first timepoint to
+# this one, measured as straight lines between consecutive timepoints.  This lets
+# classify_arrival() project a vehicle position onto the inter-timepoint polyline
+# and find which timepoint it is nearest to along the route rather than by simple
+# crow-flies circle — reducing false matches on parallel streets and curved routes.
+_trip_shape_dist_cache: dict[str, list[tuple[int, str, int, float, float, float]]] | None = None
+
+# Minimum schedule gap (seconds) between adjacent timepoints for a stop to be
+# used in on-time detection.  Pairs closer than this are ambiguous given the
+# ±2 min GTFS-RT position accuracy, so both members of a too-close pair are
+# dropped from the detection schedule.
+_MIN_TIMEPOINT_GAP_S = 120
+
+
+def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance between two WGS84 points, in metres."""
+    from math import asin, cos, radians, sin, sqrt
+
+    p1, p2 = radians(lat1), radians(lat2)
+    dphi = radians(lat2 - lat1)
+    dlambda = radians(lon2 - lon1)
+    a = sin(dphi / 2) ** 2 + cos(p1) * cos(p2) * sin(dlambda / 2) ** 2
+    return 2 * 6_371_000.0 * asin(sqrt(a))
+
+
+def _build_trip_shape_dist_schedule(
+    gtfs_static_root: Path | None = None,
+) -> dict[str, list[tuple[int, str, int, float, float, float]]]:
+    """Build a per-trip timepoint schedule enriched with cumulative route distances.
+
+    Starting from the existing timepoint schedule (timepoint==1 stops only),
+    compute the cumulative straight-line distance between consecutive timepoints
+    for each trip.  Also filter out any timepoint whose scheduled gap to either
+    neighbour is less than _MIN_TIMEPOINT_GAP_S — those stops are too close
+    together to assign observations reliably given feed accuracy limits.
+    """
+    base = load_trip_stop_schedule(gtfs_static_root)
+
+    result: dict[str, list[tuple[int, str, int, float, float, float]]] = {}
+    for trip_id, tps in base.items():
+        # Compute cumulative distance along the inter-timepoint polyline.
+        with_dist: list[tuple[int, str, int, float, float, float]] = []
+        cum = 0.0
+        for i, (seq, stop_id, arr_secs, lat, lon) in enumerate(tps):
+            if i > 0:
+                _, _, _, plat, plon = tps[i - 1]
+                cum += _haversine_m(plat, plon, lat, lon)
+            with_dist.append((seq, stop_id, arr_secs, lat, lon, cum))
+
+        # Drop timepoints that are < _MIN_TIMEPOINT_GAP_S from either neighbour.
+        filtered: list[tuple[int, str, int, float, float, float]] = []
+        for i, tp in enumerate(with_dist):
+            arr_secs = tp[2]
+            prev_gap = arr_secs - with_dist[i - 1][2] if i > 0 else float("inf")
+            next_gap = with_dist[i + 1][2] - arr_secs if i < len(with_dist) - 1 else float("inf")
+            if min(prev_gap, next_gap) >= _MIN_TIMEPOINT_GAP_S:
+                filtered.append(tp)
+
+        if filtered:
+            result[trip_id] = filtered
+
+    return result
+
+
+def load_trip_shape_dist_schedule(
+    gtfs_static_root: Path | None = None,
+) -> dict[str, list[tuple[int, str, int, float, float, float]]]:
+    """Cached per-trip timepoint schedule with cumulative inter-stop distances."""
+    global _trip_shape_dist_cache
+    if _trip_shape_dist_cache is None:
+        _trip_shape_dist_cache = _build_trip_shape_dist_schedule(gtfs_static_root)
+    return _trip_shape_dist_cache

@@ -373,6 +373,9 @@ export interface VehicleStopEvent {
   actual_time: string;
   delay_seconds: number;
   occupancy_status: string | null;
+  actual_lat: number | null;
+  actual_lon: number | null;
+  actual_bearing: number | null;
 }
 
 export interface VehiclePositionTrack {
@@ -392,6 +395,7 @@ export interface VehicleTripResponse {
   route_short_name: string | null;
   route_long_name: string | null;
   route_color: string | null;
+  route_type: string | null;
   start: string;
   end: string;
   stops: VehicleStopEvent[];
