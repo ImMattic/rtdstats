@@ -1,20 +1,12 @@
 "use client";
 import L from "leaflet";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Tooltip, useMap } from "react-leaflet";
 import type { VehicleStopEvent, VehiclePositionTrack } from "@/lib/types";
+import { interpolateTrackPosition, formatTime } from "@/lib/utils";
 import { createVehicleIcon } from "./vehicleIcon";
 
 const DENVER_CENTER: [number, number] = [39.7392, -104.9903];
-const RAIL_TYPES = new Set(["0", "1", "2"]);
-
-export interface HighlightPosition {
-  lat: number;
-  lon: number;
-  bearing: number | null;
-  routeColor: string;
-  isRail: boolean;
-}
 
 function stopDelayColor(seconds: number): string {
   if (seconds > 120) return "#dc2626";  // red — late
@@ -49,10 +41,26 @@ interface Props {
   positions: VehiclePositionTrack[];
   stops: VehicleStopEvent[];
   routeColor: string;
-  highlightPosition?: HighlightPosition | null;
+  isRail?: boolean;
+  /** Stop whose scheduled-time vehicle position should be highlighted (hovered in the table). */
+  highlightStop?: VehicleStopEvent | null;
 }
 
-export default function VehicleTripMap({ positions, stops, routeColor, highlightPosition }: Props) {
+export default function VehicleTripMap({ positions, stops, routeColor, isRail = false, highlightStop }: Props) {
+  const [mapClickStop, setMapClickStop] = useState<VehicleStopEvent | null>(null);
+
+  // Table-row hover wins; otherwise fall back to a clicked stop circle on the map.
+  const activeStop = highlightStop ?? mapClickStop;
+
+  // Where was the vehicle at this stop's *scheduled* arrival time? Interpolated
+  // from the position track — a late vehicle lands behind the stop on the route.
+  const highlight = useMemo(() => {
+    if (!activeStop) return null;
+    const pos = interpolateTrackPosition(positions, activeStop.scheduled_time);
+    if (!pos) return null;
+    return { ...pos, routeColor, isRail };
+  }, [activeStop, positions, routeColor, isRail]);
+
   useEffect(() => {
     // @ts-expect-error – internal Leaflet default icon URL resolution
     delete L.Icon.Default.prototype._getIconUrl;
@@ -102,6 +110,16 @@ export default function VehicleTripMap({ positions, stops, routeColor, highlight
               fillColor: stopDelayColor(stop.delay_seconds),
               fillOpacity: 0.9,
             }}
+            eventHandlers={{
+              click: () =>
+                setMapClickStop((prev) =>
+                  prev &&
+                  prev.stop_id === stop.stop_id &&
+                  prev.stop_sequence === stop.stop_sequence
+                    ? null
+                    : stop,
+                ),
+            }}
           >
             <Tooltip direction="top" offset={[0, -10]} opacity={1}>
               <span className="font-semibold">{stop.stop_name ?? stop.stop_id}</span>
@@ -115,21 +133,21 @@ export default function VehicleTripMap({ positions, stops, routeColor, highlight
         ) : null,
       )}
 
-      {/* Hover marker: actual detected vehicle position for the hovered stop row */}
-      {highlightPosition && (
+      {/* Hover marker: where the vehicle was at the hovered stop's scheduled arrival time */}
+      {highlight && (
         <Marker
-          position={[highlightPosition.lat, highlightPosition.lon]}
+          position={[highlight.lat, highlight.lon]}
           icon={createVehicleIcon(
-            highlightPosition.bearing,
-            highlightPosition.routeColor.replace(/^#/, ""),
+            highlight.bearing,
+            highlight.routeColor.replace(/^#/, ""),
             "#ffffff",
             "#000000",
             14,
-            highlightPosition.isRail,
+            highlight.isRail,
           )}
         >
           <Tooltip direction="top" offset={[0, -4]} opacity={1} permanent>
-            Detected here
+            <span className="font-semibold">Scheduled {activeStop ? formatTime(activeStop.scheduled_time) : ""}</span>
           </Tooltip>
         </Marker>
       )}
