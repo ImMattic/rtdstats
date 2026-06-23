@@ -1,12 +1,14 @@
 "use client";
 import dynamic from "next/dynamic";
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useVehicleTrip } from "@/lib/hooks";
 import { Card, SectionHeading } from "@/components/ui/Card";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { formatDelay, formatDelayMin, routeColor } from "@/lib/utils";
+import type { VehicleStopEvent } from "@/lib/types";
+import type { HighlightPosition } from "@/components/map/VehicleTripMap";
 
 const VehicleTripMap = dynamic(() => import("@/components/map/VehicleTripMap"), {
   ssr: false,
@@ -47,9 +49,12 @@ function StatBox({ label, value, sub }: { label: string; value: string; sub?: st
   );
 }
 
+const RAIL_TYPES = new Set(["0", "1", "2"]);
+
 function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
   const searchParams = useSearchParams();
   const tripId = searchParams.get("trip_id") ?? undefined;
+  const [hoveredStop, setHoveredStop] = useState<VehicleStopEvent | null>(null);
   // start/end bound the full extent of this single trip leg (set by the list).
   const start = searchParams.get("start") ?? undefined;
   const end = searchParams.get("end") ?? undefined;
@@ -194,7 +199,11 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
                       {data.stops.map((stop) => (
                         <tr
                           key={`${stop.stop_id}-${stop.stop_sequence}`}
-                          className="hover:bg-gray-50"
+                          className="hover:bg-gray-50 cursor-default"
+                          onMouseEnter={() =>
+                            stop.actual_lat && stop.actual_lon ? setHoveredStop(stop) : undefined
+                          }
+                          onMouseLeave={() => setHoveredStop(null)}
                         >
                           <td className="px-3 py-2 text-gray-400">{stop.stop_sequence}</td>
                           <td className="px-3 py-2 font-medium">
@@ -246,6 +255,17 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
                     positions={data.positions}
                     stops={data.stops}
                     routeColor={data.route_color ?? "3b82f6"}
+                    highlightPosition={
+                      hoveredStop?.actual_lat != null && hoveredStop?.actual_lon != null
+                        ? ({
+                            lat: hoveredStop.actual_lat,
+                            lon: hoveredStop.actual_lon,
+                            bearing: hoveredStop.actual_bearing ?? null,
+                            routeColor: data.route_color ?? "888888",
+                            isRail: RAIL_TYPES.has(data.route_type ?? ""),
+                          } satisfies HighlightPosition)
+                        : null
+                    }
                   />
                 </div>
               )}

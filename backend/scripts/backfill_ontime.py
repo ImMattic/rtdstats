@@ -34,7 +34,7 @@ from sqlalchemy import insert, select, text  # noqa: E402
 from app.database import AsyncSessionLocal, engine  # noqa: E402
 from app.models.stop_arrival import StopArrivalEvent  # noqa: E402
 from app.models.vehicle_position import VehiclePosition  # noqa: E402
-from app.services.gtfs_schedule import load_trip_stop_schedule  # noqa: E402
+from app.services.gtfs_schedule import load_trip_shape_dist_schedule  # noqa: E402
 from app.services.ontime import classify_arrival  # noqa: E402
 
 _VP = VehiclePosition
@@ -47,7 +47,7 @@ async def _wipe() -> None:
 
 
 async def _backfill(batch_size: int) -> int:
-    schedule = load_trip_stop_schedule()
+    schedule = load_trip_shape_dist_schedule()
     if not schedule:
         raise SystemExit("No timepoint schedule loaded — is gtfs-static present?")
 
@@ -62,7 +62,7 @@ async def _backfill(batch_size: int) -> int:
             stmt = (
                 select(
                     _VP.trip_id, _VP.route_id, _VP.latitude, _VP.longitude,
-                    _VP.current_status, _VP.current_stop_sequence,
+                    _VP.bearing, _VP.current_status, _VP.current_stop_sequence,
                     _VP.timestamp, _VP.id,
                 )
                 .order_by(_VP.timestamp, _VP.id)
@@ -70,20 +70,21 @@ async def _backfill(batch_size: int) -> int:
             )
             if last_ts is not None:
                 stmt = stmt.where(
-                    (_VP.timestamp > last_ts) |
-                    ((_VP.timestamp == last_ts) & (_VP.id > last_id))
+                    (_VP.timestamp > last_ts)
+                    | ((_VP.timestamp == last_ts) & (_VP.id > last_id))
                 )
             rows = (await session.execute(stmt)).all()
             if not rows:
                 break
 
             events: list[dict] = []
-            for trip_id, route_id, lat, lon, cur_status, cur_stop_seq, ts, vp_id in rows:
+            for trip_id, route_id, lat, lon, bearing, cur_status, cur_stop_seq, ts, vp_id in rows:
                 last_ts, last_id = ts, vp_id
                 event = classify_arrival(
                     {
                         "trip_id": trip_id, "route_id": route_id,
                         "latitude": lat, "longitude": lon,
+                        "bearing": bearing,
                         "current_status": cur_status,
                         "current_stop_sequence": cur_stop_seq,
                     },

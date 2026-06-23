@@ -1,10 +1,20 @@
 "use client";
 import L from "leaflet";
 import { useEffect } from "react";
-import { MapContainer, TileLayer, Polyline, CircleMarker, Tooltip, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Tooltip, useMap } from "react-leaflet";
 import type { VehicleStopEvent, VehiclePositionTrack } from "@/lib/types";
+import { createVehicleIcon } from "./vehicleIcon";
 
 const DENVER_CENTER: [number, number] = [39.7392, -104.9903];
+const RAIL_TYPES = new Set(["0", "1", "2"]);
+
+export interface HighlightPosition {
+  lat: number;
+  lon: number;
+  bearing: number | null;
+  routeColor: string;
+  isRail: boolean;
+}
 
 function stopDelayColor(seconds: number): string {
   if (seconds > 120) return "#dc2626";  // red — late
@@ -39,9 +49,10 @@ interface Props {
   positions: VehiclePositionTrack[];
   stops: VehicleStopEvent[];
   routeColor: string;
+  highlightPosition?: HighlightPosition | null;
 }
 
-export default function VehicleTripMap({ positions, stops, routeColor }: Props) {
+export default function VehicleTripMap({ positions, stops, routeColor, highlightPosition }: Props) {
   useEffect(() => {
     // @ts-expect-error – internal Leaflet default icon URL resolution
     delete L.Icon.Default.prototype._getIconUrl;
@@ -102,6 +113,25 @@ export default function VehicleTripMap({ positions, stops, routeColor }: Props) 
             </Tooltip>
           </CircleMarker>
         ) : null,
+      )}
+
+      {/* Hover marker: actual detected vehicle position for the hovered stop row */}
+      {highlightPosition && (
+        <Marker
+          position={[highlightPosition.lat, highlightPosition.lon]}
+          icon={createVehicleIcon(
+            highlightPosition.bearing,
+            highlightPosition.routeColor.replace(/^#/, ""),
+            "#ffffff",
+            "#000000",
+            14,
+            highlightPosition.isRail,
+          )}
+        >
+          <Tooltip direction="top" offset={[0, -4]} opacity={1} permanent>
+            Detected here
+          </Tooltip>
+        </Marker>
       )}
     </MapContainer>
   );

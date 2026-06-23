@@ -6,6 +6,7 @@ import { MapContainer, TileLayer, Marker, Tooltip, Polyline, CircleMarker, useMa
 import type { VehiclePosition, RailShape, StopInfo } from "@/lib/types";
 import { useRailShapes, useRouteShape, useRouteStops } from "@/lib/hooks";
 import { headwayColor } from "@/lib/utils";
+import { createVehicleIcon, iconPx } from "./vehicleIcon";
 
 const DENVER_CENTER: [number, number] = [39.7392, -104.9903];
 const DEFAULT_ZOOM = 11;
@@ -39,113 +40,6 @@ interface Props {
   onStopClick?: (stopId: string) => void;
 }
 
-function iconPx(zoom: number): number {
-  if (zoom <= 9)  return 10;
-  if (zoom <= 11) return 16;
-  if (zoom <= 13) return 22;
-  return 28;
-}
-
-// Reusable divIcons keyed by their visual inputs. Icons are immutable, so the
-// ~200+ vehicles redrawn every poll/zoom collapse into a handful of cache hits
-// instead of that many fresh SVG strings + L.divIcon() allocations.
-const _iconCache = new Map<string, L.DivIcon>();
-
-/**
- * Bus icon: circle body with a small seamless directional tip, single unified path.
- * Rail icon: rounded rectangle with a pointed nose, single seamless path.
- * Both are rotated by `bearing` and scale with zoom.
- */
-function createVehicleIcon(
-  bearing: number | null,
-  fillColor: string,
-  headwayStroke: string,
-  outlineColor: string,
-  zoom: number,
-  isRail: boolean,
-): L.DivIcon {
-  // Bucket bearing to 5° so the cache stays small (visually indistinguishable).
-  const rot = Math.round((bearing ?? 0) / 5) * 5;
-  const cacheKey = `${isRail ? 1 : 0}|${fillColor || "888888"}|${headwayStroke}|${outlineColor}|${zoom}|${rot}`;
-  const cached = _iconCache.get(cacheKey);
-  if (cached) return cached;
-
-  const s   = iconPx(zoom);
-  const cx  = s / 2;
-  const sw  = Math.max(1.5, s / 14);
-  // Two-layer stroke: outer headway ring + inner black/white separator.
-  // swOuter is the combined width; swInner is just the outline layer.
-  // The visible headway ring = (swOuter - swInner) / 2 on each side of the path.
-  const swOuter = sw * 3.5;
-  const swInner = sw * 1.5;
-  const pad = Math.ceil(swOuter / 2); // SVG edge padding to avoid clipping
-  const fill  = `#${fillColor || "888888"}`;
-  let svgBody: string;
-  let totalH: number;
-  let anchorY: number;
-
-  if (isRail) {
-    // Train: elongated body with a pointed nose, drawn as a single unified path
-    // so there's no seam between the nose triangle and the body rectangle.
-    const w  = Math.round(s * 0.52);
-    const bH = Math.round(s * 1.15); // body height
-    const nH = Math.round(s * 0.28); // nose height
-    const rx = Math.round(w * 0.32);
-    const x0 = cx - w / 2;
-    const x1 = cx + w / 2;
-    totalH  = nH + bH + Math.ceil(pad * 2);
-    anchorY = Math.round(nH + bH / 2);
-    const path = [
-      `M ${cx} ${pad}`,
-      `L ${x1} ${nH}`,
-      `L ${x1} ${nH + bH - rx}`,
-      `Q ${x1} ${nH + bH} ${x1 - rx} ${nH + bH}`,
-      `L ${x0 + rx} ${nH + bH}`,
-      `Q ${x0} ${nH + bH} ${x0} ${nH + bH - rx}`,
-      `L ${x0} ${nH}`,
-      `Z`,
-    ].join(" ");
-    svgBody = `<svg width="${s}" height="${totalH}" viewBox="0 0 ${s} ${totalH}" xmlns="http://www.w3.org/2000/svg">
-      <path d="${path}" fill="none" stroke="${headwayStroke}" stroke-width="${swOuter}" stroke-linejoin="round"/>
-      <path d="${path}" fill="${fill}" stroke="${outlineColor}" stroke-width="${swInner}" stroke-linejoin="round"/>
-    </svg>`;
-  } else {
-    // Bus: circle with a small directional tip, single unified path, no seam.
-    // The two tip sides are tangent to the circle, flowing into the arc without
-    // a visible corner.
-    const r    = Math.round(s * 0.39);
-    const tip  = Math.round(s * 0.26);            // tip protrusion beyond circle edge
-    const h    = r + tip;                          // tip-to-circle-center distance
-    const ty   = Math.round(r * r / h);           // tangent point: pixels above center
-    const tx   = Math.round(r * Math.sqrt(h * h - r * r) / h); // tangent point: horiz offset
-    const cy_c = pad + h;                          // circle center y
-    const tanY = cy_c - ty;                        // y of both tangent points
-    totalH  = Math.ceil(cy_c + r + pad);
-    anchorY = Math.round(cy_c);
-    const path = [
-      `M ${cx} ${pad}`,                                     // tip
-      `L ${cx + tx} ${tanY}`,                               // right tangent point
-      `A ${r} ${r} 0 1 1 ${cx - tx} ${tanY}`,              // arc through bottom (cw, large)
-      `Z`,
-    ].join(" ");
-    svgBody = `<svg width="${s}" height="${totalH}" viewBox="0 0 ${s} ${totalH}" xmlns="http://www.w3.org/2000/svg">
-      <path d="${path}" fill="none" stroke="${headwayStroke}" stroke-width="${swOuter}" stroke-linejoin="round" stroke-linecap="round"/>
-      <path d="${path}" fill="${fill}" stroke="${outlineColor}" stroke-width="${swInner}" stroke-linejoin="round" stroke-linecap="round"/>
-    </svg>`;
-  }
-
-  const html = `<div style="transform:rotate(${rot}deg);transform-origin:${cx}px ${anchorY}px;width:${s}px;height:${totalH}px;">${svgBody}</div>`;
-
-  const icon = L.divIcon({
-    html,
-    className: "",
-    iconSize:      [s, totalH],
-    iconAnchor:    [cx, anchorY],
-    tooltipAnchor: [0, -(anchorY + 4)],
-  });
-  _iconCache.set(cacheKey, icon);
-  return icon;
-}
 
 /** Official RTD brand colors keyed by route short name (upper-case). */
 const RTD_LINE_COLORS: Record<string, string> = {
