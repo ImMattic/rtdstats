@@ -44,13 +44,24 @@ interface Props {
   isRail?: boolean;
   /** Stop whose scheduled-time vehicle position should be highlighted (hovered in the table). */
   highlightStop?: VehicleStopEvent | null;
+  /** Current playback time (epoch ms). When set, animates the bus along the track. */
+  playbackMs?: number | null;
 }
 
-export default function VehicleTripMap({ positions, stops, routeColor, isRail = false, highlightStop }: Props) {
+export default function VehicleTripMap({ positions, stops, routeColor, isRail = false, highlightStop, playbackMs }: Props) {
   const [mapClickStop, setMapClickStop] = useState<VehicleStopEvent | null>(null);
 
+  const isPlayback = playbackMs != null;
+
+  // Where is the bus right now in playback? Interpolated from the position track.
+  const playbackPos = useMemo(() => {
+    if (playbackMs == null) return null;
+    return interpolateTrackPosition(positions, new Date(playbackMs).toISOString());
+  }, [playbackMs, positions]);
+
   // Table-row hover wins; otherwise fall back to a clicked stop circle on the map.
-  const activeStop = highlightStop ?? mapClickStop;
+  // Suppressed while playback is active so there is only ever one bus on the map.
+  const activeStop = isPlayback ? null : (highlightStop ?? mapClickStop);
 
   // Where was the vehicle at this stop's *scheduled* arrival time? Interpolated
   // from the position track — a late vehicle lands behind the stop on the route.
@@ -70,9 +81,18 @@ export default function VehicleTripMap({ positions, stops, routeColor, isRail = 
     });
   }, []);
 
-  const trackPoints: [number, number][] = positions
-    .filter((p) => p.latitude && p.longitude)
-    .map((p) => [p.latitude, p.longitude]);
+  const trackSamples = positions.filter((p) => p.latitude && p.longitude);
+  const trackPoints: [number, number][] = trackSamples.map((p) => [p.latitude, p.longitude]);
+
+  // During playback, split the track into the portion already travelled (bright)
+  // and the portion still ahead (dim) so the route "fills in" behind the bus.
+  const traveledCount =
+    playbackMs == null
+      ? trackPoints.length
+      : trackSamples.filter((p) => new Date(p.timestamp).getTime() <= playbackMs).length;
+  const traveledPoints = trackPoints.slice(0, Math.max(traveledCount, 0));
+  const upcomingPoints =
+    playbackMs == null ? [] : trackPoints.slice(Math.max(traveledCount - 1, 0));
 
   const center: [number, number] =
     trackPoints.length > 0 ? trackPoints[Math.floor(trackPoints.length / 2)] : DENVER_CENTER;
@@ -89,11 +109,17 @@ export default function VehicleTripMap({ positions, stops, routeColor, isRail = 
       />
       <BoundsAdjuster positions={positions} stops={stops} />
 
-      {/* Position track */}
-      {trackPoints.length > 1 && (
+      {/* Position track: dim "upcoming" leg underneath, bright "traveled" leg on top */}
+      {upcomingPoints.length > 1 && (
         <Polyline
-          positions={trackPoints}
-          pathOptions={{ color: fillColor, weight: 3, opacity: 0.75 }}
+          positions={upcomingPoints}
+          pathOptions={{ color: fillColor, weight: 3, opacity: 0.25 }}
+        />
+      )}
+      {traveledPoints.length > 1 && (
+        <Polyline
+          positions={traveledPoints}
+          pathOptions={{ color: fillColor, weight: 3, opacity: 0.85 }}
         />
       )}
 
@@ -148,6 +174,26 @@ export default function VehicleTripMap({ positions, stops, routeColor, isRail = 
         >
           <Tooltip direction="top" offset={[0, -4]} opacity={1} permanent>
             <span className="font-semibold">Scheduled {activeStop ? formatTime(activeStop.scheduled_time) : ""}</span>
+          </Tooltip>
+        </Marker>
+      )}
+
+      {/* Playback marker: the bus at the current playback time */}
+      {playbackPos && (
+        <Marker
+          position={[playbackPos.lat, playbackPos.lon]}
+          icon={createVehicleIcon(
+            playbackPos.bearing,
+            fillColor.replace(/^#/, ""),
+            "#ffffff",
+            "#000000",
+            14,
+            isRail,
+          )}
+          zIndexOffset={1000}
+        >
+          <Tooltip direction="top" offset={[0, -4]} opacity={1} permanent>
+            <span className="font-semibold">{playbackMs != null ? formatTime(new Date(playbackMs).toISOString()) : ""}</span>
           </Tooltip>
         </Marker>
       )}

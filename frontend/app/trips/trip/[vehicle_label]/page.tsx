@@ -4,8 +4,10 @@ import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useVehicleTrip } from "@/lib/hooks";
+import { usePlayback } from "@/lib/usePlayback";
 import { Card, SectionHeading } from "@/components/ui/Card";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import TripPlaybackControls from "@/components/map/TripPlaybackControls";
 import { formatDelay, formatDelayMin, routeColor } from "@/lib/utils";
 import type { VehicleStopEvent } from "@/lib/types";
 
@@ -86,6 +88,13 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
   const tripEnd = data?.positions.length
     ? data.positions[data.positions.length - 1].timestamp
     : end;
+
+  // Playback clock for the Trip Track map (epoch ms bounds from the position track).
+  const playbackStartMs = data?.positions.length ? Date.parse(data.positions[0].timestamp) : 0;
+  const playbackEndMs = data?.positions.length
+    ? Date.parse(data.positions[data.positions.length - 1].timestamp)
+    : 0;
+  const playback = usePlayback(playbackStartMs, playbackEndMs);
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 text-gray-900">
@@ -240,22 +249,33 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
             <Card className="lg:col-span-1">
               <SectionHeading
                 title="Trip Track"
-                subtitle="Click a stop (or hover a table row) to see where the vehicle was at its scheduled time"
+                subtitle="Press play to replay the trip, or hover a stop for its scheduled position"
               />
               {data.positions.length === 0 && data.stops.length === 0 ? (
                 <p className="py-6 text-center text-sm text-gray-500">
                   No position data available.
                 </p>
               ) : (
-                <div className="h-[420px] overflow-hidden rounded border border-gray-200">
-                  <VehicleTripMap
-                    positions={data.positions}
-                    stops={data.stops}
-                    routeColor={data.route_color ?? "3b82f6"}
-                    isRail={RAIL_TYPES.has(data.route_type ?? "")}
-                    highlightStop={hoveredStop}
-                  />
-                </div>
+                <>
+                  <div className="h-[420px] overflow-hidden rounded border border-gray-200">
+                    <VehicleTripMap
+                      positions={data.positions}
+                      stops={data.stops}
+                      routeColor={data.route_color ?? "3b82f6"}
+                      isRail={RAIL_TYPES.has(data.route_type ?? "")}
+                      highlightStop={hoveredStop}
+                      playbackMs={playback.active ? playback.currentMs : null}
+                    />
+                  </div>
+                  {data.positions.length >= 2 && (
+                    <TripPlaybackControls
+                      playback={playback}
+                      startMs={playbackStartMs}
+                      endMs={playbackEndMs}
+                      routeColor={data.route_color ?? "3b82f6"}
+                    />
+                  )}
+                </>
               )}
             </Card>
           </div>
