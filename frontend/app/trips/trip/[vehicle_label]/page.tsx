@@ -177,14 +177,7 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* Stop timeline */}
             <Card className="lg:col-span-1">
-              <SectionHeading
-                title="Stop Arrival Timeline"
-                subtitle={
-                  data.stops.length
-                    ? `${data.stops.length} stops · green = on time, red = late, blue = early`
-                    : "No stop arrival data recorded for this trip"
-                }
-              />
+              <SectionHeading title="Stop Arrival Timeline" />
               {data.stops.length === 0 ? (
                 <p className="py-6 text-center text-sm text-gray-500">
                   Stop arrival events are derived from geofencing. Data may not be available for
