@@ -102,6 +102,28 @@ async def test_limit_too_large_rejected(client):
     assert resp.status_code == 422
 
 
+async def test_limit_above_new_ceiling_rejected(client):
+    resp = await client.get("/api/v1/historical/vehicles?limit=5000")
+    assert resp.status_code == 422
+
+
+async def test_span_too_wide_rejected(client):
+    resp = await client.get(
+        "/api/v1/historical/vehicles",
+        params={"start": "2024-01-01T00:00:00Z", "end": "2024-02-01T00:00:00Z"},
+    )
+    assert resp.status_code == 422
+    assert "time range too large" in resp.json()["detail"]
+
+
+async def test_start_after_end_rejected(client):
+    resp = await client.get(
+        "/api/v1/historical/vehicles",
+        params={"start": "2024-01-02T00:00:00Z", "end": "2024-01-01T00:00:00Z"},
+    )
+    assert resp.status_code == 422
+
+
 async def test_page_zero_rejected(client):
     resp = await client.get("/api/v1/historical/vehicles?page=0")
     assert resp.status_code == 422

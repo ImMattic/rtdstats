@@ -4,10 +4,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.database import get_db
 from app.models.vehicle_position import VehiclePosition
 from app.models.stop_arrival import StopArrivalEvent
@@ -15,6 +16,31 @@ from app.models.trip_update import TripUpdate
 from app.services.gtfs_decoder import load_gtfs_static_data, load_trip_endpoint_sequences
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
+
+_settings = get_settings()
+
+
+def _validated_range(
+    start: datetime | None,
+    end: datetime | None,
+    default_span: timedelta,
+) -> tuple[datetime, datetime]:
+    """Fill in defaults and reject inverted or abusively wide time ranges."""
+    now = datetime.now(tz=timezone.utc)
+    end = end or now
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+    start = start or (end - default_span)
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    if start >= end:
+        raise HTTPException(status_code=422, detail="start must be before end")
+    if end - start > timedelta(hours=_settings.vehicles_max_span_hours):
+        raise HTTPException(
+            status_code=422,
+            detail=f"time range too large: max {_settings.vehicles_max_span_hours}h",
+        )
+    return start, end
 
 # A trip can begin before / end after the requested window.  We scan this much
 # extra on each side so each trip's *true* first→last position is captured and
@@ -44,6 +70,10 @@ def _trip_endpoint_stops() -> dict[str, tuple[str | None, str | None]]:
 #   4. Returns a total_count via window function alongside the paginated rows.
 #
 # The {route_clause} placeholder is either empty or "AND route_id = :route_id".
+# The {window_clause} placeholder bounds a trip to the requested window: by
+# default a trip qualifies if its start OR end lands inside [start, end];  in
+# strict mode both its start AND end must land inside it (trips that begin
+# before or run past the window are dropped entirely).
 _ACTIVE_VEHICLES_SQL = """
 WITH agg AS (
     SELECT
@@ -79,8 +109,7 @@ filtered AS (
     FROM agg a
     LEFT JOIN arrivals ar ON ar.trip_id = a.trip_id
     WHERE (
-        (a.start_time >= :start AND a.start_time <= :end)
-        OR  (a.end_time  >= :start AND a.end_time  <= :end)
+        {window_clause}
     )
       AND COALESCE(ar.arrival_count, 0) > 1
 ),
@@ -96,6 +125,13 @@ paged AS (
 SELECT * FROM paged
 """
 
+# Time-window clauses substituted into {window_clause} above.
+_WINDOW_CLAUSE_OVERLAP = (
+    "(a.start_time >= :start AND a.start_time <= :end)"
+    " OR (a.end_time >= :start AND a.end_time <= :end)"
+)
+_WINDOW_CLAUSE_STRICT = "a.start_time >= :start AND a.end_time <= :end"
+
 
 @router.get("/active")
 async def get_active_vehicles(
@@ -103,8 +139,9 @@ async def get_active_vehicles(
     start: Annotated[datetime | None, Query()] = None,
     end: Annotated[datetime | None, Query()] = None,
     route_id: Annotated[str | None, Query()] = None,
+    strict: Annotated[bool, Query()] = False,
     limit: Annotated[int, Query(ge=1, le=100)] = 15,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    offset: Annotated[int, Query(ge=0, le=5_000)] = 0,
 ) -> dict:
     """Trips whose start or end falls within [start, end].
 
@@ -114,18 +151,26 @@ async def get_active_vehicles(
     the requested window, then keep only trips whose start or end timestamp is
     actually inside ``[start, end]``.
 
+    When ``strict`` is true, only trips that lie *entirely* within
+    ``[start, end]`` are kept — both start and end must fall inside the window,
+    so a trip that begins before or runs past the window is excluded.
+
     Quality filter (same criteria as before) is applied in SQL:
     observation_count >= 10 AND stop_arrival_count > 1.
     """
-    now = datetime.now(tz=timezone.utc)
-    end = end or now
-    start = start or (end - timedelta(hours=1))
+    start, end = _validated_range(start, end, default_span=timedelta(hours=1))
 
     scan_start = start - _MAX_TRIP_DURATION
     scan_end = end + _MAX_TRIP_DURATION
 
     route_clause = "AND route_id = :route_id" if route_id else ""
-    sql = text(_ACTIVE_VEHICLES_SQL.format(route_clause=route_clause))
+    window_clause = _WINDOW_CLAUSE_STRICT if strict else _WINDOW_CLAUSE_OVERLAP
+    sql = text(
+        _ACTIVE_VEHICLES_SQL.format(
+            route_clause=route_clause,
+            window_clause=window_clause,
+        )
+    )
 
     params: dict = {
         "scan_start": scan_start,
@@ -200,9 +245,7 @@ async def get_vehicle_trip(
     end: Annotated[datetime | None, Query()] = None,
 ) -> dict:
     """Stop arrival timeline and position track for a specific vehicle's trip."""
-    now = datetime.now(tz=timezone.utc)
-    end = end or now
-    start = start or (end - timedelta(hours=6))
+    start, end = _validated_range(start, end, default_span=timedelta(hours=6))
 
     pos_filter = [
         VehiclePosition.vehicle_label == vehicle_label,
@@ -304,7 +347,7 @@ async def get_vehicle_trip(
     if stops_list:
         delays = [s["delay_seconds"] for s in stops_list]
         avg_delay = sum(delays) / len(delays)
-        on_time_count = sum(1 for d in delays if abs(d) <= 120)
+        on_time_count = sum(1 for d in delays if abs(d) <= 300)
         on_time_pct = round(on_time_count / len(delays) * 100, 1)
 
     positions = [

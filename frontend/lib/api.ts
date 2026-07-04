@@ -25,6 +25,16 @@ import type {
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
+export class ApiError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { "Content-Type": "application/json" },
@@ -32,7 +42,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`API ${res.status}: ${text}`);
+    throw new ApiError(res.status, `API ${res.status}: ${text}`);
   }
   return res.json() as Promise<T>;
 }
@@ -172,6 +182,7 @@ export interface ActiveVehiclesParams {
   start?: string;
   end?: string;
   route_id?: string;
+  strict?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -181,6 +192,7 @@ export function fetchActiveVehicles(params: ActiveVehiclesParams = {}): Promise<
     start: params.start,
     end: params.end,
     route_id: params.route_id,
+    strict: params.strict ? "true" : undefined,
     limit: params.limit,
     offset: params.offset,
   }));

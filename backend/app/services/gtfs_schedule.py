@@ -329,6 +329,11 @@ def load_route_direction_info(
 # crow-flies circle — reducing false matches on parallel streets and curved routes.
 _trip_shape_dist_cache: dict[str, list[tuple[int, str, int, float, float, float]]] | None = None
 
+# {(route_id, stop_id): sorted list of arrival_secs from all trips on that route}.
+# Used to detect trip_id misassignment: if another trip on the same route is
+# scheduled closer to the observed arrival time, the bus is likely on the wrong trip.
+_stop_arrivals_cache: dict[tuple[str, str], list[int]] | None = None
+
 # Minimum schedule gap (seconds) between adjacent timepoints for a stop to be
 # used in on-time detection.  Pairs closer than this are ambiguous given the
 # ±2 min GTFS-RT position accuracy, so both members of a too-close pair are
@@ -394,3 +399,40 @@ def load_trip_shape_dist_schedule(
     if _trip_shape_dist_cache is None:
         _trip_shape_dist_cache = _build_trip_shape_dist_schedule(gtfs_static_root)
     return _trip_shape_dist_cache
+
+
+def _build_stop_arrivals_index(
+    gtfs_static_root: Path | None = None,
+) -> dict[tuple[str, str], list[int]]:
+    """Build {(route_id, stop_id): sorted arrival_secs list} across all trips.
+
+    Joining the shape-dist schedule (trip_id → timepoints) with trip metadata
+    (trip_id → route_id) gives us all scheduled arrival times at each stop for
+    each route.  classify_arrival() uses this to detect when a better-matching
+    trip exists for an observed arrival — the signature of a GTFS-RT trip_id
+    misassignment on high-frequency routes.
+    """
+    root = gtfs_static_root or resolve_gtfs_static_root()
+    shape_dist_schedule = load_trip_shape_dist_schedule(gtfs_static_root)
+    trip_meta = _load_trip_meta(root)
+
+    raw: dict[tuple[str, str], set[int]] = defaultdict(set)
+    for trip_id, timepoints in shape_dist_schedule.items():
+        meta = trip_meta.get(trip_id)
+        if not meta:
+            continue
+        route_id = meta[0]
+        for _, stop_id, arrival_secs, _, _, _ in timepoints:
+            raw[(route_id, stop_id)].add(arrival_secs)
+
+    return {k: sorted(v) for k, v in raw.items()}
+
+
+def load_stop_arrivals_index(
+    gtfs_static_root: Path | None = None,
+) -> dict[tuple[str, str], list[int]]:
+    """Cached {(route_id, stop_id): sorted arrival_secs list} for misassignment detection."""
+    global _stop_arrivals_cache
+    if _stop_arrivals_cache is None:
+        _stop_arrivals_cache = _build_stop_arrivals_index(gtfs_static_root)
+    return _stop_arrivals_cache

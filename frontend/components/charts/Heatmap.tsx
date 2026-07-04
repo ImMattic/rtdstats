@@ -14,11 +14,11 @@ const HOURS = Array.from({ length: 24 }, (_, h) => h);
 const DOWS = [1, 2, 3, 4, 5, 6, 0]; // Mon..Sun for display
 
 function delayColor(seconds: number): string {
-  // green (early/on-time) → red (very late), centered around 0–300s.
+  // green (early/on-time) → red (very late). On-time is within ±300s (5 min).
   if (seconds <= 0) return "#16a34a";
-  if (seconds <= 120) return "#65a30d";
-  if (seconds <= 300) return "#eab308";
-  if (seconds <= 600) return "#ea580c";
+  if (seconds <= 300) return "#65a30d";
+  if (seconds <= 600) return "#eab308";
+  if (seconds <= 900) return "#ea580c";
   return "#dc2626";
 }
 

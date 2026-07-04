@@ -78,8 +78,30 @@ async def test_export_limit_ceiling_rejected(client):
 
 
 async def test_export_limit_at_ceiling_accepted(client):
-    resp = await client.get("/api/v1/export/vehicles?limit=50000")
+    resp = await client.get("/api/v1/export/vehicles?limit=10000")
     assert resp.status_code == 200
+
+
+async def test_export_old_ceiling_now_rejected(client):
+    resp = await client.get("/api/v1/export/vehicles?limit=50000")
+    assert resp.status_code == 422
+
+
+async def test_export_span_too_wide_rejected(client):
+    resp = await client.get(
+        "/api/v1/export/vehicles",
+        params={"start": "2024-01-01T00:00:00Z", "end": "2024-06-01T00:00:00Z"},
+    )
+    assert resp.status_code == 422
+    assert "time range too large" in resp.json()["detail"]
+
+
+async def test_export_start_after_end_rejected(client):
+    resp = await client.get(
+        "/api/v1/export/vehicles",
+        params={"start": "2024-01-02T00:00:00Z", "end": "2024-01-01T00:00:00Z"},
+    )
+    assert resp.status_code == 422
 
 
 async def test_health_endpoint(client):

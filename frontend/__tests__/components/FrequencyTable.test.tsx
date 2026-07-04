@@ -29,11 +29,11 @@ describe("FrequencyTable", () => {
     expect(screen.getByText("44")).toBeInTheDocument();
   });
 
-  it("shows dash for zero headway", () => {
+  it("filters out routes with zero headway", () => {
     render(<FrequencyTable routes={[makeRoute({ avg_headway_minutes: 0 })]} />);
-    // Multiple "—" may appear (avg + range cells), just ensure the column is present
-    const dashes = screen.getAllByText("—");
-    expect(dashes.length).toBeGreaterThan(0);
+    // Routes without a positive headway are dropped, so no data row renders
+    expect(screen.queryByText("15L")).not.toBeInTheDocument();
+    expect(screen.queryAllByRole("row")).toHaveLength(1); // header only
   });
 
   it("shows headway in minutes when positive", () => {
