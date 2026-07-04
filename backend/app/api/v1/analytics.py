@@ -11,7 +11,9 @@ heatmap and occupancy-by-hour charts read naturally to a Denver audience.
 """
 from __future__ import annotations
 
+import asyncio
 import math
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
@@ -530,12 +532,50 @@ def _occ_trip_ids(route_id: str | None, direction: int | None) -> list[str] | No
     return entry["trip_ids"] if entry else []
 
 
+# Occupancy scans the raw vehicle_positions hypertable (the occupancy_hourly
+# cagg lacks per-status/direction granularity), so cache assembled responses.
+# TTL matches the frontend's 5-min analytics polling; key space is capped since
+# route_id is client-controlled.
+_OCC_CACHE_TTL_SECONDS = 300.0
+_OCC_CACHE_MAX_KEYS = 512
+_occ_cache: dict[tuple[str | None, int, int | None], tuple[float, OccupancyResponse]] = {}
+_occ_locks: dict[tuple[str | None, int, int | None], asyncio.Lock] = {}
+
+
 @router.get("/occupancy", response_model=OccupancyResponse)
 async def occupancy(
     db: Annotated[AsyncSession, Depends(get_db)],
     route_id: Annotated[str | None, Query()] = None,
     days: Annotated[int, Query(ge=1, le=90)] = 7,
     direction: Annotated[int | None, Query(ge=0, le=1)] = None,
+) -> OccupancyResponse:
+    key = (route_id, days, direction)
+    hit = _occ_cache.get(key)
+    if hit is not None and time.monotonic() - hit[0] < _OCC_CACHE_TTL_SECONDS:
+        return hit[1]
+
+    lock = _occ_locks.setdefault(key, asyncio.Lock())
+    async with lock:
+        hit = _occ_cache.get(key)
+        if hit is not None and time.monotonic() - hit[0] < _OCC_CACHE_TTL_SECONDS:
+            return hit[1]
+        resp = await _build_occupancy(db, route_id, days, direction)
+        if len(_occ_cache) >= _OCC_CACHE_MAX_KEYS:
+            now = time.monotonic()
+            for k in [k for k, (t, _) in _occ_cache.items() if now - t >= _OCC_CACHE_TTL_SECONDS]:
+                _occ_cache.pop(k, None)
+                stale_lock = _occ_locks.get(k)
+                if stale_lock is not None and not stale_lock.locked():
+                    _occ_locks.pop(k, None)
+        _occ_cache[key] = (time.monotonic(), resp)
+        return resp
+
+
+async def _build_occupancy(
+    db: AsyncSession,
+    route_id: str | None,
+    days: int,
+    direction: int | None,
 ) -> OccupancyResponse:
     cutoff = _cutoff(days)
     trip_ids = _occ_trip_ids(route_id, direction)

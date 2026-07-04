@@ -1,6 +1,7 @@
 """On-time performance, frequency, and stuck-vehicle alert endpoints."""
 from __future__ import annotations
 
+import asyncio
 import math
 import time
 from collections import defaultdict
@@ -196,22 +197,40 @@ async def frequency_stats(
 
 # ── Stuck-vehicle alerts ───────────────────────────────────────────────────
 
-# Stuck-alert detection scans a 15-min window and is polled every 30s by every
-# client; cache the assembled response briefly so concurrent tabs share one scan.
-_ALERTS_CACHE_TTL_SECONDS = 10.0
+# Stuck-alert detection scans a ~36-min window and is polled every 30s by every
+# client; cache the assembled response so concurrent tabs share one scan. TTL
+# matches the client polling interval. The single-flight lock ensures N
+# concurrent cache misses run one scan, not N.
+_ALERTS_CACHE_TTL_SECONDS = 30.0
 _alerts_cache: tuple[float, AlertsResponse] | None = None
+_alerts_lock = asyncio.Lock()
 _trip_endpoint_stops: dict[str, tuple[str | None, str | None]] | None = None
 _route_terminal_stops: dict[str, set[str]] | None = None
+
+
+def _cached_alerts() -> AlertsResponse | None:
+    if _alerts_cache is not None and time.monotonic() - _alerts_cache[0] < _ALERTS_CACHE_TTL_SECONDS:
+        return _alerts_cache[1]
+    return None
 
 
 @router.get("/alerts", response_model=AlertsResponse)
 async def stuck_vehicle_alerts(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AlertsResponse:
+    hit = _cached_alerts()
+    if hit is not None:
+        return hit
+    async with _alerts_lock:
+        hit = _cached_alerts()
+        if hit is not None:
+            return hit
+        return await _build_alerts(db)
+
+
+async def _build_alerts(db: AsyncSession) -> AlertsResponse:
     global _alerts_cache, _trip_endpoint_stops, _route_terminal_stops
     mono = time.monotonic()
-    if _alerts_cache is not None and mono - _alerts_cache[0] < _ALERTS_CACHE_TTL_SECONDS:
-        return _alerts_cache[1]
 
     settings = get_settings()
     threshold = timedelta(minutes=settings.stuck_vehicle_minutes)

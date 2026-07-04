@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { http, HttpResponse } from "msw";
 import { server } from "../mocks/handlers";
-import { fetchVehicles, fetchHistorical, exportUrl } from "@/lib/api";
+import { ApiError, fetchVehicles, fetchHistorical, exportUrl } from "@/lib/api";
 
 describe("apiFetch", () => {
   it("returns parsed JSON on 200", async () => {
@@ -26,6 +26,17 @@ describe("apiFetch", () => {
       )
     );
     await expect(fetchVehicles()).rejects.toThrow("API 404");
+  });
+
+  it("throws ApiError carrying the status code (so 4xx is not retried)", async () => {
+    server.use(
+      http.get("/api/v1/realtime/vehicles", () =>
+        HttpResponse.json({ detail: "rate limit exceeded" }, { status: 429 })
+      )
+    );
+    const err = await fetchVehicles().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(429);
   });
 });
 

@@ -17,6 +17,9 @@ Run inside the backend container or venv:
 
     python -m scripts.backfill_ontime
     python -m scripts.backfill_ontime --batch-size 20000
+
+Long replays can exceed the API's server-side query timeout; disable it for
+this process with STATEMENT_TIMEOUT_MS=0.
 """
 from __future__ import annotations
 

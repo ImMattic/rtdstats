@@ -1,0 +1,38 @@
+# Reference Caddyfile for the Caddy VM (not deployed from this repo — apply
+# manually on the proxy host). Terminates TLS and forwards to the staging /
+# prod VM's frontend on the LAN.
+#
+# Edge protections:
+#   - request body + header/read timeouts bound slow-loris style connections
+#   - dev/legacy surfaces (interactive docs, the arbitrary-file decode
+#     endpoint) are blocked before they ever reach the app
+#   - compression is handled here so the backend containers don't have to
+#
+# Per-IP rate limiting at the edge requires the third-party
+# github.com/mholt/caddy-ratelimit module (xcaddy build). It is optional:
+# the backend's own rate-limit middleware is authoritative.
+
+{
+	servers {
+		timeouts {
+			read_body 10s
+			read_header 5s
+			write 60s # export downloads need headroom
+			idle 2m
+		}
+	}
+}
+
+staging.example.com {
+	encode zstd gzip
+
+	request_body {
+		max_size 1MB
+	}
+
+	@blocked path /api/v1/realtime/decode* /docs* /openapi.json* /redoc*
+	respond @blocked 404
+
+	# Staging VM frontend (Next.js proxies /api/* to the backend internally)
+	reverse_proxy 192.168.1.x:3000
+}
