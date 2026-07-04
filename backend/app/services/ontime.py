@@ -32,7 +32,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from app.config import get_settings
-from app.services.gtfs_schedule import load_trip_shape_dist_schedule
+from app.services.gtfs_schedule import load_stop_arrivals_index, load_trip_shape_dist_schedule
 
 _settings = get_settings()
 _DENVER = ZoneInfo("America/Denver")
@@ -121,16 +121,25 @@ def classify_arrival(
     *,
     radius_m: float | None = None,
     max_delay_s: int | None = None,
+    stop_arrivals: dict[tuple[str, str], list[int]] | None = None,
 ) -> dict[str, Any] | None:
     """Turn one vehicle position into a stop-arrival event, or ``None``.
 
     ``schedule`` maps trip_id → list of 6-tuples:
       (stop_sequence, stop_id, arrival_secs, stop_lat, stop_lon, cumulative_dist_m)
 
+    ``stop_arrivals`` maps (route_id, stop_id) → sorted list of arrival_secs for
+    all trips on that route.  When provided (or loaded from cache when ``None``),
+    arrivals whose delay exceeds the on-time threshold are suppressed if another
+    trip on the same route is scheduled closer to the actual arrival time — the
+    signature of a GTFS-RT trip_id misassignment on high-frequency routes.  Pass
+    an empty dict to disable the check (useful in tests).
+
     Returns ``None`` when the position has no usable trip/coords, the trip isn't
     in the schedule, the vehicle is more than ``radius_m`` off-route (lateral
-    distance), no timepoint is within ``radius_m`` along the route, or the
-    closest schedule match is implausibly far off (``max_delay_s``).
+    distance), no timepoint is within ``radius_m`` along the route, the closest
+    schedule match is implausibly far off (``max_delay_s``), or a better-matching
+    trip exists on the same route at this stop.
 
     ``delay_seconds`` is positive when late, negative when early.
     """
@@ -190,6 +199,22 @@ def classify_arrival(
     if abs(delay_seconds) > max_delay_s:
         return None
 
+    # If the delay exceeds the on-time threshold, check whether another trip on
+    # the same route is scheduled closer to actual_time at this stop.  A closer
+    # competing trip means the GTFS-RT trip_id is likely a misassignment — common
+    # on high-frequency routes where the headway matches the apparent delay.
+    if abs(delay_seconds) > _settings.ontime_threshold_seconds:
+        arrivals = stop_arrivals if stop_arrivals is not None else load_stop_arrivals_index()
+        route_id = vp_row.get("route_id")
+        if route_id:
+            competing = arrivals.get((route_id, stop_id))
+            if competing:
+                midnight = datetime.combine(service_date, time(0, 0), tzinfo=_DENVER)
+                actual_secs = (actual_time.astimezone(_DENVER) - midnight).total_seconds()
+                closest_gap = min(abs(s - actual_secs) for s in competing)
+                if closest_gap < abs(delay_seconds):
+                    return None
+
     return {
         "trip_id": trip_id,
         "route_id": vp_row.get("route_id"),
@@ -228,10 +253,12 @@ def detect_arrivals(
     if not schedule:
         return []
 
+    arrivals_index = load_stop_arrivals_index()
+
     events: list[dict[str, Any]] = []
     for row in vp_rows:
         actual = row.get("timestamp") or default_time
-        event = classify_arrival(row, schedule, actual)
+        event = classify_arrival(row, schedule, actual, stop_arrivals=arrivals_index)
         if event is None:
             continue
         key = (event["trip_id"], event["stop_sequence"], event["service_date"])

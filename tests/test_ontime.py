@@ -181,6 +181,46 @@ def test_detect_arrivals_dedupes_loitering():
         {**_vp(), "timestamp": scheduled},
         {**_vp(), "timestamp": scheduled + timedelta(seconds=30)},  # still at stop
     ]
-    with patch("app.services.ontime.load_trip_shape_dist_schedule", return_value=_SCHEDULE):
+    with patch("app.services.ontime.load_trip_shape_dist_schedule", return_value=_SCHEDULE), \
+         patch("app.services.ontime.load_stop_arrivals_index", return_value={}):
         events = detect_arrivals(rows, scheduled)
     assert len(events) == 1  # one event despite two snapshots near the stop
+
+
+# ── Cross-trip misassignment detection ────────────────────────────────────────
+
+# Build a two-trip schedule: T1 at 08:00, T2 at 08:15 — same route R1, same stop S1.
+_ARR_SECS_T2 = _ARR_SECS + 15 * 60  # 08:15:00
+_TWO_TRIP_INDEX: dict = {("R1", "S1"): sorted([_ARR_SECS, _ARR_SECS_T2])}
+
+
+def test_misassigned_trip_suppressed():
+    # Bus on T1 (08:00) but arrives at exactly T2's scheduled time (08:15).
+    # The GTFS-RT feed still reports trip_id=T1, making it look 15 min late.
+    # A better match (T2) exists in the index → suppress.
+    scheduled_t1 = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    actual = scheduled_t1 + timedelta(seconds=15 * 60)
+    event = classify_arrival(_vp(), _SCHEDULE, actual, stop_arrivals=_TWO_TRIP_INDEX)
+    assert event is None
+
+
+def test_no_better_match_keeps_arrival():
+    # Bus is genuinely late (12 min) but there's no competing trip scheduled
+    # closer to the actual time — keep the arrival.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    actual = scheduled + timedelta(seconds=12 * 60)
+    # Only T1 in the index for this stop — no better match.
+    arrivals_index: dict = {("R1", "S1"): [_ARR_SECS]}
+    event = classify_arrival(_vp(), _SCHEDULE, actual, stop_arrivals=arrivals_index)
+    assert event is not None
+    assert event["delay_seconds"] == 12 * 60
+
+
+def test_within_ontime_threshold_skips_check():
+    # Delay is within the 5-min on-time window — skip the cross-trip check
+    # entirely even if a closer trip exists.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    actual = scheduled + timedelta(seconds=200)  # ~3.3 min late
+    event = classify_arrival(_vp(), _SCHEDULE, actual, stop_arrivals=_TWO_TRIP_INDEX)
+    assert event is not None
+    assert event["delay_seconds"] == 200
