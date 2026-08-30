@@ -12,7 +12,7 @@ const description =
 
 export const metadata: Metadata = {
   metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://rtdstats-staging.configmode.com"
   ),
   title: "RTDstats – Denver RTD Live Tracker",
   description,
@@ -29,11 +29,13 @@ export const metadata: Metadata = {
     type: "website",
     locale: "en_US",
     siteName: "RTDstats",
+    images: [{ url: "/og-image.png", width: 1200, height: 630 }],
   },
   twitter: {
     card: "summary_large_image",
     title: "RTDstats – Denver RTD Live Tracker",
     description,
+    images: ["/og-image.png"],
   },
 };
 

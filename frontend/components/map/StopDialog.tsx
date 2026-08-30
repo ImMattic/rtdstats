@@ -81,13 +81,13 @@ export default function StopDialog({ stop, vehicles, onClose }: Props) {
               {liveVehicles.map((v, i) => {
                 const delay = v.delay_seconds ?? 0;
                 const delayLabel =
-                  delay > 60
+                  delay > 300
                     ? `+${Math.round(delay / 60)}m late`
-                    : delay < -60
+                    : delay < -300
                       ? `${Math.round(delay / 60)}m early`
                       : "On time";
                 const delayColor =
-                  delay > 300 ? "text-red-600" : delay < -60 ? "text-yellow-600" : "text-green-600";
+                  delay > 300 ? "text-red-600" : delay < -300 ? "text-yellow-600" : "text-green-600";
 
                 return (
                   <div key={v.vehicle_id ?? v.trip_id ?? i} className="flex items-center gap-2">

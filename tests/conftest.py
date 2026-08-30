@@ -6,6 +6,8 @@ handled by patching the relevant helpers in individual test modules.
 """
 from __future__ import annotations
 
+import os
+
 from unittest.mock import patch, MagicMock, AsyncMock
 from datetime import datetime, timezone
 
@@ -17,6 +19,10 @@ from sqlalchemy.ext.asyncio import (
     AsyncSession,
 )
 from httpx import AsyncClient, ASGITransport
+
+# Must be set before app.main is imported: the rate-limit middleware is wired
+# at import time, and its per-IP budgets would trip across a full test run.
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
 from app.database import Base, get_db
 from app.main import app
@@ -69,6 +75,7 @@ async def client(db_session: AsyncSession):
 @pytest.fixture(autouse=True)
 def clear_module_caches():
     """Clear module-level response caches before each test."""
+    import app.api.v1.analytics as analytics_mod
     import app.api.v1.realtime as realtime_mod
     import app.api.v1.stats as stats_mod
     import app.services.ingestion as ingestion_mod
@@ -76,6 +83,9 @@ def clear_module_caches():
     import app.services.ontime as ontime_mod
 
     realtime_mod._vehicles_cache.clear()
+    realtime_mod._vehicles_locks.clear()
+    analytics_mod._occ_cache.clear()
+    analytics_mod._occ_locks.clear()
     stats_mod._alerts_cache = None
     stats_mod._trip_endpoints = None
     ingestion_mod._routes_cache = None

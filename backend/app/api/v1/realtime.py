@@ -1,6 +1,7 @@
 """Real-time vehicle position endpoints."""
 from __future__ import annotations
 
+import asyncio
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
@@ -168,7 +169,11 @@ def _enrich(
 # route_id; the key space is bounded by the number of routes (~190).
 
 _CACHE_TTL_SECONDS = 5.0
+# route_id comes from the URL path, so the key space is attacker-controlled —
+# bound the cache and evict expired entries once it grows past real usage.
+_CACHE_MAX_KEYS = 512
 _vehicles_cache: dict[str, tuple[float, RealtimeResponse]] = {}
+_vehicles_locks: dict[str, asyncio.Lock] = {}
 
 
 async def _build_vehicles_response(
@@ -199,13 +204,31 @@ async def _cached_vehicles_response(
     route_id: str | None,
 ) -> RealtimeResponse:
     key = route_id or "__all__"
-    now = time.monotonic()
     hit = _vehicles_cache.get(key)
-    if hit is not None and now - hit[0] < _CACHE_TTL_SECONDS:
+    if hit is not None and time.monotonic() - hit[0] < _CACHE_TTL_SECONDS:
         return hit[1]
-    resp = await _build_vehicles_response(db, route_id)
-    _vehicles_cache[key] = (now, resp)
-    return resp
+
+    # Single-flight: concurrent misses for the same key wait for one rebuild
+    # instead of each running the DISTINCT ON scan.
+    lock = _vehicles_locks.setdefault(key, asyncio.Lock())
+    async with lock:
+        hit = _vehicles_cache.get(key)
+        if hit is not None and time.monotonic() - hit[0] < _CACHE_TTL_SECONDS:
+            return hit[1]
+        resp = await _build_vehicles_response(db, route_id)
+        if len(_vehicles_cache) >= _CACHE_MAX_KEYS:
+            _evict_expired()
+        _vehicles_cache[key] = (time.monotonic(), resp)
+        return resp
+
+
+def _evict_expired() -> None:
+    now = time.monotonic()
+    for k in [k for k, (t, _) in _vehicles_cache.items() if now - t >= _CACHE_TTL_SECONDS]:
+        _vehicles_cache.pop(k, None)
+        lock = _vehicles_locks.get(k)
+        if lock is not None and not lock.locked():
+            _vehicles_locks.pop(k, None)
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────

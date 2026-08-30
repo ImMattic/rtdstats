@@ -4,10 +4,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.database import get_db
 from app.models.vehicle_position import VehiclePosition
 from app.models.trip_update import TripUpdate
@@ -15,6 +16,8 @@ from app.schemas.vehicle_position import VehiclePositionHistoryOut
 from app.services.gtfs_decoder import load_gtfs_static_data
 
 router = APIRouter(prefix="/historical", tags=["historical"])
+
+_settings = get_settings()
 
 # Pagination total is capped to keep wide-range queries cheap. If the true count
 # exceeds this the UI simply shows "many pages" rather than an exact figure.
@@ -33,12 +36,23 @@ async def get_historical_vehicles(
         datetime | None,
         Query(description="End timestamp (ISO 8601, default: now)"),
     ] = None,
-    limit: Annotated[int, Query(ge=1, le=10_000)] = 200,
+    limit: Annotated[int, Query(ge=1, le=1_000)] = 200,
     page: Annotated[int, Query(ge=1)] = 1,
 ) -> dict:
     now = datetime.now(tz=timezone.utc)
     start = start or (now - timedelta(hours=24))
     end = end or now
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+    if start >= end:
+        raise HTTPException(status_code=422, detail="start must be before end")
+    if end - start > timedelta(days=_settings.historical_max_span_days):
+        raise HTTPException(
+            status_code=422,
+            detail=f"time range too large: max {_settings.historical_max_span_days} days",
+        )
     offset = (page - 1) * limit
 
     stmt = (

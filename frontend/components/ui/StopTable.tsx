@@ -41,7 +41,7 @@ export default function StopTable({ stops, className }: Props) {
                 className={`px-3 py-2 text-right font-mono ${
                   (s.delay_seconds ?? 0) > 300
                     ? "text-red-600"
-                    : (s.delay_seconds ?? 0) < -60
+                    : (s.delay_seconds ?? 0) < -300
                       ? "text-yellow-600"
                       : "text-green-700"
                 }`}

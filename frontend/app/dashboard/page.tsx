@@ -287,6 +287,7 @@ export default function DashboardPage() {
         <KpiCard
           title="On-Time Rate"
           value={ov ? `${ov.on_time_pct.value.toFixed(1)}%` : "—"}
+          subtitle="± 5 mins"
           accentColor={ov ? onTimeColor(ov.on_time_pct.value) : undefined}
         />
         <KpiCard
@@ -314,7 +315,7 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
-          <SectionHeading title="When Is Service Reliable?" subtitle="On-time % by hour × day of week (Denver time)" />
+          <SectionHeading title="Service Reliability" />
           {heatmap.isLoading ? <LoadingSpinner /> : <Heatmap cells={heatmap.data?.cells ?? []} metric="ontime" onCellClick={handleHeatmapCellClick} />}
         </Card>
         <Card>
@@ -340,7 +341,7 @@ export default function DashboardPage() {
           )}
         </Card>
         <Card>
-          <SectionHeading title="Worst Stops by Delay" subtitle="Where riders wait longest past schedule" />
+          <SectionHeading title="Worst Stops by Delay" />
           {worstStops.isLoading ? <LoadingSpinner /> : <WorstStopsTable stops={worstStops.data?.stops ?? []} />}
         </Card>
       </div>

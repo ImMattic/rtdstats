@@ -96,4 +96,60 @@ export function formatStatusLabel(key: string | null | undefined): string {
   if (!key) return "";
   const words = key.toLowerCase().split("_");
   return words[0].charAt(0).toUpperCase() + words[0].slice(1) + (words.length > 1 ? ` ${words.slice(1).join(" ")}` : "");
+/** Compass bearing (deg, 0=N) from point A→B. Returns null if the points coincide. */
+function bearingBetween(lat1: number, lon1: number, lat2: number, lon2: number): number | null {
+  if (lat1 === lat2 && lon1 === lon2) return null;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const phi1 = toRad(lat1);
+  const phi2 = toRad(lat2);
+  const dLon = toRad(lon2 - lon1);
+  const y = Math.sin(dLon) * Math.cos(phi2);
+  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLon);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
+interface TrackSample {
+  latitude: number;
+  longitude: number;
+  bearing: number | null;
+  timestamp: string;
+}
+
+/**
+ * Find where the vehicle was at `targetIso` by linearly interpolating between the
+ * two bracketing position samples. Bearing comes from the direction of travel
+ * across that segment (falling back to a reported bearing when the vehicle is
+ * stationary). Clamps to the first/last sample when the target falls outside the
+ * recorded track. Returns null when no usable samples exist.
+ */
+export function interpolateTrackPosition(
+  positions: TrackSample[],
+  targetIso: string,
+): { lat: number; lon: number; bearing: number | null } | null {
+  const samples = positions
+    .filter((p) => p.latitude != null && p.longitude != null)
+    .map((p) => ({ ...p, t: new Date(p.timestamp).getTime() }))
+    .sort((a, b) => a.t - b.t);
+  if (samples.length === 0) return null;
+
+  const target = new Date(targetIso).getTime();
+  const first = samples[0];
+  const last = samples[samples.length - 1];
+
+  if (target <= first.t) return { lat: first.latitude, lon: first.longitude, bearing: first.bearing };
+  if (target >= last.t) return { lat: last.latitude, lon: last.longitude, bearing: last.bearing };
+
+  for (let i = 0; i < samples.length - 1; i++) {
+    const a = samples[i];
+    const b = samples[i + 1];
+    if (target >= a.t && target <= b.t) {
+      const frac = b.t === a.t ? 0 : (target - a.t) / (b.t - a.t);
+      const lat = a.latitude + (b.latitude - a.latitude) * frac;
+      const lon = a.longitude + (b.longitude - a.longitude) * frac;
+      const bearing =
+        bearingBetween(a.latitude, a.longitude, b.latitude, b.longitude) ?? a.bearing ?? b.bearing;
+      return { lat, lon, bearing };
+    }
+  }
+  return null;
 }

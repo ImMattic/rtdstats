@@ -1,12 +1,15 @@
 "use client";
 import dynamic from "next/dynamic";
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useVehicleTrip } from "@/lib/hooks";
+import { usePlayback } from "@/lib/usePlayback";
 import { Card, SectionHeading } from "@/components/ui/Card";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import TripPlaybackControls from "@/components/map/TripPlaybackControls";
 import { formatDelay, formatDelayMin, routeColor } from "@/lib/utils";
+import type { VehicleStopEvent } from "@/lib/types";
 
 const VehicleTripMap = dynamic(() => import("@/components/map/VehicleTripMap"), {
   ssr: false,
@@ -25,15 +28,15 @@ const OCCUPANCY_LABELS: Record<string, string> = {
 };
 
 function delayClass(seconds: number): string {
-  if (seconds > 120) return "text-red-600 font-semibold";
-  if (seconds < -120) return "text-blue-600 font-semibold";
+  if (seconds > 300) return "text-red-600 font-semibold";
+  if (seconds < -300) return "text-blue-600 font-semibold";
   return "text-green-600";
 }
 
 function delayBadge(seconds: number): string {
-  if (seconds > 300) return "bg-red-100 text-red-700";
-  if (seconds > 120) return "bg-orange-100 text-orange-700";
-  if (seconds < -120) return "bg-blue-100 text-blue-700";
+  if (seconds > 600) return "bg-red-100 text-red-700";
+  if (seconds > 300) return "bg-orange-100 text-orange-700";
+  if (seconds < -300) return "bg-blue-100 text-blue-700";
   return "bg-green-100 text-green-700";
 }
 
@@ -47,9 +50,12 @@ function StatBox({ label, value, sub }: { label: string; value: string; sub?: st
   );
 }
 
+const RAIL_TYPES = new Set(["0", "1", "2"]);
+
 function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
   const searchParams = useSearchParams();
   const tripId = searchParams.get("trip_id") ?? undefined;
+  const [hoveredStop, setHoveredStop] = useState<VehicleStopEvent | null>(null);
   // start/end bound the full extent of this single trip leg (set by the list).
   const start = searchParams.get("start") ?? undefined;
   const end = searchParams.get("end") ?? undefined;
@@ -82,6 +88,13 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
   const tripEnd = data?.positions.length
     ? data.positions[data.positions.length - 1].timestamp
     : end;
+
+  // Playback clock for the Trip Track map (epoch ms bounds from the position track).
+  const playbackStartMs = data?.positions.length ? Date.parse(data.positions[0].timestamp) : 0;
+  const playbackEndMs = data?.positions.length
+    ? Date.parse(data.positions[data.positions.length - 1].timestamp)
+    : 0;
+  const playback = usePlayback(playbackStartMs, playbackEndMs);
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 text-gray-900">
@@ -147,7 +160,7 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
             <StatBox
               label="On-Time Rate"
               value={data.on_time_pct !== null ? `${data.on_time_pct}%` : "—"}
-              sub="±2 min window"
+              sub="±5 min window"
             />
             <StatBox
               label="Occupancy"
@@ -164,14 +177,7 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* Stop timeline */}
             <Card className="lg:col-span-1">
-              <SectionHeading
-                title="Stop Arrival Timeline"
-                subtitle={
-                  data.stops.length
-                    ? `${data.stops.length} stops · green = on time, red = late, blue = early`
-                    : "No stop arrival data recorded for this trip"
-                }
-              />
+              <SectionHeading title="Stop Arrival Timeline" />
               {data.stops.length === 0 ? (
                 <p className="py-6 text-center text-sm text-gray-500">
                   Stop arrival events are derived from geofencing. Data may not be available for
@@ -194,7 +200,9 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
                       {data.stops.map((stop) => (
                         <tr
                           key={`${stop.stop_id}-${stop.stop_sequence}`}
-                          className="hover:bg-gray-50"
+                          className="hover:bg-gray-50 cursor-default"
+                          onMouseEnter={() => setHoveredStop(stop)}
+                          onMouseLeave={() => setHoveredStop(null)}
                         >
                           <td className="px-3 py-2 text-gray-400">{stop.stop_sequence}</td>
                           <td className="px-3 py-2 font-medium">
@@ -234,20 +242,33 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
             <Card className="lg:col-span-1">
               <SectionHeading
                 title="Trip Track"
-                subtitle="Position history · stop markers colored by delay"
+                subtitle="Press play to replay the trip, or hover a stop for its scheduled position"
               />
               {data.positions.length === 0 && data.stops.length === 0 ? (
                 <p className="py-6 text-center text-sm text-gray-500">
                   No position data available.
                 </p>
               ) : (
-                <div className="h-[420px] overflow-hidden rounded border border-gray-200">
-                  <VehicleTripMap
-                    positions={data.positions}
-                    stops={data.stops}
-                    routeColor={data.route_color ?? "3b82f6"}
-                  />
-                </div>
+                <>
+                  <div className="h-[420px] overflow-hidden rounded border border-gray-200">
+                    <VehicleTripMap
+                      positions={data.positions}
+                      stops={data.stops}
+                      routeColor={data.route_color ?? "3b82f6"}
+                      isRail={RAIL_TYPES.has(data.route_type ?? "")}
+                      highlightStop={hoveredStop}
+                      playbackMs={playback.active ? playback.currentMs : null}
+                    />
+                  </div>
+                  {data.positions.length >= 2 && (
+                    <TripPlaybackControls
+                      playback={playback}
+                      startMs={playbackStartMs}
+                      endMs={playbackEndMs}
+                      routeColor={data.route_color ?? "3b82f6"}
+                    />
+                  )}
+                </>
               )}
             </Card>
           </div>

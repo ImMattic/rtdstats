@@ -46,6 +46,11 @@ class StopArrivalEvent(Base):
     # Partition key for the hypertable (always equals actual_time).
     timestamp: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
 
+    # Actual vehicle position at detection time (nullable for pre-005 rows).
+    actual_lat: Mapped[float | None] = mapped_column(nullable=True)
+    actual_lon: Mapped[float | None] = mapped_column(nullable=True)
+    actual_bearing: Mapped[float | None] = mapped_column(nullable=True)
+
     __table_args__ = (
         Index(
             "ix_sae_trip_stop_date",

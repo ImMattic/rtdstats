@@ -15,8 +15,8 @@ const STATUS_LABELS: Record<number, string> = {
 
 export default function VehicleDialog({ vehicle: v, onClose, isStuck = false }: Props) {
   const delay = v.delay_seconds ?? 0;
-  const isLate = delay > 120;
-  const isEarly = delay < -120;
+  const isLate = delay > 300;
+  const isEarly = delay < -300;
   const delayText = (isLate || isEarly) ? formatDelay(v.delay_seconds) : "";
 
   return (
