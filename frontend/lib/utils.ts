@@ -91,6 +91,11 @@ export function formatHour(hour: number): string {
 
 export const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+/** GTFS-realtime status/occupancy key (e.g. "IN_TRANSIT_TO") → "In transit to". */
+export function formatStatusLabel(key: string | null | undefined): string {
+  if (!key) return "";
+  const words = key.toLowerCase().split("_");
+  return words[0].charAt(0).toUpperCase() + words[0].slice(1) + (words.length > 1 ? ` ${words.slice(1).join(" ")}` : "");
 /** Compass bearing (deg, 0=N) from point A→B. Returns null if the points coincide. */
 function bearingBetween(lat1: number, lon1: number, lat2: number, lon2: number): number | null {
   if (lat1 === lat2 && lon1 === lon2) return null;
