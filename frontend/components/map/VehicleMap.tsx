@@ -292,7 +292,7 @@ export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, 
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        url={`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png${cartoApiKey ? `?api_key=${cartoApiKey}` : ""}`}
+        url={`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png${cartoApiKey ? `?key=${cartoApiKey}` : ""}`}
         subdomains="abcd"
         maxZoom={19}
       />

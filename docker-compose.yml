@@ -73,6 +73,7 @@ services:
       # Server-side proxy target — Next.js rewrites /api/* to this URL.
       # Uses the Compose service name; never exposed to the browser.
       BACKEND_URL: http://backend:8000
+      CARTO_API_KEY: ${CARTO_API_KEY:-}
     depends_on:
       - backend
     deploy:
