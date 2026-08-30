@@ -44,8 +44,8 @@ jobs:
           file: backend/Dockerfile
           push: true
           tags: ${{ steps.tags.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
 
   build-frontend:
     name: Build & Push Frontend
@@ -82,5 +82,5 @@ jobs:
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           build-args: BACKEND_URL=http://backend:8000
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
