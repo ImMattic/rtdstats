@@ -5,7 +5,7 @@ import { memo, useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, Marker, Tooltip, Polyline, CircleMarker, useMap, useMapEvents } from "react-leaflet";
 import type { VehiclePosition, RailShape, StopInfo } from "@/lib/types";
 import { useRailShapes, useRouteShape, useRouteStops } from "@/lib/hooks";
-import { headwayColor, formatStatusLabel } from "@/lib/utils";
+import { headwayColor } from "@/lib/utils";
 
 const DENVER_CENTER: [number, number] = [39.7392, -104.9903];
 const DEFAULT_ZOOM = 11;
@@ -235,7 +235,7 @@ const VehicleMarkers = memo(function VehicleMarkers({ vehicles, onVehicleClick, 
                 <span className="font-semibold">{v.route_short_name}</span>
                 {v.vehicle_label ? ` · #${v.vehicle_label}` : ""}
                 {v.stop_name ? (
-                  <><br />{formatStatusLabel(v.current_status_label)} {v.stop_name}</>
+                  <><br />{v.current_status_label ?? ""} {v.stop_name}</>
                 ) : null}
               </Tooltip>
             </Marker>
