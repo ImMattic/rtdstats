@@ -5,13 +5,18 @@
 # Cron (every minute):
 #   * * * * * /opt/rtdstats/scripts/staging-update.sh >> /var/log/rtdstats-update.log 2>&1
 #
-# Why the git handling matters: gtfs-static/ is bind-mounted into the backend
-# (not baked into the image) and the backend caches those CSVs in memory for the
-# life of the process. A `git pull` that refreshes the feeds changes neither an
-# image digest nor the Compose config, so `docker compose up -d` alone will NOT
-# pick it up -- the backend keeps serving stale routes (e.g. commuter rail shows
-# the raw route_id "113B" instead of "B"). This script force-recreates the
-# backend whenever gtfs-static/ changes.
+# The checkout at $REPO is treated as a DISPOSABLE MIRROR of origin/$BRANCH:
+# every run does `fetch` + `reset --hard` + `clean`, so any local edits or stray
+# files on the VM are discarded and the box always reflects the repo. (Ignored
+# files such as deployment/.env are preserved -- see the `git clean` line.)
+#
+# Why the gtfs-static handling matters: gtfs-static/ is bind-mounted into the
+# backend (not baked into the image) and the backend caches those CSVs in memory
+# for the life of the process. A repo update that only refreshes the feeds
+# changes neither an image digest nor the Compose config, so `docker compose
+# up -d` alone will NOT pick it up -- the backend keeps serving stale routes
+# (e.g. commuter rail shows the raw route_id "113B" instead of "B"). This script
+# force-recreates the backend whenever gtfs-static/ changes.
 
 set -eu
 
@@ -26,6 +31,7 @@ fi
 PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 
 REPO="/opt/rtdstats"
+BRANCH="staging"
 COMPOSE_FILE="$REPO/deployment/docker-compose.staging.yml"
 ENV_FILE="$REPO/deployment/.env"
 BACKEND_IMAGE="aggiematt/rtdstats-backend:staging"
@@ -36,16 +42,29 @@ log()    { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 dc()     { docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"; }
 digest() { docker inspect --format='{{index .RepoDigests 0}}' "$1" 2>/dev/null || echo none; }
 
-# ── 1. Sync the checkout (fast-forward only; surface drift loudly) ─────────
-GIT_BEFORE=$(git -C "$REPO" rev-parse HEAD)
-if ! git -C "$REPO" pull --ff-only --quiet; then
-    log "ERROR: 'git -C $REPO pull --ff-only' failed -- checkout has diverged or"
-    log "       has local edits to tracked files. NOTHING deployed."
-    log "       Fix on the VM:  git -C $REPO status   (then stash/reset, or"
-    log "       'git -C $REPO reset --hard @{u}' to make it a strict mirror)."
+# ── 1. Force the checkout to match origin/$BRANCH exactly ─────────────────
+# Local edits, staged changes and untracked files are ALL discarded every run.
+# Ignored files (deployment/.env, venv/, ...) are kept -- add -x to `git clean`
+# below if you want a totally pristine tree.
+if ! git -C "$REPO" fetch --quiet --prune origin; then
+    log "ERROR: git fetch failed (network / auth / remote down). NOTHING deployed."
     exit 1
 fi
+if ! git -C "$REPO" rev-parse --verify --quiet "origin/$BRANCH" >/dev/null; then
+    log "ERROR: origin/$BRANCH not found -- set BRANCH at the top of this script."
+    exit 1
+fi
+
+GIT_BEFORE=$(git -C "$REPO" rev-parse HEAD)
+DISCARDED=$(git -C "$REPO" status --porcelain)
+git -C "$REPO" reset --hard --quiet "origin/$BRANCH"
+git -C "$REPO" clean -ffd --quiet
 GIT_AFTER=$(git -C "$REPO" rev-parse HEAD)
+
+if [ -n "$DISCARDED" ]; then
+    log "Discarded local VM changes to match origin/$BRANCH:"
+    printf '%s\n' "$DISCARDED" | sed 's/^/  /'
+fi
 
 REPO_CHANGED=0
 GTFS_CHANGED=0
