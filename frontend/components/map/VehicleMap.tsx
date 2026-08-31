@@ -5,7 +5,6 @@ import { memo, useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, Marker, Tooltip, Polyline, CircleMarker, useMap, useMapEvents } from "react-leaflet";
 import type { VehiclePosition, RailShape, StopInfo } from "@/lib/types";
 import { useRailShapes, useRouteShape, useRouteStops } from "@/lib/hooks";
-
 import { headwayColor, formatStatusLabel } from "@/lib/utils";
 import { createVehicleIcon, iconPx } from "./vehicleIcon";
 
