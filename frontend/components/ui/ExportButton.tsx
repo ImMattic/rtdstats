@@ -20,13 +20,13 @@ export default function ExportButton({ routeId, start, end }: Props) {
     <div className="flex gap-2">
       <button
         onClick={() => handleExport("csv")}
-        className="rounded bg-rtd-blue px-3 py-1.5 text-sm font-medium text-white hover:bg-rtd-blue/90 transition-colors"
+        className="press rounded-lg border border-line bg-card px-3 py-1.5 text-sm font-medium text-fg hover:border-accent hover:text-accent"
       >
         Export CSV
       </button>
       <button
         onClick={() => handleExport("json")}
-        className="rounded bg-rtd-blue px-3 py-1.5 text-sm font-medium text-white hover:bg-rtd-blue/90 transition-colors"
+        className="press rounded-lg border border-line bg-card px-3 py-1.5 text-sm font-medium text-fg hover:border-accent hover:text-accent"
       >
         Export JSON
       </button>

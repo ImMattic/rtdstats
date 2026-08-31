@@ -31,20 +31,18 @@ export default function StopDialog({ stop, vehicles, onClose }: Props) {
   const sortedRoutes = [...railRoutes, ...busRoutes];
 
   return (
-    <div className="animate-dialog-in absolute bottom-6 left-1/2 z-[9999] w-80 -translate-x-1/2 rounded-xl bg-white/95 shadow-2xl ring-1 ring-black/5 backdrop-blur-sm">
+    <div className="animate-dialog-in absolute bottom-6 left-1/2 z-[9999] w-80 -translate-x-1/2 overflow-hidden rounded-2xl bg-card/95 shadow-card ring-1 ring-line backdrop-blur-md">
       {/* Header */}
-      <div className="flex items-start justify-between rounded-t-xl bg-gray-900 px-4 py-3 text-white">
-        <div className="flex-1 min-w-0">
+      <div className="flex items-start justify-between bg-card-muted px-4 py-3 text-fg">
+        <div className="min-w-0 flex-1">
           <h2 className="text-base font-bold leading-tight">{stop.stop_name}</h2>
-          {stop.stop_desc && (
-            <p className="text-xs text-gray-400 mt-0.5">{stop.stop_desc}</p>
-          )}
-          <p className="text-xs text-gray-500 mt-0.5">Stop #{stop.stop_id}</p>
+          {stop.stop_desc && <p className="mt-0.5 text-xs text-fg-muted">{stop.stop_desc}</p>}
+          <p className="mt-0.5 text-xs text-fg-subtle">Stop #{stop.stop_id}</p>
         </div>
         <button
           onClick={onClose}
           aria-label="Close"
-          className="ml-2 mt-0.5 shrink-0 rounded-full p-1 hover:bg-white/20 transition-colors"
+          className="press ml-2 mt-0.5 shrink-0 rounded-full p-1 text-fg-muted hover:bg-fg/10 hover:text-fg"
         >
           <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
             <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
@@ -53,17 +51,19 @@ export default function StopDialog({ stop, vehicles, onClose }: Props) {
       </div>
 
       {/* Body */}
-      <div className="px-4 py-3 space-y-3 text-sm text-gray-900">
+      <div className="space-y-3 px-4 py-3 text-sm text-fg">
         {/* Line badges */}
         {sortedRoutes.length > 0 && (
           <div>
-            <p className="text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Lines serving this stop</p>
+            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-fg-subtle">
+              Lines serving this stop
+            </p>
             <div className="flex flex-wrap gap-1.5">
               {sortedRoutes.map((r) => (
                 <span
                   key={r.route_id}
                   title={r.long_name}
-                  className="inline-flex items-center rounded px-2 py-0.5 text-xs font-bold text-white leading-tight"
+                  className="inline-flex items-center rounded px-2 py-0.5 text-xs font-bold leading-tight text-white"
                   style={{ backgroundColor: `#${r.color || "888888"}` }}
                 >
                   {r.short_name}
@@ -75,7 +75,9 @@ export default function StopDialog({ stop, vehicles, onClose }: Props) {
 
         {/* Live vehicles at this stop */}
         <div>
-          <p className="text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Live vehicles</p>
+          <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-fg-subtle">
+            Live vehicles
+          </p>
           {liveVehicles.length > 0 ? (
             <div className="space-y-1.5">
               {liveVehicles.map((v, i) => {
@@ -87,7 +89,7 @@ export default function StopDialog({ stop, vehicles, onClose }: Props) {
                       ? `${Math.round(delay / 60)}m early`
                       : "On time";
                 const delayColor =
-                  delay > 300 ? "text-red-600" : delay < -300 ? "text-yellow-600" : "text-green-600";
+                  delay > 300 ? "text-danger" : delay < -300 ? "text-warn" : "text-ok";
 
                 return (
                   <div key={v.vehicle_id ?? v.trip_id ?? i} className="flex items-center gap-2">
@@ -97,7 +99,7 @@ export default function StopDialog({ stop, vehicles, onClose }: Props) {
                     >
                       {v.route_short_name}
                     </span>
-                    <span className="text-xs text-gray-600 truncate">
+                    <span className="truncate text-xs text-fg-muted">
                       {STATUS_LABELS[v.current_status ?? -1] ?? "Nearby"}
                       {v.vehicle_label ? ` · #${v.vehicle_label}` : ""}
                     </span>
@@ -109,17 +111,17 @@ export default function StopDialog({ stop, vehicles, onClose }: Props) {
               })}
             </div>
           ) : (
-            <p className="text-xs text-gray-400">No vehicles currently detected at this stop.</p>
+            <p className="text-xs text-fg-subtle">No vehicles currently detected at this stop.</p>
           )}
         </div>
 
         {/* Links */}
-        <div className="pt-1.5 border-t border-gray-100 flex flex-wrap gap-x-3 gap-y-1">
+        <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-line pt-1.5">
           <a
             href={`https://app.rtd-denver.com/nextride/stop/${stop.stop_id}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-rtd-blue hover:underline"
+            className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
           >
             RTD NextRide
             <ExternalLinkIcon />

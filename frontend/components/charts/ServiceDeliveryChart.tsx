@@ -24,7 +24,7 @@ export default function ServiceDeliveryChart({ data, limit = 20 }: Props) {
 
   if (!routes.length) {
     return (
-      <p className="py-8 text-center text-sm text-gray-500">
+      <p className="py-8 text-center text-sm text-fg-muted">
         No service-delivery data yet (needs both observed trips and a scheduled baseline).
       </p>
     );
@@ -34,8 +34,8 @@ export default function ServiceDeliveryChart({ data, limit = 20 }: Props) {
     <div className="space-y-2">
       {routes.map((r) => (
         <div key={r.route_id} className="flex items-center gap-2 text-xs">
-          <span className="w-10 shrink-0 text-right font-bold text-gray-900">{r.route_short_name}</span>
-          <div className="relative h-5 flex-1 overflow-hidden rounded bg-gray-100">
+          <span className="w-10 shrink-0 text-right font-bold text-fg">{r.route_short_name}</span>
+          <div className="relative h-5 flex-1 overflow-hidden rounded bg-card-muted">
             <div
               className="h-full rounded transition-all"
               style={{ width: `${Math.min(100, r.delivered_pct)}%`, backgroundColor: barColor(r.delivered_pct) }}

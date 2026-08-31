@@ -7,13 +7,13 @@ import type { StopInfo, StuckAlert, VehiclePosition } from "@/lib/types";
 import VehicleDialog from "@/components/map/VehicleDialog";
 import StopDialog from "@/components/map/StopDialog";
 import VehicleSearch from "@/components/map/VehicleSearch";
-import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import TransitLoader from "@/components/ui/TransitLoader";
 import { headwayColor } from "@/lib/utils";
 
 // Leaflet must be loaded client-side only
 const VehicleMap = dynamic(() => import("@/components/map/VehicleMap"), {
   ssr: false,
-  loading: () => <LoadingSpinner label="Loading map…" />,
+  loading: () => <TransitLoader label="Loading map" />,
 });
 
 function HomePageInner() {
@@ -97,9 +97,15 @@ function HomePageInner() {
   return (
     <div className="flex flex-1 flex-col">
       {/* Status bar */}
-      <div className="flex items-center justify-between bg-surface-card border-b border-surface-border px-4 py-2 text-sm text-gray-300">
+      <div className="flex items-center justify-between border-b border-line bg-card px-4 py-2 text-sm text-fg-muted">
         <div className="flex items-center gap-4">
-          <span className="font-medium">
+          <span className="flex items-center gap-2 font-medium text-fg">
+            <span
+              className={`h-2 w-2 rounded-full ${
+                isError ? "bg-danger" : isLoading ? "bg-warn" : "bg-ok"
+              }`}
+              style={!isLoading && !isError ? { animation: "pulse-ring 2s ease-in-out infinite" } : undefined}
+            />
             {isLoading
               ? "Connecting…"
               : isError
@@ -107,14 +113,14 @@ function HomePageInner() {
                 : `${vehicles.length} vehicles · ${totalRoutes} routes`}
           </span>
           {data && (
-            <span className="text-gray-400 text-xs">
+            <span className="text-xs text-fg-subtle">
               Updated {new Date(dataUpdatedAt).toLocaleTimeString()}
             </span>
           )}
         </div>
 
         {/* Frequency legend */}
-        <div className="hidden sm:flex items-center gap-2 text-xs text-gray-500">
+        <div className="hidden items-center gap-2 text-xs text-fg-subtle sm:flex">
           <span>Headway:</span>
           {(
             [
@@ -141,9 +147,9 @@ function HomePageInner() {
       <div className="relative" style={{ height: "calc(100vh - 10rem)" }}>
         {isError ? (
           <div className="flex h-full items-center justify-center">
-            <div className="text-center text-gray-500">
-              <p className="text-lg font-medium">Backend unreachable</p>
-              <p className="text-sm mt-1">Make sure the API server is running.</p>
+            <div className="text-center text-fg-muted">
+              <p className="text-lg font-medium text-fg">Backend unreachable</p>
+              <p className="mt-1 text-sm">Make sure the API server is running.</p>
             </div>
           </div>
         ) : (
@@ -189,7 +195,7 @@ function HomePageInner() {
 
 export default function HomePage() {
   return (
-    <Suspense fallback={<LoadingSpinner label="Loading map…" />}>
+    <Suspense fallback={<TransitLoader label="Loading map" />}>
       <HomePageInner />
     </Suspense>
   );

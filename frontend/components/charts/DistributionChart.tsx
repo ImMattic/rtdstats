@@ -11,6 +11,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import type { DistributionBin } from "@/lib/types";
+import { useChartTheme } from "@/lib/useChartTheme";
 
 interface Props {
   bins: DistributionBin[];
@@ -27,26 +28,37 @@ const BIN_COLORS: Record<string, string> = {
 };
 
 function DistributionChart({ bins }: Props) {
+  const theme = useChartTheme();
+
   if (!bins.length || bins.every((b) => b.count === 0)) {
-    return <p className="py-8 text-center text-sm text-gray-500">No delay data yet.</p>;
+    return <p className="py-8 text-center text-sm text-fg-muted">No delay data yet.</p>;
   }
 
   return (
     <ResponsiveContainer width="100%" height={240}>
       <BarChart data={bins} margin={{ left: 4, right: 8, top: 8 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} vertical={false} />
         <XAxis
           dataKey="label"
-          tick={{ fontSize: 9, fill: "#64748b" }}
+          tick={{ fontSize: 9, fill: theme.axis }}
           interval={0}
           angle={-12}
           textAnchor="end"
           height={48}
         />
-        <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11, fill: "#4b5563" }} width={36} />
+        <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11, fill: theme.text }} width={36} />
         <Tooltip
           formatter={(value: number) => [`${value.toFixed(1)}%`, "Share of arrivals"]}
-          contentStyle={{ fontSize: 12, borderRadius: 8 }}
+          contentStyle={{
+            fontSize: 12,
+            borderRadius: 8,
+            background: theme.tooltipBg,
+            border: `1px solid ${theme.tooltipBorder}`,
+            color: theme.tooltipText,
+          }}
+          labelStyle={{ color: theme.tooltipText }}
+          itemStyle={{ color: theme.tooltipText }}
+          cursor={{ fill: theme.grid, opacity: 0.4 }}
         />
         <Bar dataKey="pct" radius={[4, 4, 0, 0]}>
           {bins.map((b) => (

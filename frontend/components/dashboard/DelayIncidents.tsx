@@ -19,7 +19,7 @@ function mapHref(a: StuckAlert): string | null {
 export default function DelayIncidents({ alerts }: Props) {
   if (!alerts.length) {
     return (
-      <p className="text-sm text-green-700 bg-green-50 rounded-lg px-4 py-3">
+      <p className="status-ok rounded-lg px-4 py-3 text-sm">
         No stuck vehicles detected.
       </p>
     );
@@ -30,28 +30,28 @@ export default function DelayIncidents({ alerts }: Props) {
       {alerts.map((a, i) => {
         const href = mapHref(a);
         return (
-          <li key={i} className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+          <li key={i} className="status-danger rounded-lg px-4 py-3">
             <div className="flex items-center justify-between">
               <div>
-                <span className="font-bold text-red-800">{a.route_short_name}</span>
+                <span className="font-bold">{a.route_short_name}</span>
                 {a.vehicle_label && (
-                  <span className="ml-2 text-sm text-red-700">#{a.vehicle_label}</span>
+                  <span className="ml-2 text-sm opacity-90">#{a.vehicle_label}</span>
                 )}
                 {a.stop_name && (
-                  <span className="ml-2 text-sm text-red-600">@ {a.stop_name}</span>
+                  <span className="ml-2 text-sm opacity-80">@ {a.stop_name}</span>
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <span className="rounded-full bg-red-200 px-2 py-0.5 text-xs font-semibold text-red-800 min-w-[4.5rem] text-center tabular-nums">
+                <span className="min-w-[4.5rem] rounded-full bg-danger/20 px-2 py-0.5 text-center text-xs font-semibold tabular-nums">
                   {a.minutes_stuck} min
                 </span>
                 {href && (
                   <Link
                     href={href}
                     title="See on Map"
-                    className="text-gray-600 hover:text-gray-900 transition-colors flex-shrink-0"
+                    className="press flex-shrink-0 opacity-70 transition-opacity hover:opacity-100"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
                       <circle cx="12" cy="12" r="3" />
                       <path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
                       <circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" strokeWidth="2" />
@@ -60,7 +60,7 @@ export default function DelayIncidents({ alerts }: Props) {
                 )}
               </div>
             </div>
-            <p className="mt-1 text-xs text-red-500">
+            <p className="mt-1 text-xs opacity-75">
               Stuck since {formatDateTime(a.stuck_since)}
             </p>
           </li>

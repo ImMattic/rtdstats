@@ -26,7 +26,7 @@ import ScorecardTable from "@/components/charts/ScorecardTable";
 import HeadwayChart from "@/components/charts/HeadwayChart";
 import OccupancyChart from "@/components/charts/OccupancyChart";
 import WorstStopsTable from "@/components/charts/WorstStopsTable";
-import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { ChartSkeleton, TableSkeleton } from "@/components/ui/Skeleton";
 import { formatDelayMin, onTimeColor } from "@/lib/utils";
 
 const DAY_OPTIONS = [1, 7];
@@ -159,20 +159,20 @@ export default function DashboardPage() {
     routes.data?.routes.find((r) => r.route_id === routeId)?.short_name;
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 text-gray-900">
+    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 text-fg">
       {/* Header + controls */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Transit Performance Dashboard</h1>
-          <p className="text-sm text-gray-500">
+        <div className="animate-fade-up">
+          <h1 className="font-display text-2xl font-bold text-fg">Transit Performance Dashboard</h1>
+          <p className="text-sm text-fg-muted">
             Reliability, frequency, service delivery &amp; demand across RTD
             {selectedRouteName ? ` · Route ${selectedRouteName}` : " · all routes"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <div ref={routeComboRef} className="relative">
-            <div className="flex items-center gap-1 rounded border border-gray-200 px-2 py-1.5 text-sm focus-within:ring-2 focus-within:ring-rtd-blue bg-white">
-              <svg className="h-3.5 w-3.5 shrink-0 text-gray-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <div className="flex items-center gap-1 rounded-lg border border-line bg-card px-2 py-1.5 text-sm text-fg focus-within:ring-2 focus-within:ring-accent">
+              <svg className="h-3.5 w-3.5 shrink-0 text-fg-subtle" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                 <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clipRule="evenodd" />
               </svg>
               <input
@@ -181,13 +181,13 @@ export default function DashboardPage() {
                 placeholder={selectedRouteName ? `Route ${selectedRouteName}` : "All routes"}
                 onChange={(e) => setRouteSearch(e.target.value)}
                 onFocus={() => setRouteDropdownOpen(true)}
-                className="w-44 bg-transparent outline-none placeholder-gray-700"
+                className="w-44 bg-transparent text-fg outline-none placeholder:text-fg-subtle"
               />
               {routeId && (
                 <button
                   onClick={() => { setRouteId(""); setRouteSearch(""); setRouteDropdownOpen(false); }}
                   aria-label="Clear route filter"
-                  className="shrink-0 text-gray-400 hover:text-gray-600"
+                  className="shrink-0 text-fg-subtle hover:text-fg"
                 >
                   <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                     <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
@@ -196,28 +196,28 @@ export default function DashboardPage() {
               )}
             </div>
             {routeDropdownOpen && (
-              <ul className="absolute left-0 top-full z-50 mt-1 max-h-64 w-64 overflow-y-auto rounded border border-gray-200 bg-white shadow-lg">
+              <ul className="animate-pop-in absolute left-0 top-full z-50 mt-1 max-h-64 w-64 overflow-y-auto rounded-lg border border-line bg-card shadow-card">
                 <li>
                   <button
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => { setRouteId(""); setRouteSearch(""); setRouteDropdownOpen(false); }}
-                    className="w-full px-3 py-2 text-left text-sm text-gray-500 hover:bg-gray-50"
+                    className="w-full px-3 py-2 text-left text-sm text-fg-muted hover:bg-card-muted"
                   >
                     All routes
                   </button>
                 </li>
                 {groupedRoutes.rail.length > 0 && (
                   <>
-                    <li className="border-t border-gray-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Rail</li>
+                    <li className="border-t border-line px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">Rail</li>
                     {groupedRoutes.rail.map((r) => (
                       <li key={r.route_id}>
                         <button
                           onMouseDown={(e) => e.preventDefault()}
                           onClick={() => { setRouteId(r.route_id); setRouteSearch(""); setRouteDropdownOpen(false); }}
-                          className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ${r.route_id === routeId ? "bg-blue-50 font-medium text-rtd-blue" : "text-gray-700"}`}
+                          className={`w-full px-3 py-2 text-left text-sm hover:bg-card-muted ${r.route_id === routeId ? "bg-accent/10 font-medium text-accent" : "text-fg-muted"}`}
                         >
                           <span className="font-medium">{r.short_name}</span>
-                          <span className="ml-1.5 text-gray-400">— {r.long_name}</span>
+                          <span className="ml-1.5 text-fg-subtle">— {r.long_name}</span>
                         </button>
                       </li>
                     ))}
@@ -225,16 +225,16 @@ export default function DashboardPage() {
                 )}
                 {groupedRoutes.bus.length > 0 && (
                   <>
-                    <li className="border-t border-gray-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Bus</li>
+                    <li className="border-t border-line px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">Bus</li>
                     {groupedRoutes.bus.map((r) => (
                       <li key={r.route_id}>
                         <button
                           onMouseDown={(e) => e.preventDefault()}
                           onClick={() => { setRouteId(r.route_id); setRouteSearch(""); setRouteDropdownOpen(false); }}
-                          className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ${r.route_id === routeId ? "bg-blue-50 font-medium text-rtd-blue" : "text-gray-700"}`}
+                          className={`w-full px-3 py-2 text-left text-sm hover:bg-card-muted ${r.route_id === routeId ? "bg-accent/10 font-medium text-accent" : "text-fg-muted"}`}
                         >
                           <span className="font-medium">{r.short_name}</span>
-                          <span className="ml-1.5 text-gray-400">— {r.long_name}</span>
+                          <span className="ml-1.5 text-fg-subtle">— {r.long_name}</span>
                         </button>
                       </li>
                     ))}
@@ -242,36 +242,36 @@ export default function DashboardPage() {
                 )}
                 {groupedRoutes.other.length > 0 && (
                   <>
-                    <li className="border-t border-gray-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Other</li>
+                    <li className="border-t border-line px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">Other</li>
                     {groupedRoutes.other.map((r) => (
                       <li key={r.route_id}>
                         <button
                           onMouseDown={(e) => e.preventDefault()}
                           onClick={() => { setRouteId(r.route_id); setRouteSearch(""); setRouteDropdownOpen(false); }}
-                          className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ${r.route_id === routeId ? "bg-blue-50 font-medium text-rtd-blue" : "text-gray-700"}`}
+                          className={`w-full px-3 py-2 text-left text-sm hover:bg-card-muted ${r.route_id === routeId ? "bg-accent/10 font-medium text-accent" : "text-fg-muted"}`}
                         >
                           <span className="font-medium">{r.short_name}</span>
-                          <span className="ml-1.5 text-gray-400">— {r.long_name}</span>
+                          <span className="ml-1.5 text-fg-subtle">— {r.long_name}</span>
                         </button>
                       </li>
                     ))}
                   </>
                 )}
                 {groupedRoutes.rail.length === 0 && groupedRoutes.bus.length === 0 && groupedRoutes.other.length === 0 && (
-                  <li className="px-3 py-2 text-sm text-gray-400">No routes found</li>
+                  <li className="px-3 py-2 text-sm text-fg-subtle">No routes found</li>
                 )}
               </ul>
             )}
           </div>
-          <div className="flex items-center gap-1 text-sm">
+          <div className="flex items-center gap-1 rounded-lg border border-line bg-card p-0.5 text-sm">
             {DAY_OPTIONS.map((d) => (
               <button
                 key={d}
                 onClick={() => setDays(d)}
-                className={`rounded px-3 py-1 font-medium transition-colors ${
+                className={`press rounded-md px-3 py-1 font-medium transition-colors ${
                   days === d
-                    ? "bg-rtd-blue text-white"
-                    : "bg-white border border-gray-200 text-gray-600 hover:border-rtd-blue"
+                    ? "bg-accent text-accent-contrast shadow-sm"
+                    : "text-fg-muted hover:bg-card-muted hover:text-fg"
                 }`}
               >
                 {d}d
@@ -282,41 +282,50 @@ export default function DashboardPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KpiCard title="Routes Tracked" value={ov ? String(ov.routes_tracked) : "—"} />
+      <div className="stagger grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <KpiCard
+          title="Routes Tracked"
+          value={ov ? undefined : "—"}
+          numericValue={ov ? ov.routes_tracked : undefined}
+        />
         <KpiCard
           title="On-Time Rate"
-          value={ov ? `${ov.on_time_pct.value.toFixed(1)}%` : "—"}
+          value={ov ? undefined : "—"}
+          numericValue={ov ? ov.on_time_pct.value : undefined}
+          format={(n) => `${n.toFixed(1)}%`}
           subtitle="± 5 mins"
           accentColor={ov ? onTimeColor(ov.on_time_pct.value) : undefined}
         />
         <KpiCard
           title="Avg Delay"
-          value={ov ? formatDelayMin(ov.avg_delay_seconds.value) : "—"}
+          value={ov ? undefined : "—"}
+          numericValue={ov ? ov.avg_delay_seconds.value : undefined}
+          format={(n) => formatDelayMin(n)}
           lowerIsBetter
         />
         <KpiCard
           title="Stuck Alerts"
-          value={alerts.isLoading ? "…" : String(alertCount)}
-          accentColor={alertCount > 0 ? "#111827" : "#16a34a"}
+          value={alerts.isLoading ? "…" : undefined}
+          numericValue={alerts.isLoading ? undefined : alertCount}
+          accentColor={alertCount > 0 ? "rgb(var(--danger))" : "rgb(var(--ok))"}
         />
       </div>
 
       {/* ── Reliability ─────────────────────────────────────────────── */}
-      <h2 className="pt-2 text-lg font-bold text-gray-400">Reliability</h2>
+      <h2 className="pt-2 font-display text-lg font-bold text-fg-subtle">Reliability</h2>
 
-      <Card>
+      <Card className="animate-fade-up">
         <SectionHeading
           title="On-Time Performance Trend"
           subtitle={`${granularity === "hour" ? "Hourly" : "Daily"} on-time rate (bars: avg delay) · 80% target line`}
         />
-        {trend.isLoading ? <LoadingSpinner /> : <TrendChart points={trend.data?.points ?? []} granularity={granularity} onPointClick={handleTrendPointClick} />}
+        {trend.isLoading ? <ChartSkeleton height={280} /> : <TrendChart points={trend.data?.points ?? []} granularity={granularity} onPointClick={handleTrendPointClick} />}
       </Card>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="stagger grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <SectionHeading title="Service Reliability" />
-          {heatmap.isLoading ? <LoadingSpinner /> : <Heatmap cells={heatmap.data?.cells ?? []} metric="ontime" onCellClick={handleHeatmapCellClick} />}
+          {heatmap.isLoading ? <ChartSkeleton height={190} /> : <Heatmap cells={heatmap.data?.cells ?? []} metric="ontime" onCellClick={handleHeatmapCellClick} />}
         </Card>
         <Card>
           <SectionHeading
@@ -327,29 +336,29 @@ export default function DashboardPage() {
                 : "How early/late arrivals fall"
             }
           />
-          {distribution.isLoading ? <LoadingSpinner /> : <DistributionChart bins={distribution.data?.bins ?? []} />}
+          {distribution.isLoading ? <ChartSkeleton height={240} /> : <DistributionChart bins={distribution.data?.bins ?? []} />}
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="stagger grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <SectionHeading title="Route Reliability Scorecard" subtitle="Click a route to filter the whole dashboard" />
           {scorecard.isLoading ? (
-            <LoadingSpinner />
+            <TableSkeleton rows={8} />
           ) : (
             <ScorecardTable routes={scorecard.data?.routes ?? []} onSelectRoute={setRouteId} />
           )}
         </Card>
         <Card>
           <SectionHeading title="Worst Stops by Delay" />
-          {worstStops.isLoading ? <LoadingSpinner /> : <WorstStopsTable stops={worstStops.data?.stops ?? []} />}
+          {worstStops.isLoading ? <TableSkeleton rows={8} /> : <WorstStopsTable stops={worstStops.data?.stops ?? []} />}
         </Card>
       </div>
 
       {/* ── Frequency & Service Delivery ────────────────────────────── */}
-      <h2 className="pt-2 text-lg font-bold text-gray-400">Frequency &amp; Service Delivery</h2>
+      <h2 className="pt-2 font-display text-lg font-bold text-fg-subtle">Frequency &amp; Service Delivery</h2>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="stagger grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <SectionHeading
             title="Scheduled Frequency by Hour"
@@ -360,25 +369,25 @@ export default function DashboardPage() {
             }
           />
           {!routeId ? (
-            <p className="py-8 text-center text-sm text-gray-500">
+            <p className="py-8 text-center text-sm text-fg-muted">
               Pick a route above to see its scheduled headways through the day.
             </p>
           ) : scheduleFreq.isLoading ? (
-            <LoadingSpinner />
+            <ChartSkeleton height={220} />
           ) : (
             <HeadwayChart headways={scheduleFreq.data?.routes[0]?.headways_by_hour ?? []} />
           )}
         </Card>
         <Card>
           <SectionHeading title="Current Frequency (Live)" subtitle="Estimated headway from active vehicles" />
-          {frequency.isLoading ? <LoadingSpinner /> : <FrequencyTable routes={frequency.data?.routes ?? []} onRowClick={handleFrequencyRowClick} />}
+          {frequency.isLoading ? <TableSkeleton rows={8} /> : <FrequencyTable routes={frequency.data?.routes ?? []} onRowClick={handleFrequencyRowClick} />}
         </Card>
       </div>
 
       {/* ── Live Demand ─────────────────────────────────────────────── */}
-      <h2 className="pt-2 text-lg font-bold text-gray-400">Live Demand</h2>
+      <h2 className="pt-2 font-display text-lg font-bold text-fg-subtle">Live Demand</h2>
 
-      <Card>
+      <Card className="animate-fade-up">
         <SectionHeading
           title="Live Crowding"
           subtitle={
@@ -388,7 +397,7 @@ export default function DashboardPage() {
           }
         />
         {occupancy.isLoading ? (
-          <LoadingSpinner />
+          <ChartSkeleton height={240} />
         ) : occupancy.data ? (
           <OccupancyChart
             data={occupancy.data}
@@ -399,9 +408,9 @@ export default function DashboardPage() {
       </Card>
 
       {/* ── Live alerts ─────────────────────────────────────────────── */}
-      <Card>
+      <Card className="animate-fade-up">
         <SectionHeading title="Stuck Vehicle Alerts" subtitle="Vehicles stationary beyond the alert threshold" />
-        {alerts.isLoading ? <LoadingSpinner /> : <DelayIncidents alerts={alerts.data?.alerts ?? []} />}
+        {alerts.isLoading ? <TableSkeleton rows={3} /> : <DelayIncidents alerts={alerts.data?.alerts ?? []} />}
       </Card>
     </div>
   );

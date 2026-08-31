@@ -6,14 +6,14 @@ import Link from "next/link";
 import { useVehicleTrip } from "@/lib/hooks";
 import { usePlayback } from "@/lib/usePlayback";
 import { Card, SectionHeading } from "@/components/ui/Card";
-import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import TransitLoader from "@/components/ui/TransitLoader";
 import TripPlaybackControls from "@/components/map/TripPlaybackControls";
 import { formatDelay, formatDelayMin, routeColor } from "@/lib/utils";
 import type { VehicleStopEvent } from "@/lib/types";
 
 const VehicleTripMap = dynamic(() => import("@/components/map/VehicleTripMap"), {
   ssr: false,
-  loading: () => <div className="h-full animate-pulse rounded bg-gray-800" />,
+  loading: () => <div className="skeleton h-full" />,
 });
 
 const OCCUPANCY_LABELS: Record<string, string> = {
@@ -28,24 +28,24 @@ const OCCUPANCY_LABELS: Record<string, string> = {
 };
 
 function delayClass(seconds: number): string {
-  if (seconds > 300) return "text-red-600 font-semibold";
-  if (seconds < -300) return "text-blue-600 font-semibold";
-  return "text-green-600";
+  if (seconds > 300) return "text-danger font-semibold";
+  if (seconds < -300) return "text-accent font-semibold";
+  return "text-ok";
 }
 
 function delayBadge(seconds: number): string {
-  if (seconds > 600) return "bg-red-100 text-red-700";
-  if (seconds > 300) return "bg-orange-100 text-orange-700";
-  if (seconds < -300) return "bg-blue-100 text-blue-700";
-  return "bg-green-100 text-green-700";
+  if (seconds > 600) return "status-danger";
+  if (seconds > 300) return "status-warn";
+  if (seconds < -300) return "status-info";
+  return "status-ok";
 }
 
 function StatBox({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-gray-900">{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-gray-400">{sub}</p>}
+    <div className="rounded-xl border border-line bg-card p-4 shadow-card">
+      <p className="text-xs text-fg-muted">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-fg">{value}</p>
+      {sub && <p className="mt-0.5 text-xs text-fg-subtle">{sub}</p>}
     </div>
   );
 }
@@ -97,20 +97,20 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
   const playback = usePlayback(playbackStartMs, playbackEndMs);
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 text-gray-900">
+    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 text-fg">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-gray-500">
-        <Link href={backHref} className="hover:text-rtd-blue">
+      <div className="flex items-center gap-2 text-sm text-fg-muted">
+        <Link href={backHref} className="hover:text-accent">
           Trips
         </Link>
         <span>/</span>
-        <span className="text-gray-700">#{vehicleLabel}</span>
+        <span className="text-fg-muted">#{vehicleLabel}</span>
       </div>
 
       {/* Header */}
       <div>
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-bold text-white">Vehicle #{vehicleLabel}</h1>
+          <h1 className="font-display text-2xl font-bold text-fg">Vehicle #{vehicleLabel}</h1>
           {data?.route_short_name && (
             <span
               className="rounded px-2.5 py-1 text-sm font-bold text-white"
@@ -121,10 +121,10 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
           )}
         </div>
         {data?.route_long_name && (
-          <p className="mt-0.5 text-sm text-gray-500">{data.route_long_name}</p>
+          <p className="mt-0.5 text-sm text-fg-muted">{data.route_long_name}</p>
         )}
         {(tripStart || tripEnd) && (
-          <p className="mt-0.5 text-xs text-gray-400">
+          <p className="mt-0.5 text-xs text-fg-subtle">
             {tripStart
               ? new Date(tripStart).toLocaleString([], {
                   dateStyle: "medium",
@@ -139,9 +139,9 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
         )}
       </div>
 
-      {isLoading && <LoadingSpinner />}
+      {isLoading && <TransitLoader label="Loading trip" />}
       {isError && (
-        <p className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+        <p className="rounded status-danger px-4 py-3 text-sm">
           Failed to load trip data.
         </p>
       )}
@@ -179,14 +179,14 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
             <Card className="lg:col-span-1">
               <SectionHeading title="Stop Arrival Timeline" />
               {data.stops.length === 0 ? (
-                <p className="py-6 text-center text-sm text-gray-500">
+                <p className="py-6 text-center text-sm text-fg-muted">
                   Stop arrival events are derived from geofencing. Data may not be available for
                   all trips or older time windows.
                 </p>
               ) : (
-                <div className="overflow-x-auto rounded border border-gray-200">
-                  <table className="min-w-full text-sm text-gray-800">
-                    <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                <div className="overflow-x-auto rounded border border-line">
+                  <table className="min-w-full text-sm text-fg">
+                    <thead className="bg-card-muted text-xs uppercase text-fg-muted">
                       <tr>
                         <th className="px-3 py-2 text-left">#</th>
                         <th className="px-3 py-2 text-left">Stop</th>
@@ -196,19 +196,19 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
                         <th className="px-3 py-2 text-left">Occupancy</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-line">
                       {data.stops.map((stop) => (
                         <tr
                           key={`${stop.stop_id}-${stop.stop_sequence}`}
-                          className="hover:bg-gray-50 cursor-default"
+                          className="hover:bg-card-muted cursor-default"
                           onMouseEnter={() => setHoveredStop(stop)}
                           onMouseLeave={() => setHoveredStop(null)}
                         >
-                          <td className="px-3 py-2 text-gray-400">{stop.stop_sequence}</td>
+                          <td className="px-3 py-2 text-fg-subtle">{stop.stop_sequence}</td>
                           <td className="px-3 py-2 font-medium">
                             {stop.stop_name ?? stop.stop_id}
                           </td>
-                          <td className="px-3 py-2 text-right text-gray-500">
+                          <td className="px-3 py-2 text-right text-fg-muted">
                             {new Date(stop.scheduled_time).toLocaleTimeString([], {
                               hour: "2-digit",
                               minute: "2-digit",
@@ -227,7 +227,7 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
                               {formatDelay(stop.delay_seconds) || "On time"}
                             </span>
                           </td>
-                          <td className="px-3 py-2 text-gray-600">
+                          <td className="px-3 py-2 text-fg-muted">
                             {OCCUPANCY_LABELS[stop.occupancy_status ?? "UNKNOWN"] ?? "—"}
                           </td>
                         </tr>
@@ -245,12 +245,12 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
                 subtitle="Press play to replay the trip, or hover a stop for its scheduled position"
               />
               {data.positions.length === 0 && data.stops.length === 0 ? (
-                <p className="py-6 text-center text-sm text-gray-500">
+                <p className="py-6 text-center text-sm text-fg-muted">
                   No position data available.
                 </p>
               ) : (
                 <>
-                  <div className="h-[420px] overflow-hidden rounded border border-gray-200">
+                  <div className="h-[420px] overflow-hidden rounded border border-line">
                     <VehicleTripMap
                       positions={data.positions}
                       stops={data.stops}
@@ -274,7 +274,7 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
           </div>
 
           {data.trip_id && (
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-fg-subtle">
               Trip ID: <span className="font-mono">{data.trip_id}</span>
             </p>
           )}
@@ -291,13 +291,7 @@ export default function TripDetailPage({
 }) {
   const vehicleLabel = decodeURIComponent(params.vehicle_label);
   return (
-    <Suspense
-      fallback={
-        <div className="mx-auto w-full max-w-7xl px-4 py-6">
-          <p className="text-sm text-gray-500">Loading…</p>
-        </div>
-      }
-    >
+    <Suspense fallback={<TransitLoader label="Loading trip" />}>
       <TripDetailContent vehicleLabel={vehicleLabel} />
     </Suspense>
   );

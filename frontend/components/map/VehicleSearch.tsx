@@ -90,7 +90,7 @@ export default function VehicleSearch({ vehicles, onSelect, onSelectStop }: Prop
       {/* Mobile collapsed: icon button */}
       {!mobileExpanded && (
         <button
-          className="sm:hidden flex h-11 w-11 items-center justify-center rounded-full bg-gray-900/90 border border-gray-700 text-gray-300 shadow-lg backdrop-blur-sm"
+          className="sm:hidden flex h-11 w-11 items-center justify-center rounded-full bg-card/90 border border-line text-fg-muted shadow-card backdrop-blur-md"
           onClick={expandMobile}
           aria-label="Search routes and stations"
         >
@@ -100,8 +100,8 @@ export default function VehicleSearch({ vehicles, onSelect, onSelectStop }: Prop
 
       {/* Search input — always visible on desktop, shown when expanded on mobile */}
       <div className={`flex-col w-72 ${mobileExpanded ? "flex" : "hidden sm:flex"}`}>
-        <div className="flex items-center gap-2 rounded-lg bg-gray-900/90 border border-gray-700 px-3 py-2.5 shadow-lg backdrop-blur-sm">
-          <SearchIcon className="text-gray-500 shrink-0" />
+        <div className="flex items-center gap-2 rounded-lg bg-card/90 border border-line px-3 py-2.5 shadow-card backdrop-blur-md">
+          <SearchIcon className="text-fg-subtle shrink-0" />
           <input
             ref={inputRef}
             type="search"
@@ -112,7 +112,7 @@ export default function VehicleSearch({ vehicles, onSelect, onSelectStop }: Prop
             }}
             onFocus={() => setDropdownOpen(true)}
             placeholder="Search route or station…"
-            className="flex-1 min-w-0 bg-transparent text-base sm:text-sm text-gray-200 placeholder-gray-500 outline-none"
+            className="flex-1 min-w-0 bg-transparent text-base sm:text-sm text-fg placeholder:text-fg-subtle outline-none"
           />
           <button
             onClick={() => {
@@ -121,18 +121,18 @@ export default function VehicleSearch({ vehicles, onSelect, onSelectStop }: Prop
               setMobileExpanded(false);
             }}
             aria-label="Close search"
-            className="shrink-0 text-gray-500 hover:text-gray-300 transition-colors"
+            className="shrink-0 text-fg-subtle hover:text-fg transition-colors"
           >
             <ClearIcon />
           </button>
         </div>
 
         {dropdownOpen && (
-          <ul className="mt-1 max-h-80 overflow-y-auto rounded-lg border border-gray-700 bg-gray-900/95 shadow-lg backdrop-blur-sm">
+          <ul className="animate-pop-in mt-1 max-h-80 overflow-y-auto rounded-lg border border-line bg-card/95 shadow-card backdrop-blur-md">
             {/* ── Routes ───────────────────────────────────────── */}
             {groupedRoutes.rail.length > 0 && (
               <>
-                <li className="px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <li className="px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
                   Rail
                 </li>
                 {groupedRoutes.rail.map((r) => (
@@ -140,15 +140,15 @@ export default function VehicleSearch({ vehicles, onSelect, onSelectStop }: Prop
                     <button
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => handleSelectRoute(r.route_id)}
-                      className="flex w-full items-center gap-3 border-t border-gray-800 px-3 py-2.5 text-left hover:bg-gray-800 transition-colors"
+                      className="flex w-full items-center gap-3 border-t border-line px-3 py-2.5 text-left hover:bg-card-muted transition-colors"
                     >
                       <span
                         className="h-3 w-3 shrink-0 rounded-full"
                         style={{ backgroundColor: `#${r.color}` }}
                       />
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-gray-100">{r.short_name}</p>
-                        <p className="truncate text-xs text-gray-400">{r.long_name}</p>
+                        <p className="text-sm font-semibold text-fg">{r.short_name}</p>
+                        <p className="truncate text-xs text-fg-muted">{r.long_name}</p>
                       </div>
                     </button>
                   </li>
@@ -157,7 +157,7 @@ export default function VehicleSearch({ vehicles, onSelect, onSelectStop }: Prop
             )}
             {groupedRoutes.bus.length > 0 && (
               <>
-                <li className={`px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-500 ${groupedRoutes.rail.length > 0 ? "border-t border-gray-700" : ""}`}>
+                <li className={`px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle ${groupedRoutes.rail.length > 0 ? "border-t border-line" : ""}`}>
                   Bus
                 </li>
                 {groupedRoutes.bus.map((r) => (
@@ -165,15 +165,15 @@ export default function VehicleSearch({ vehicles, onSelect, onSelectStop }: Prop
                     <button
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => handleSelectRoute(r.route_id)}
-                      className="flex w-full items-center gap-3 border-t border-gray-800 px-3 py-2.5 text-left hover:bg-gray-800 transition-colors"
+                      className="flex w-full items-center gap-3 border-t border-line px-3 py-2.5 text-left hover:bg-card-muted transition-colors"
                     >
                       <span
                         className="h-3 w-3 shrink-0 rounded-full"
                         style={{ backgroundColor: `#${r.color}` }}
                       />
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-gray-100">{r.short_name}</p>
-                        <p className="truncate text-xs text-gray-400">{r.long_name}</p>
+                        <p className="text-sm font-semibold text-fg">{r.short_name}</p>
+                        <p className="truncate text-xs text-fg-muted">{r.long_name}</p>
                       </div>
                     </button>
                   </li>
@@ -182,7 +182,7 @@ export default function VehicleSearch({ vehicles, onSelect, onSelectStop }: Prop
             )}
             {groupedRoutes.other.length > 0 && (
               <>
-                <li className={`px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-500 ${groupedRoutes.rail.length + groupedRoutes.bus.length > 0 ? "border-t border-gray-700" : ""}`}>
+                <li className={`px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle ${groupedRoutes.rail.length + groupedRoutes.bus.length > 0 ? "border-t border-line" : ""}`}>
                   Other
                 </li>
                 {groupedRoutes.other.map((r) => (
@@ -190,15 +190,15 @@ export default function VehicleSearch({ vehicles, onSelect, onSelectStop }: Prop
                     <button
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => handleSelectRoute(r.route_id)}
-                      className="flex w-full items-center gap-3 border-t border-gray-800 px-3 py-2.5 text-left hover:bg-gray-800 transition-colors"
+                      className="flex w-full items-center gap-3 border-t border-line px-3 py-2.5 text-left hover:bg-card-muted transition-colors"
                     >
                       <span
                         className="h-3 w-3 shrink-0 rounded-full"
                         style={{ backgroundColor: `#${r.color}` }}
                       />
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-gray-100">{r.short_name}</p>
-                        <p className="truncate text-xs text-gray-400">{r.long_name}</p>
+                        <p className="text-sm font-semibold text-fg">{r.short_name}</p>
+                        <p className="truncate text-xs text-fg-muted">{r.long_name}</p>
                       </div>
                     </button>
                   </li>
@@ -209,7 +209,7 @@ export default function VehicleSearch({ vehicles, onSelect, onSelectStop }: Prop
             {/* ── Stations ─────────────────────────────────────── */}
             {stops.length > 0 && (
               <>
-                <li className={`px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-500 ${hasRoutes ? "border-t border-gray-700" : ""}`}>
+                <li className={`px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle ${hasRoutes ? "border-t border-line" : ""}`}>
                   Stations
                 </li>
                 {stops.map((stop) => (
@@ -217,16 +217,16 @@ export default function VehicleSearch({ vehicles, onSelect, onSelectStop }: Prop
                     <button
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => handleSelectStop(stop)}
-                      className="flex w-full items-center gap-3 border-t border-gray-800 px-3 py-2.5 text-left hover:bg-gray-800 transition-colors"
+                      className="flex w-full items-center gap-3 border-t border-line px-3 py-2.5 text-left hover:bg-card-muted transition-colors"
                     >
-                      <span className="shrink-0 text-gray-500">
+                      <span className="shrink-0 text-fg-subtle">
                         <StationIcon />
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-gray-100">{stop.stop_name}</p>
+                        <p className="text-sm font-semibold text-fg">{stop.stop_name}</p>
                         <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                           {stop.stop_desc && (
-                            <span className="text-xs text-gray-400 mr-1">{stop.stop_desc}</span>
+                            <span className="text-xs text-fg-muted mr-1">{stop.stop_desc}</span>
                           )}
                           {stop.routes.slice(0, 6).map((r) => (
                             <span
@@ -238,7 +238,7 @@ export default function VehicleSearch({ vehicles, onSelect, onSelectStop }: Prop
                             </span>
                           ))}
                           {stop.routes.length > 6 && (
-                            <span className="text-[10px] text-gray-500">
+                            <span className="text-[10px] text-fg-subtle">
                               +{stop.routes.length - 6}
                             </span>
                           )}
@@ -251,7 +251,7 @@ export default function VehicleSearch({ vehicles, onSelect, onSelectStop }: Prop
             )}
 
             {totalGroups === 0 && (
-              <li className="px-3 py-3 text-sm text-gray-500">No routes or stations found</li>
+              <li className="px-3 py-3 text-sm text-fg-subtle">No routes or stations found</li>
             )}
           </ul>
         )}

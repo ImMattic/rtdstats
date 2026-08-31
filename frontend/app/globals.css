@@ -2,29 +2,158 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Ensure the Leaflet map fills its container */
+/* ============================================================
+   Design tokens
+
+   Dark is the default (bare :root). Light is opt-in via
+   [data-theme="light"], or via prefers-color-scheme when the
+   visitor has made no explicit choice yet (before the no-flash
+   script in layout.tsx runs, or with JS disabled).
+
+   Colours are stored as space-separated RGB triples so Tailwind's
+   `rgb(var(--x) / <alpha-value>)` helper can add opacity.
+   ============================================================ */
+:root {
+  --canvas: 11 18 32;
+  --card: 19 28 46;
+  --card-muted: 27 39 64;
+  --line: 38 50 71;
+  --fg: 232 237 245;
+  --fg-muted: 154 167 189;
+  --fg-subtle: 107 122 147;
+  --accent: 90 166 238;
+  --accent-contrast: 255 255 255;
+  --accent-red: 240 69 92;
+  --ok: 52 211 153;
+  --warn: 251 191 36;
+  --danger: 248 113 113;
+  --status-alpha: 0.14;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.35), 0 12px 34px -14px rgb(0 0 0 / 0.6);
+  --font-display: var(--font-inter-tight), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --canvas: 246 247 249;
+  --card: 255 255 255;
+  --card-muted: 243 245 248;
+  --line: 228 232 239;
+  --fg: 22 32 46;
+  --fg-muted: 91 107 128;
+  --fg-subtle: 138 151 168;
+  --accent: 0 47 135;
+  --accent-contrast: 255 255 255;
+  --accent-red: 206 14 45;
+  --ok: 22 163 74;
+  --warn: 217 119 6;
+  --danger: 220 38 38;
+  --status-alpha: 0.1;
+
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 12px 28px -14px rgb(16 24 40 / 0.14);
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --canvas: 246 247 249;
+    --card: 255 255 255;
+    --card-muted: 243 245 248;
+    --line: 228 232 239;
+    --fg: 22 32 46;
+    --fg-muted: 91 107 128;
+    --fg-subtle: 138 151 168;
+    --accent: 0 47 135;
+    --accent-contrast: 255 255 255;
+    --accent-red: 206 14 45;
+    --ok: 22 163 74;
+    --warn: 217 119 6;
+    --danger: 220 38 38;
+    --status-alpha: 0.1;
+    --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 12px 28px -14px rgb(16 24 40 / 0.14);
+    color-scheme: light;
+  }
+}
+
+body {
+  background-color: rgb(var(--canvas));
+  color: rgb(var(--fg));
+  /* Ease the theme flip on the page chrome (map tiles swap instantly regardless). */
+  transition: background-color 240ms ease, color 240ms ease;
+}
+
+/* ============================================================
+   Leaflet — token-aware map chrome
+   ============================================================ */
 .leaflet-container {
   height: 100%;
   width: 100%;
+  background: rgb(var(--canvas));
 }
 
-/* Leaflet popup / tooltip dark theme */
 .leaflet-tooltip {
-  background: #1A2535 !important;
-  border: 1px solid #263040 !important;
-  color: #f1f5f9 !important;
-  border-radius: 6px !important;
+  background: rgb(var(--card)) !important;
+  border: 1px solid rgb(var(--line)) !important;
+  color: rgb(var(--fg)) !important;
+  border-radius: 8px !important;
   font-size: 12px !important;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+  box-shadow: var(--shadow-card) !important;
 }
-.leaflet-tooltip::before {
-  border-top-color: #263040 !important;
+.leaflet-tooltip-top::before {
+  border-top-color: rgb(var(--line)) !important;
+}
+.leaflet-tooltip-bottom::before {
+  border-bottom-color: rgb(var(--line)) !important;
+}
+.leaflet-tooltip-left::before {
+  border-left-color: rgb(var(--line)) !important;
+}
+.leaflet-tooltip-right::before {
+  border-right-color: rgb(var(--line)) !important;
+}
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  background: rgb(var(--card));
+  color: rgb(var(--fg));
+  border-color: rgb(var(--line));
+}
+.leaflet-control-attribution {
+  background: rgb(var(--card) / 0.75) !important;
+  color: rgb(var(--fg-subtle)) !important;
+}
+.leaflet-control-attribution a {
+  color: rgb(var(--fg-muted)) !important;
 }
 
-@keyframes dialog-in {
+/* ============================================================
+   Keyframes
+   ============================================================ */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scale-in {
   0% {
     opacity: 0;
-    transform: translate(-50%, 24px) scale(0.98);
+    transform: translate(-50%, 24px) scale(0.97);
   }
   70% {
     opacity: 1;
@@ -35,7 +164,219 @@
   }
 }
 
-.animate-dialog-in {
-  animation: dialog-in 260ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: transform, opacity;
+@keyframes pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes pulse-ring {
+  0%,
+  100% {
+    transform: scale(0.82);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes train-run {
+  0% {
+    left: 0;
+  }
+  100% {
+    left: calc(100% - 2.25rem);
+  }
+}
+
+@keyframes track-dash {
+  to {
+    stroke-dashoffset: -32;
+  }
+}
+
+@keyframes loading-dots {
+  0%,
+  20% {
+    content: "";
+  }
+  40% {
+    content: ".";
+  }
+  60% {
+    content: "..";
+  }
+  80%,
+  100% {
+    content: "...";
+  }
+}
+
+/* ============================================================
+   Animation / motion utilities
+   ============================================================ */
+@layer utilities {
+  .animate-fade-up {
+    animation: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .animate-fade-in {
+    animation: fade-in 0.4s ease both;
+  }
+  .animate-pop-in {
+    animation: pop-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .animate-dialog-in {
+    animation: scale-in 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform, opacity;
+  }
+
+  /* Stagger children of a container: <div class="stagger"> ... */
+  .stagger > * {
+    animation: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .stagger > *:nth-child(1) {
+    animation-delay: 0ms;
+  }
+  .stagger > *:nth-child(2) {
+    animation-delay: 55ms;
+  }
+  .stagger > *:nth-child(3) {
+    animation-delay: 110ms;
+  }
+  .stagger > *:nth-child(4) {
+    animation-delay: 165ms;
+  }
+  .stagger > *:nth-child(5) {
+    animation-delay: 220ms;
+  }
+  .stagger > *:nth-child(6) {
+    animation-delay: 275ms;
+  }
+  .stagger > *:nth-child(7) {
+    animation-delay: 330ms;
+  }
+  .stagger > *:nth-child(8) {
+    animation-delay: 385ms;
+  }
+  .stagger > *:nth-child(n + 9) {
+    animation-delay: 440ms;
+  }
+}
+
+/* ============================================================
+   Component helpers
+   ============================================================ */
+@layer components {
+  .skeleton {
+    background-image: linear-gradient(
+      90deg,
+      rgb(var(--card-muted)) 0%,
+      rgb(var(--line)) 50%,
+      rgb(var(--card-muted)) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+    border-radius: 0.5rem;
+  }
+
+  .press {
+    transition: transform 120ms ease, background-color 150ms ease, border-color 150ms ease,
+      color 150ms ease, opacity 150ms ease;
+  }
+  .press:active {
+    transform: scale(0.97);
+  }
+
+  .status-ok {
+    background-color: rgb(var(--ok) / var(--status-alpha));
+    color: rgb(var(--ok));
+    border: 1px solid rgb(var(--ok) / 0.28);
+  }
+  .status-warn {
+    background-color: rgb(var(--warn) / var(--status-alpha));
+    color: rgb(var(--warn));
+    border: 1px solid rgb(var(--warn) / 0.28);
+  }
+  .status-info {
+    background-color: rgb(var(--accent) / var(--status-alpha));
+    color: rgb(var(--accent));
+    border: 1px solid rgb(var(--accent) / 0.28);
+  }
+  .status-danger {
+    background-color: rgb(var(--danger) / var(--status-alpha));
+    color: rgb(var(--danger));
+    border: 1px solid rgb(var(--danger) / 0.28);
+  }
+
+  .loading-dots::after {
+    content: "";
+    animation: loading-dots 1.4s steps(1, end) infinite;
+  }
+}
+
+/* Custom range slider (trip playback) — keep it on-theme in both modes. */
+input[type="range"].rtd-range {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+input[type="range"].rtd-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  width: 14px;
+  border-radius: 9999px;
+  background: rgb(var(--accent-contrast));
+  border: 2px solid currentColor;
+  margin-top: -6px;
+  cursor: pointer;
+}
+input[type="range"].rtd-range::-moz-range-thumb {
+  height: 14px;
+  width: 14px;
+  border-radius: 9999px;
+  background: rgb(var(--accent-contrast));
+  border: 2px solid currentColor;
+  cursor: pointer;
+}
+
+/* Native date/time picker indicator stays visible on dark. */
+:root:not([data-theme="light"]) input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
+}
+
+/* ============================================================
+   Reduced motion — neutralise decoration, keep essential fades
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+  .skeleton {
+    animation: none !important;
+    background-position: 0 0 !important;
+  }
 }

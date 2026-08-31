@@ -1,11 +1,25 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Inter_Tight } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import "leaflet/dist/leaflet.css";
 import NavBar from "@/components/ui/NavBar";
+import BootSplash from "@/components/ui/BootSplash";
 import Providers from "./providers";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+const interTight = Inter_Tight({
+  subsets: ["latin"],
+  variable: "--font-inter-tight",
+  display: "swap",
+});
+
+// Runs before hydration so the theme is set before first paint (no flash).
+const THEME_INIT = `(function(){try{var t=localStorage.getItem('theme');if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark';}document.documentElement.dataset.theme=t;}catch(e){document.documentElement.dataset.theme='dark';}})();`;
 
 const description =
   "Real-time vehicle positions, on-time performance, and delay tracking for Denver's RTD light rail, commuter rail, and bus network.";
@@ -45,14 +59,28 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={`${inter.className} bg-surface text-gray-100 antialiased`}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${inter.variable} ${interTight.variable}`}
+    >
+      <body className="bg-canvas font-sans text-fg antialiased">
+        <Script
+          id="theme-init"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: THEME_INIT }}
+        />
+        <noscript>
+          {/* Don't trap no-JS visitors behind the client-only splash. */}
+          <style dangerouslySetInnerHTML={{ __html: "#boot-splash{display:none!important}" }} />
+        </noscript>
         <Providers>
+          <BootSplash />
           <div className="flex min-h-screen flex-col">
             <NavBar />
             <main className="flex flex-1 flex-col">{children}</main>
-            <footer className="border-t border-surface-border bg-surface-card py-2 text-center text-xs text-gray-500">
-              Made with ❤️ in Broomfield, CO
+            <footer className="border-t border-line bg-card py-3 text-center text-xs text-fg-subtle">
+              Made with <span className="text-accent-red">❤</span> in Broomfield, CO
             </footer>
           </div>
         </Providers>

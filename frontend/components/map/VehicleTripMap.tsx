@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Tooltip, useMap } from "react-leaflet";
 import type { VehicleStopEvent, VehiclePositionTrack } from "@/lib/types";
 import { interpolateTrackPosition, formatTime } from "@/lib/utils";
+import { useTheme } from "@/lib/useTheme";
 import { createVehicleIcon } from "./vehicleIcon";
 
 const DENVER_CENTER: [number, number] = [39.7392, -104.9903];
@@ -81,6 +82,9 @@ export default function VehicleTripMap({ positions, stops, routeColor, isRail = 
     });
   }, []);
 
+  const { theme } = useTheme();
+  const basemap = theme === "light" ? "light_all" : "dark_all";
+
   const [cartoApiKey, setCartoApiKey] = useState<string | null>(null);
   useEffect(() => {
     fetch("/api/config")
@@ -110,8 +114,9 @@ export default function VehicleTripMap({ positions, stops, routeColor, isRail = 
   return (
     <MapContainer center={center} zoom={13} className="h-full w-full" scrollWheelZoom>
       <TileLayer
+        key={basemap}
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        url={`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png${cartoApiKey ? `?key=${cartoApiKey}` : ""}`}
+        url={`https://{s}.basemaps.cartocdn.com/${basemap}/{z}/{x}/{y}.png${cartoApiKey ? `?key=${cartoApiKey}` : ""}`}
         subdomains="abcd"
         maxZoom={19}
       />

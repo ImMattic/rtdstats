@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import type { OccupancyResponse } from "@/lib/types";
 import { formatHour } from "@/lib/utils";
+import { useChartTheme } from "@/lib/useChartTheme";
 
 interface Props {
   data: OccupancyResponse;
@@ -32,6 +33,7 @@ const CODES = [
 type CodeKey = typeof CODES[number]["key"];
 
 function OccupancyChart({ data, direction, onDirectionChange }: Props) {
+  const theme = useChartTheme();
   const hourData = useMemo(() => {
     return data.by_hour
       .filter((h) => {
@@ -56,7 +58,7 @@ function OccupancyChart({ data, direction, onDirectionChange }: Props) {
 
   if (!data.reported) {
     return (
-      <div className="rounded-lg bg-amber-50 p-4 text-sm text-amber-800">
+      <div className="status-warn rounded-lg p-4 text-sm">
         RTD is not currently publishing occupancy codes in its GTFS-RT feed for this selection,
         so live crowding can&apos;t be shown.
       </div>
@@ -73,13 +75,13 @@ function OccupancyChart({ data, direction, onDirectionChange }: Props) {
       {/* Direction toggle buttons */}
       {hasDirections && onDirectionChange && (
         <div className="mb-3 flex items-center gap-2 text-xs">
-          <span className="text-gray-500">Direction:</span>
+          <span className="text-fg-muted">Direction:</span>
           <button
             onClick={() => onDirectionChange(undefined)}
-            className={`rounded px-2 py-1 font-medium transition-colors ${
+            className={`press rounded-lg px-2 py-1 font-medium transition-colors ${
               direction === undefined
-                ? "bg-rtd-blue text-white"
-                : "border border-gray-200 text-gray-600 hover:border-rtd-blue"
+                ? "bg-accent text-accent-contrast"
+                : "border border-line text-fg-muted hover:border-accent hover:text-fg"
             }`}
           >
             All
@@ -88,10 +90,10 @@ function OccupancyChart({ data, direction, onDirectionChange }: Props) {
             <button
               key={d.direction_id}
               onClick={() => onDirectionChange(d.direction_id === direction ? undefined : d.direction_id)}
-              className={`rounded px-2 py-1 font-medium transition-colors ${
+              className={`press rounded-lg px-2 py-1 font-medium transition-colors ${
                 direction === d.direction_id
-                  ? "bg-rtd-blue text-white"
-                  : "border border-gray-200 text-gray-600 hover:border-rtd-blue"
+                  ? "bg-accent text-accent-contrast"
+                  : "border border-line text-fg-muted hover:border-accent hover:text-fg"
               }`}
             >
               {d.headsign || `Direction ${d.direction_id}`}
@@ -117,24 +119,33 @@ function OccupancyChart({ data, direction, onDirectionChange }: Props) {
             </span>
           );
         })}
-        <span className="ml-auto text-gray-400">{total.toLocaleString()} samples</span>
+        <span className="ml-auto text-fg-subtle">{total.toLocaleString()} samples</span>
       </div>
 
       <ResponsiveContainer width="100%" height={240}>
         <BarChart data={hourData} margin={{ left: 4, right: 8, top: 8 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-          <XAxis dataKey="label" tick={{ fontSize: 9, fill: "#64748b" }} interval={1} />
+          <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} vertical={false} />
+          <XAxis dataKey="label" tick={{ fontSize: 9, fill: theme.axis }} interval={1} />
           <YAxis
             tickFormatter={(v) => `${v}%`}
-            tick={{ fontSize: 11, fill: "#4b5563" }}
+            tick={{ fontSize: 11, fill: theme.text }}
             width={36}
             domain={[0, 100]}
           />
           <Tooltip
             formatter={(value: number, name: string) => [`${value.toFixed(1)}%`, name]}
-            contentStyle={{ fontSize: 12, borderRadius: 8 }}
+            contentStyle={{
+              fontSize: 12,
+              borderRadius: 8,
+              background: theme.tooltipBg,
+              border: `1px solid ${theme.tooltipBorder}`,
+              color: theme.tooltipText,
+            }}
+            labelStyle={{ color: theme.tooltipText }}
+            itemStyle={{ color: theme.tooltipText }}
+            cursor={{ fill: theme.grid, opacity: 0.4 }}
           />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
+          <Legend wrapperStyle={{ fontSize: 11, color: theme.text }} />
           {CODES.map((c, i) => (
             <Bar
               key={c.key}

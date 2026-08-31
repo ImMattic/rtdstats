@@ -5,6 +5,7 @@ import { memo, useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, Marker, Tooltip, Polyline, CircleMarker, useMap, useMapEvents } from "react-leaflet";
 import type { VehiclePosition, RailShape, StopInfo } from "@/lib/types";
 import { useRailShapes, useRouteShape, useRouteStops } from "@/lib/hooks";
+import { useTheme } from "@/lib/useTheme";
 import { headwayColor, formatStatusLabel } from "@/lib/utils";
 import { createVehicleIcon, iconPx } from "./vehicleIcon";
 
@@ -261,6 +262,8 @@ function FlyToHandler({ flyTo }: { flyTo?: FlyToCoords | null }) {
 
 export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, flyTo, selectedStop, onStopClick }: Props) {
   const [cartoApiKey, setCartoApiKey] = useState<string | null>(null);
+  const { theme } = useTheme();
+  const basemap = theme === "light" ? "light_all" : "dark_all";
 
   useEffect(() => {
     // @ts-expect-error – _getIconUrl is internal
@@ -290,8 +293,9 @@ export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, 
       scrollWheelZoom
     >
       <TileLayer
+        key={basemap}
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        url={`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png${cartoApiKey ? `?key=${cartoApiKey}` : ""}`}
+        url={`https://{s}.basemaps.cartocdn.com/${basemap}/{z}/{x}/{y}.png${cartoApiKey ? `?key=${cartoApiKey}` : ""}`}
         subdomains="abcd"
         maxZoom={19}
       />

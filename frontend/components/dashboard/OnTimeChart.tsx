@@ -11,12 +11,15 @@ import {
   ReferenceLine,
 } from "recharts";
 import type { OnTimeRouteStats } from "@/lib/types";
+import { useChartTheme } from "@/lib/useChartTheme";
 
 interface Props {
   routes: OnTimeRouteStats[];
 }
 
 function OnTimeChart({ routes }: Props) {
+  const theme = useChartTheme();
+
   // Sort by on_time_pct descending, top 20; recompute only when routes change.
   const data = useMemo(
     () => [...routes].sort((a, b) => b.on_time_pct - a.on_time_pct).slice(0, 20),
@@ -24,7 +27,7 @@ function OnTimeChart({ routes }: Props) {
   );
 
   if (!routes.length) {
-    return <p className="text-sm text-gray-500 py-4">No on-time data yet.</p>;
+    return <p className="py-4 text-sm text-fg-muted">No on-time data yet.</p>;
   }
 
   return (
@@ -34,19 +37,28 @@ function OnTimeChart({ routes }: Props) {
           type="number"
           domain={[0, 100]}
           tickFormatter={(v) => `${v}%`}
-          tick={{ fontSize: 11, fill: "#4b5563" }}
+          tick={{ fontSize: 11, fill: theme.text }}
         />
         <YAxis
           type="category"
           dataKey="route_short_name"
           width={36}
-          tick={{ fontSize: 11, fill: "#1f2937" }}
+          tick={{ fontSize: 11, fill: theme.text }}
         />
         <Tooltip
           formatter={(value: number) => [`${value.toFixed(1)}%`, "On time"]}
-          cursor={{ fill: "rgba(0,0,0,0.04)" }}
+          cursor={{ fill: theme.grid, opacity: 0.4 }}
+          contentStyle={{
+            fontSize: 12,
+            borderRadius: 8,
+            background: theme.tooltipBg,
+            border: `1px solid ${theme.tooltipBorder}`,
+            color: theme.tooltipText,
+          }}
+          labelStyle={{ color: theme.tooltipText }}
+          itemStyle={{ color: theme.tooltipText }}
         />
-        <ReferenceLine x={80} stroke="#6b7280" strokeDasharray="4 2" />
+        <ReferenceLine x={80} stroke={theme.reference} strokeDasharray="4 2" />
         <Bar dataKey="on_time_pct" radius={[0, 4, 4, 0]}>
           {data.map((entry, i) => (
             <Cell

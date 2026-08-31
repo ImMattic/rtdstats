@@ -32,7 +32,7 @@ export default function Heatmap({ cells, metric = "ontime", onCellClick }: Props
   }, [cells]);
 
   if (!cells.length) {
-    return <p className="py-8 text-center text-sm text-gray-500">No heatmap data yet.</p>;
+    return <p className="py-8 text-center text-sm text-fg-muted">No heatmap data yet.</p>;
   }
 
   return (
@@ -42,20 +42,20 @@ export default function Heatmap({ cells, metric = "ontime", onCellClick }: Props
           {/* Hour axis */}
           <div className="flex pl-10">
             {HOURS.map((h) => (
-              <div key={h} className="w-[18px] text-center text-[8px] text-gray-400">
+              <div key={h} className="w-[18px] text-center text-[8px] text-fg-subtle">
                 {h % 3 === 0 ? formatHour(h) : ""}
               </div>
             ))}
           </div>
           {DOWS.map((dow) => (
             <div key={dow} className="flex items-center">
-              <div className="w-10 pr-1 text-right text-[10px] font-medium text-gray-500">
+              <div className="w-10 pr-1 text-right text-[10px] font-medium text-fg-muted">
                 {DOW_LABELS[dow]}
               </div>
               {HOURS.map((h) => {
                 const cell = lookup.get(`${dow}-${h}`);
                 const color = !cell
-                  ? "#f1f5f9"
+                  ? "rgb(var(--card-muted))"
                   : metric === "ontime"
                     ? onTimeColor(cell.on_time_pct)
                     : delayColor(cell.avg_delay_seconds);
@@ -75,17 +75,17 @@ export default function Heatmap({ cells, metric = "ontime", onCellClick }: Props
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+      <div className="mt-3 flex items-center justify-between text-xs text-fg-muted">
         <div className="h-4">
           {hover && (
             <span>
-              <span className="font-semibold text-gray-700">
+              <span className="font-semibold text-fg">
                 {DOW_LABELS[hover.dow]} {formatHour(hover.hour)}
               </span>{" "}
               · {hover.on_time_pct.toFixed(0)}% on-time · {(hover.avg_delay_seconds / 60).toFixed(1)}m avg ·{" "}
               {hover.observations.toLocaleString()} samples
               {onCellClick && (
-                <span className="ml-2 font-medium text-blue-600">· Click to view trips →</span>
+                <span className="ml-2 font-medium text-accent">· Click to view trips →</span>
               )}
             </span>
           )}

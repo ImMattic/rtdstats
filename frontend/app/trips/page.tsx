@@ -3,7 +3,8 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useActiveVehicles, useRoutes } from "@/lib/hooks";
 import { Card, SectionHeading } from "@/components/ui/Card";
-import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { TableSkeleton } from "@/components/ui/Skeleton";
+import TransitLoader from "@/components/ui/TransitLoader";
 import ExportButton from "@/components/ui/ExportButton";
 import { formatDateTime, routeColor } from "@/lib/utils";
 import type { ActiveVehicle } from "@/lib/types";
@@ -188,11 +189,11 @@ function TripsContent() {
   const selectedRouteName = routes.data?.routes.find((r) => r.route_id === routeId)?.short_name;
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 text-gray-900">
+    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 text-fg">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Trip Explorer</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="font-display text-2xl font-bold text-fg">Trip Explorer</h1>
+          <p className="text-sm text-fg-muted">
             {timeLabel ? `${timeLabel} · ` : ""}
             {isLoading ? "Loading…" : `${data?.vehicle_count ?? 0} vehicles`}
             {fetchRouteId
@@ -211,31 +212,31 @@ function TripsContent() {
         />
         <div className="flex flex-wrap items-end gap-4">
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">Start</label>
+            <label className="text-xs font-medium text-fg-muted">Start</label>
             <input
               type="datetime-local"
               value={startLocal}
               onChange={(e) => setStartLocal(e.target.value)}
-              className="rounded border border-gray-200 px-2 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-rtd-blue"
+              className="rounded border border-line px-2 py-1.5 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">End</label>
+            <label className="text-xs font-medium text-fg-muted">End</label>
             <input
               type="datetime-local"
               value={endLocal}
               onChange={(e) => setEndLocal(e.target.value)}
-              className="rounded border border-gray-200 px-2 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-rtd-blue"
+              className="rounded border border-line px-2 py-1.5 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
 
           {/* Route combobox */}
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">Route</label>
+            <label className="text-xs font-medium text-fg-muted">Route</label>
             <div ref={routeComboRef} className="relative">
-              <div className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1.5 text-sm focus-within:ring-2 focus-within:ring-rtd-blue">
+              <div className="flex items-center gap-1 rounded border border-line bg-card px-2 py-1.5 text-sm focus-within:ring-2 focus-within:ring-accent">
                 <svg
-                  className="h-3.5 w-3.5 shrink-0 text-gray-400"
+                  className="h-3.5 w-3.5 shrink-0 text-fg-subtle"
                   viewBox="0 0 20 20"
                   fill="currentColor"
                   aria-hidden="true"
@@ -252,7 +253,7 @@ function TripsContent() {
                   placeholder={selectedRouteName ? `Route ${selectedRouteName}` : "All routes"}
                   onChange={(e) => setRouteSearch(e.target.value)}
                   onFocus={() => setRouteDropdownOpen(true)}
-                  className="w-44 bg-transparent outline-none placeholder-gray-700"
+                  className="w-44 bg-transparent outline-none placeholder:text-fg-subtle"
                 />
                 {routeId && (
                   <button
@@ -262,7 +263,7 @@ function TripsContent() {
                       setRouteDropdownOpen(false);
                     }}
                     aria-label="Clear route filter"
-                    className="shrink-0 text-gray-400 hover:text-gray-600"
+                    className="shrink-0 text-fg-subtle hover:text-fg-muted"
                   >
                     <svg
                       className="h-3.5 w-3.5"
@@ -276,7 +277,7 @@ function TripsContent() {
                 )}
               </div>
               {routeDropdownOpen && (
-                <ul className="absolute left-0 top-full z-50 mt-1 max-h-64 w-64 overflow-y-auto rounded border border-gray-200 bg-white shadow-lg">
+                <ul className="absolute left-0 top-full z-50 mt-1 max-h-64 w-64 overflow-y-auto rounded border border-line bg-card shadow-lg">
                   <li>
                     <button
                       onMouseDown={(e) => e.preventDefault()}
@@ -285,14 +286,14 @@ function TripsContent() {
                         setRouteSearch("");
                         setRouteDropdownOpen(false);
                       }}
-                      className="w-full px-3 py-2 text-left text-sm text-gray-500 hover:bg-gray-50"
+                      className="w-full px-3 py-2 text-left text-sm text-fg-muted hover:bg-card-muted"
                     >
                       All routes
                     </button>
                   </li>
                   {groupedRoutes.rail.length > 0 && (
                     <>
-                      <li className="border-t border-gray-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                      <li className="border-t border-line px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
                         Rail
                       </li>
                       {groupedRoutes.rail.map((r) => (
@@ -304,10 +305,10 @@ function TripsContent() {
                               setRouteSearch("");
                               setRouteDropdownOpen(false);
                             }}
-                            className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ${r.route_id === routeId ? "bg-blue-50 font-medium text-rtd-blue" : "text-gray-700"}`}
+                            className={`w-full px-3 py-2 text-left text-sm hover:bg-card-muted ${r.route_id === routeId ? "bg-accent/10 font-medium text-accent" : "text-fg-muted"}`}
                           >
                             <span className="font-medium">{r.short_name}</span>
-                            <span className="ml-1.5 text-gray-400">— {r.long_name}</span>
+                            <span className="ml-1.5 text-fg-subtle">— {r.long_name}</span>
                           </button>
                         </li>
                       ))}
@@ -315,7 +316,7 @@ function TripsContent() {
                   )}
                   {groupedRoutes.bus.length > 0 && (
                     <>
-                      <li className="border-t border-gray-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                      <li className="border-t border-line px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
                         Bus
                       </li>
                       {groupedRoutes.bus.map((r) => (
@@ -327,10 +328,10 @@ function TripsContent() {
                               setRouteSearch("");
                               setRouteDropdownOpen(false);
                             }}
-                            className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ${r.route_id === routeId ? "bg-blue-50 font-medium text-rtd-blue" : "text-gray-700"}`}
+                            className={`w-full px-3 py-2 text-left text-sm hover:bg-card-muted ${r.route_id === routeId ? "bg-accent/10 font-medium text-accent" : "text-fg-muted"}`}
                           >
                             <span className="font-medium">{r.short_name}</span>
-                            <span className="ml-1.5 text-gray-400">— {r.long_name}</span>
+                            <span className="ml-1.5 text-fg-subtle">— {r.long_name}</span>
                           </button>
                         </li>
                       ))}
@@ -338,7 +339,7 @@ function TripsContent() {
                   )}
                   {groupedRoutes.other.length > 0 && (
                     <>
-                      <li className="border-t border-gray-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                      <li className="border-t border-line px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
                         Other
                       </li>
                       {groupedRoutes.other.map((r) => (
@@ -350,10 +351,10 @@ function TripsContent() {
                               setRouteSearch("");
                               setRouteDropdownOpen(false);
                             }}
-                            className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ${r.route_id === routeId ? "bg-blue-50 font-medium text-rtd-blue" : "text-gray-700"}`}
+                            className={`w-full px-3 py-2 text-left text-sm hover:bg-card-muted ${r.route_id === routeId ? "bg-accent/10 font-medium text-accent" : "text-fg-muted"}`}
                           >
                             <span className="font-medium">{r.short_name}</span>
-                            <span className="ml-1.5 text-gray-400">— {r.long_name}</span>
+                            <span className="ml-1.5 text-fg-subtle">— {r.long_name}</span>
                           </button>
                         </li>
                       ))}
@@ -362,7 +363,7 @@ function TripsContent() {
                   {groupedRoutes.rail.length === 0 &&
                     groupedRoutes.bus.length === 0 &&
                     groupedRoutes.other.length === 0 && (
-                      <li className="px-3 py-2 text-sm text-gray-400">No routes found</li>
+                      <li className="px-3 py-2 text-sm text-fg-subtle">No routes found</li>
                     )}
                 </ul>
               )}
@@ -372,22 +373,22 @@ function TripsContent() {
           <button
             onClick={handleLoad}
             disabled={!isValidRange}
-            className={`rounded px-4 py-1.5 text-sm font-medium text-white transition-colors ${
+            className={`press rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${
               isValidRange
-                ? "bg-rtd-blue hover:bg-rtd-blue/90"
-                : "cursor-not-allowed bg-gray-300"
+                ? "bg-accent text-accent-contrast hover:bg-accent/90"
+                : "cursor-not-allowed bg-card-muted text-fg-subtle"
             }`}
           >
             Load trips
           </button>
         </div>
 
-        <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-gray-600">
+        <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-fg-muted">
           <input
             type="checkbox"
             checked={strict}
             onChange={(e) => setStrict(e.target.checked)}
-            className="h-4 w-4 rounded border-gray-300 text-rtd-blue focus:ring-rtd-blue"
+            className="h-4 w-4 rounded border-line text-accent focus:ring-accent"
           />
           Only include trips strictly within this timeframe
         </label>
@@ -400,25 +401,25 @@ function TripsContent() {
           subtitle="Click a row to see the vehicle's stop-by-stop timeline"
         />
 
-        {isLoading && <LoadingSpinner />}
+        {isLoading && <TableSkeleton rows={8} />}
 
         {isError && (
-          <p className="py-8 text-center text-sm text-red-500">
+          <p className="py-8 text-center text-sm text-danger">
             Failed to load vehicles. The time window may be out of range.
           </p>
         )}
 
         {!isLoading && !isError && data?.vehicles.length === 0 && (
-          <p className="py-8 text-center text-sm text-gray-500">
+          <p className="py-8 text-center text-sm text-fg-muted">
             No vehicle data found for this time window.
           </p>
         )}
 
         {!isLoading && !isError && (data?.vehicles.length ?? 0) > 0 && (
           <>
-            <div className="overflow-x-auto rounded border border-gray-200">
-              <table className="min-w-full text-sm text-gray-800">
-                <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+            <div className="overflow-x-auto rounded border border-line">
+              <table className="min-w-full text-sm text-fg">
+                <thead className="bg-card-muted text-xs uppercase text-fg-muted">
                   <tr>
                     <th className="px-3 py-2 text-left">Route</th>
                     <th className="px-3 py-2 text-left">Vehicle</th>
@@ -429,11 +430,11 @@ function TripsContent() {
                     <th className="px-3 py-2 text-left">Occupancy</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-line">
                   {data!.vehicles.map((v, i) => (
                     <tr
                       key={`${v.vehicle_label ?? ""}-${v.trip_id ?? i}`}
-                      className="cursor-pointer hover:bg-blue-50"
+                      className="cursor-pointer hover:bg-accent/10"
                       onClick={() => handleVehicleClick(v)}
                     >
                       <td className="px-3 py-2">
@@ -442,29 +443,29 @@ function TripsContent() {
                       <td className="px-3 py-2 font-semibold">
                         {v.vehicle_label ? `#${v.vehicle_label}` : "—"}
                       </td>
-                      <td className="w-[600px] max-w-[600px] px-3 py-2 text-gray-600">
+                      <td className="w-[600px] max-w-[600px] px-3 py-2 text-fg-muted">
                         <span className="block truncate" title={`${v.start_stop_name ?? "—"} → ${v.end_stop_name ?? "—"}`}>
                           {v.start_stop_name ?? "—"}
-                          <span className="px-1 text-gray-400">→</span>
+                          <span className="px-1 text-fg-subtle">→</span>
                           {v.end_stop_name ?? "—"}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-gray-600">
+                      <td className="px-3 py-2 text-fg-muted">
                         {new Date(v.start_time).toLocaleTimeString([], {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
                       </td>
-                      <td className="px-3 py-2 text-gray-600">
+                      <td className="px-3 py-2 text-fg-muted">
                         {new Date(v.end_time).toLocaleTimeString([], {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-gray-600">
+                      <td className="px-3 py-2 text-right font-mono text-fg-muted">
                         {formatDuration(v.start_time, v.end_time)}
                       </td>
-                      <td className="px-3 py-2 text-gray-600">
+                      <td className="px-3 py-2 text-fg-muted">
                         {OCCUPANCY_SHORT[v.last_occupancy_status ?? "UNKNOWN"] ?? "—"}
                       </td>
                     </tr>
@@ -480,20 +481,20 @@ function TripsContent() {
               const start = (page - 1) * pageSize + 1;
               const end = Math.min(page * pageSize, totalCount);
               return (
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-gray-600">
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-fg-muted">
                   <span>
                     {start}–{end} of {totalCount} trips
                   </span>
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1.5">
-                      <label className="text-xs text-gray-500">Rows per page</label>
+                      <label className="text-xs text-fg-muted">Rows per page</label>
                       <select
                         value={pageSize}
                         onChange={(e) => {
                           setPageSize(Number(e.target.value));
                           setPage(1);
                         }}
-                        className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-rtd-blue"
+                        className="rounded border border-line bg-card px-2 py-1 text-xs text-fg focus:outline-none focus:ring-2 focus:ring-accent"
                       >
                         {PAGE_SIZE_OPTIONS.map((n) => (
                           <option key={n} value={n}>{n}</option>
@@ -504,7 +505,7 @@ function TripsContent() {
                       <button
                         onClick={() => setPage((p) => Math.max(1, p - 1))}
                         disabled={page === 1}
-                        className="rounded border border-gray-200 px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-40 hover:bg-gray-50"
+                        className="press rounded-lg border border-line px-2 py-1 text-xs hover:bg-card-muted disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         ‹ Prev
                       </button>
@@ -514,7 +515,7 @@ function TripsContent() {
                       <button
                         onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                         disabled={page >= totalPages}
-                        className="rounded border border-gray-200 px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-40 hover:bg-gray-50"
+                        className="press rounded-lg border border-line px-2 py-1 text-xs hover:bg-card-muted disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         Next ›
                       </button>
@@ -532,13 +533,7 @@ function TripsContent() {
 
 export default function TripsPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="mx-auto w-full max-w-7xl px-4 py-6">
-          <p className="text-sm text-gray-500">Loading…</p>
-        </div>
-      }
-    >
+    <Suspense fallback={<TransitLoader label="Loading trips" />}>
       <TripsContent />
     </Suspense>
   );

@@ -1,15 +1,19 @@
-import { Card } from "@/components/ui/Card";
+import CountUp from "@/components/ui/CountUp";
 import { cn } from "@/lib/utils";
 
 interface Props {
   title: string;
-  value: string;
+  /** Pre-formatted fallback value (used when `numericValue` is not supplied). */
+  value?: string;
+  /** When finite, the value counts up to this on mount and on change. */
+  numericValue?: number;
+  /** Formats `numericValue` for display. */
+  format?: (n: number) => string;
   subtitle?: string;
-  /** Signed change vs. the previous period (already computed in display units). */
+  /** Signed change vs. the previous period (already in display units). */
   delta?: number | null;
-  /** Suffix shown after the delta number, e.g. "pts" or "s". */
   deltaSuffix?: string;
-  /** When true, a negative delta is good (e.g. delay, headway). Default: up is good. */
+  /** When true, a negative delta is good (e.g. delay, headway). */
   lowerIsBetter?: boolean;
   accentColor?: string;
 }
@@ -22,7 +26,9 @@ function deltaTone(delta: number, lowerIsBetter: boolean): "good" | "bad" | "fla
 
 export default function KpiCard({
   title,
-  value,
+  value = "—",
+  numericValue,
+  format = (n) => String(Math.round(n)),
   subtitle,
   delta,
   deltaSuffix = "",
@@ -32,27 +38,41 @@ export default function KpiCard({
   const showDelta = delta !== null && delta !== undefined && Number.isFinite(delta);
   const tone = showDelta ? deltaTone(delta as number, lowerIsBetter) : "flat";
   const toneClass =
-    tone === "good" ? "text-green-600" : tone === "bad" ? "text-red-600" : "text-gray-400";
+    tone === "good" ? "text-ok" : tone === "bad" ? "text-danger" : "text-fg-subtle";
   const arrow = !showDelta ? "" : (delta as number) > 0 ? "▲" : (delta as number) < 0 ? "▼" : "—";
 
+  const showCount = typeof numericValue === "number" && Number.isFinite(numericValue);
+  const accent = accentColor ?? "rgb(var(--accent))";
+
   return (
-    <Card className="flex flex-col justify-between">
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{title}</p>
+    <div className="relative overflow-hidden rounded-2xl border border-line bg-card p-5 shadow-card">
+      <span
+        aria-hidden="true"
+        className="absolute inset-x-0 top-0 h-1"
+        style={{ backgroundColor: accent }}
+      />
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
+        {title}
+      </p>
       <p
-        className="mt-1 text-3xl font-bold"
+        className="mt-1.5 font-display text-3xl font-bold tabular-nums text-fg"
         style={accentColor ? { color: accentColor } : undefined}
       >
-        {value}
+        {showCount ? (
+          <CountUp value={numericValue as number} format={format} />
+        ) : (
+          value
+        )}
       </p>
-      <div className="mt-1 flex items-center gap-2">
+      <div className="mt-1.5 flex items-center gap-2">
         {showDelta && (
           <span className={cn("text-xs font-semibold", toneClass)}>
             {arrow} {Math.abs(delta as number).toFixed(1)}
             {deltaSuffix}
           </span>
         )}
-        {subtitle && <span className="text-xs text-gray-400">{subtitle}</span>}
+        {subtitle && <span className="text-xs text-fg-subtle">{subtitle}</span>}
       </div>
-    </Card>
+    </div>
   );
 }
