@@ -40,7 +40,7 @@ export default function NavBar() {
           href="https://github.com/ImMattic/rtdstats"
           target="_blank"
           rel="noopener noreferrer"
-          title="View on GitHub"
+          title="View on Github"
           className="ml-auto text-white/80 hover:text-white transition-colors"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
