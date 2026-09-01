@@ -259,6 +259,127 @@ function FlyToHandler({ flyTo }: { flyTo?: FlyToCoords | null }) {
   return null;
 }
 
+/**
+ * Google/Apple-Maps-style one-finger zoom: double-tap and, without lifting on
+ * the second tap, drag up to zoom in / down to zoom out. A plain double-tap with
+ * no drag falls through to Leaflet's built-in doubleClickZoom. Drives the zoom
+ * through the same internals Leaflet's pinch handler uses, so it feels identical.
+ */
+function OneFingerZoom() {
+  const map = useMap();
+
+  useEffect(() => {
+    const el = map.getContainer();
+    // Leaflet internals aren't in @types/leaflet — same escape hatch this file
+    // already uses for L.Icon.Default._getIconUrl.
+    const m = map as unknown as {
+      _move: (c: L.LatLng, z: number, d?: unknown, s?: unknown) => void;
+      _moveStart: (zoomChanged: boolean, noMoveStart: boolean) => void;
+      _animateZoom: (c: L.LatLng, z: number, start: boolean, noUpdate?: unknown) => void;
+      _resetView: (c: L.LatLng, z: number) => void;
+      _limitZoom: (z: number) => number;
+    };
+
+    const DOUBLE_TAP_MS = 300; // max gap between the two taps
+    const TAP_SLOP = 30;       // px the two taps may be apart
+    const COMMIT_SLOP = 8;     // px of vertical travel before we take over
+    const PX_PER_ZOOM = 180;   // vertical px that equals one zoom level
+
+    let lastTapTime = 0;
+    let lastTapPos = { x: 0, y: 0 };
+    let armed = false;   // second tap is down; may become a drag-zoom
+    let zooming = false; // committed: we're driving the zoom
+    let moved = false;
+    let startY = 0;
+    let startZoom = 0;
+    let center: L.LatLng | null = null;
+    let raf = 0;
+
+    const near = (a: typeof lastTapPos, b: typeof lastTapPos) =>
+      Math.hypot(a.x - b.x, a.y - b.y) < TAP_SLOP;
+
+    function finish() {
+      if (!zooming) { armed = false; return; }
+      armed = false;
+      zooming = false;
+      cancelAnimationFrame(raf);
+      map.dragging.enable();
+      // Re-enable next tick so the closing tap doesn't fire a step-zoom.
+      setTimeout(() => map.doubleClickZoom.enable(), 0);
+      if (moved && center) {
+        const z = m._limitZoom(map.getZoom());
+        if (map.options.zoomAnimation) {
+          m._animateZoom(center, z, true, map.options.zoomSnap);
+        } else {
+          m._resetView(center, z);
+        }
+      }
+    }
+
+    function onStart(e: TouchEvent) {
+      if (e.touches.length !== 1) { if (zooming) finish(); armed = false; return; }
+      const t = e.touches[0];
+      const pos = { x: t.clientX, y: t.clientY };
+      const now = Date.now();
+      if (now - lastTapTime < DOUBLE_TAP_MS && near(pos, lastTapPos)) {
+        armed = true;
+        moved = false;
+        startY = t.clientY;
+        startZoom = map.getZoom();
+        center = map.getCenter();
+      }
+      lastTapTime = now;
+      lastTapPos = pos;
+    }
+
+    function onMove(e: TouchEvent) {
+      if (!armed || e.touches.length !== 1 || !center) return;
+      const t = e.touches[0];
+      if (!zooming) {
+        if (Math.abs(t.clientY - startY) < COMMIT_SLOP) return;
+        zooming = true;
+        map.stop();
+        map.dragging.disable();
+        map.doubleClickZoom.disable();
+        m._moveStart(true, false);
+      }
+      e.preventDefault();
+      const scale = Math.pow(2, (startY - t.clientY) / PX_PER_ZOOM);
+      let zoom = map.getScaleZoom(scale, startZoom);
+      if (!map.options.bounceAtZoomLimits &&
+          ((zoom < map.getMinZoom() && scale < 1) ||
+           (zoom > map.getMaxZoom() && scale > 1))) {
+        zoom = m._limitZoom(zoom);
+      }
+      moved = true;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() =>
+        m._move(center!, zoom, { pinch: true, round: false }),
+      );
+    }
+
+    function onEnd() {
+      if (zooming) { finish(); return; }
+      armed = false;
+      lastTapTime = Date.now(); // arm the double-tap window
+    }
+
+    el.addEventListener("touchstart", onStart, { passive: false });
+    el.addEventListener("touchmove", onMove, { passive: false });
+    el.addEventListener("touchend", onEnd);
+    el.addEventListener("touchcancel", finish);
+    return () => {
+      cancelAnimationFrame(raf);
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove", onMove);
+      el.removeEventListener("touchend", onEnd);
+      el.removeEventListener("touchcancel", finish);
+    };
+  }, [map]);
+
+  return null;
+}
+
 export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, flyTo, selectedStop, onStopClick }: Props) {
   const [cartoApiKey, setCartoApiKey] = useState<string | null>(null);
 
@@ -296,6 +417,7 @@ export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, 
         maxZoom={19}
       />
       <FlyToHandler flyTo={flyTo} />
+      <OneFingerZoom />
       <RailLines />
       <SelectedBusRouteLine selectedVehicle={selectedVehicle} />
       <RouteStopMarkers
