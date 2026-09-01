@@ -407,7 +407,7 @@ export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, 
       minZoom={9}
       maxBounds={DENVER_METRO_BOUNDS}
       maxBoundsViscosity={1.0}
-      className="h-full w-full"
+      className="absolute inset-0 h-full w-full"
       scrollWheelZoom
     >
       <TileLayer

@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import "leaflet/dist/leaflet.css";
 import NavBar from "@/components/ui/NavBar";
+import SiteFooter from "@/components/ui/SiteFooter";
 import Providers from "./providers";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -48,12 +49,10 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${inter.className} bg-surface text-gray-100 antialiased`}>
         <Providers>
-          <div className="flex min-h-screen flex-col">
+          <div className="flex min-h-dvh flex-col">
             <NavBar />
-            <main className="flex flex-1 flex-col">{children}</main>
-            <footer className="border-t border-surface-border bg-surface-card py-2 text-center text-xs text-gray-500">
-              Made with ❤️ in Broomfield, CO
-            </footer>
+            <main className="flex min-h-0 flex-1 flex-col">{children}</main>
+            <SiteFooter />
           </div>
         </Providers>
       </body>

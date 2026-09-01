@@ -95,7 +95,7 @@ function HomePageInner() {
   const totalRoutes = new Set(vehicles.map((v) => v.route_id)).size;
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* Status bar */}
       <div className="flex items-center justify-between bg-surface-card border-b border-surface-border px-4 py-2 text-sm text-gray-300">
         <div className="flex items-center gap-4">
@@ -137,10 +137,10 @@ function HomePageInner() {
         </div>
       </div>
 
-      {/* Map */}
-      <div className="relative" style={{ height: "calc(100vh - 10rem)" }}>
+      {/* Map — fills whatever height is left below the nav + status bars */}
+      <div className="relative min-h-0 flex-1">
         {isError ? (
-          <div className="flex h-full items-center justify-center">
+          <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center text-gray-500">
               <p className="text-lg font-medium">Backend unreachable</p>
               <p className="text-sm mt-1">Make sure the API server is running.</p>
