@@ -17,9 +17,13 @@ export default function NavBar() {
   return (
     <header className="bg-rtd-red text-white shadow-lg border-b-2 border-rtd-darkred">
       <div className="mx-auto max-w-7xl px-4 py-3 flex items-center gap-8">
-        <span className="text-xl font-bold tracking-tight">
+        <Link
+          href="/"
+          className="text-xl font-bold tracking-tight transition-opacity hover:opacity-80"
+          aria-label="RTDstats — Live Map"
+        >
           RTD<span className="text-rtd-gold">stats</span>
-        </span>
+        </Link>
         <nav className="hidden sm:flex gap-4">
           {NAV_LINKS.map((link) => (
             <Link
