@@ -8,6 +8,17 @@
   width: 100%;
 }
 
+/* Zoom control sits in the bottom-right corner, stacked above the attribution;
+   dropped on mobile, where pinch / double-tap-drag zoom is the norm. */
+.leaflet-control-zoom {
+  margin-bottom: 6px !important;
+}
+@media (max-width: 639px) {
+  .leaflet-control-zoom {
+    display: none !important;
+  }
+}
+
 /* Leaflet popup / tooltip dark theme */
 .leaflet-tooltip {
   background: #1A2535 !important;
@@ -19,6 +30,36 @@
 }
 .leaflet-tooltip::before {
   border-top-color: #263040 !important;
+}
+
+/* Leaflet attribution control dark theme */
+.leaflet-control-attribution {
+  background: rgba(26, 37, 53, 0.8) !important;
+  color: #94a3b8 !important;
+}
+.leaflet-control-attribution a {
+  color: #cbd5e1 !important;
+}
+
+/* Leaflet zoom control dark theme */
+.leaflet-bar {
+  border: 1px solid #263040 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+}
+.leaflet-bar a,
+.leaflet-control-zoom a {
+  background-color: #1A2535 !important;
+  color: #f1f5f9 !important;
+  border-bottom: 1px solid #263040 !important;
+}
+.leaflet-bar a:hover,
+.leaflet-control-zoom a:hover {
+  background-color: #263040 !important;
+  color: #ffffff !important;
+}
+.leaflet-bar a.leaflet-disabled {
+  background-color: #141d29 !important;
+  color: #475569 !important;
 }
 
 @keyframes dialog-in {
@@ -38,4 +79,41 @@
 .animate-dialog-in {
   animation: dialog-in 260ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform, opacity;
+}
+
+/* Map status widget — one cycle step fading into the next */
+@keyframes cycle-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-cycle-in {
+  animation: cycle-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Map status widget — search field taking over the pill */
+@keyframes search-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.animate-search-in {
+  animation: search-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-cycle-in,
+  .animate-search-in {
+    animation: none;
+  }
 }

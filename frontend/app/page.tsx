@@ -6,9 +6,8 @@ import { useVehicles, useStopInfo, useAlerts } from "@/lib/hooks";
 import type { StopInfo, StuckAlert, VehiclePosition } from "@/lib/types";
 import VehicleDialog from "@/components/map/VehicleDialog";
 import StopDialog from "@/components/map/StopDialog";
-import VehicleSearch from "@/components/map/VehicleSearch";
+import MapStatusBar from "@/components/map/MapStatusBar";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
-import { headwayColor } from "@/lib/utils";
 
 // Leaflet must be loaded client-side only
 const VehicleMap = dynamic(() => import("@/components/map/VehicleMap"), {
@@ -95,49 +94,20 @@ function HomePageInner() {
   const totalRoutes = new Set(vehicles.map((v) => v.route_id)).size;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {/* Status bar */}
-      <div className="flex items-center justify-between bg-surface-card border-b border-surface-border px-4 py-2 text-sm text-gray-300">
-        <div className="flex items-center gap-4">
-          <span className="font-medium">
-            {isLoading
-              ? "Connecting…"
-              : isError
-                ? "Feed unavailable"
-                : `${vehicles.length} vehicles · ${totalRoutes} routes`}
-          </span>
-          {data && (
-            <span className="text-gray-400 text-xs">
-              Updated {new Date(dataUpdatedAt).toLocaleTimeString()}
-            </span>
-          )}
-        </div>
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      {/* Status + search widget — tucked beneath the nav island; tap to cycle info */}
+      <MapStatusBar
+        vehicles={vehicles}
+        vehicleCount={vehicles.length}
+        routeCount={totalRoutes}
+        isLoading={isLoading}
+        isError={isError}
+        dataUpdatedAt={dataUpdatedAt}
+        onSelect={handleSearchSelect}
+        onSelectStop={handleSearchStopSelect}
+      />
 
-        {/* Frequency legend */}
-        <div className="hidden sm:flex items-center gap-2 text-xs text-gray-500">
-          <span>Headway:</span>
-          {(
-            [
-              { label: "<15m",  color: headwayColor(10)  },
-              { label: "20m",   color: headwayColor(18)  },
-              { label: "30m",   color: headwayColor(25)  },
-              { label: "40m",   color: headwayColor(35)  },
-              { label: "50m",   color: headwayColor(45)  },
-              { label: "60m+",  color: headwayColor(99)  },
-            ] as const
-          ).map(({ label, color }) => (
-            <span key={label} className="flex items-center gap-1">
-              <span
-                className="inline-block h-3 w-3 rounded-full border-2"
-                style={{ borderColor: color, backgroundColor: "transparent" }}
-              />
-              {label}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* Map — fills whatever height is left below the nav + status bars */}
+      {/* Map — fills the whole area; the nav island and status pill float over it */}
       <div className="relative min-h-0 flex-1">
         {isError ? (
           <div className="absolute inset-0 flex items-center justify-center">
@@ -147,21 +117,14 @@ function HomePageInner() {
             </div>
           </div>
         ) : (
-          <>
-            <VehicleMap
-              vehicles={vehicles}
-              onVehicleClick={handleVehicleClick}
-              selectedVehicle={selected}
-              flyTo={searchFlyTo ?? flyTo}
-              selectedStop={selectedStop}
-              onStopClick={handleMapStopClick}
-            />
-            <VehicleSearch
-              vehicles={vehicles}
-              onSelect={handleSearchSelect}
-              onSelectStop={handleSearchStopSelect}
-            />
-          </>
+          <VehicleMap
+            vehicles={vehicles}
+            onVehicleClick={handleVehicleClick}
+            selectedVehicle={selected}
+            flyTo={searchFlyTo ?? flyTo}
+            selectedStop={selectedStop}
+            onStopClick={handleMapStopClick}
+          />
         )}
 
         {/* Vehicle dialog — hidden while a stop dialog is open */}

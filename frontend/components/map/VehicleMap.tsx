@@ -2,7 +2,7 @@
 
 import L from "leaflet";
 import { memo, useEffect, useMemo, useState } from "react";
-import { MapContainer, TileLayer, Marker, Tooltip, Polyline, CircleMarker, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Tooltip, Polyline, CircleMarker, ZoomControl, AttributionControl, useMap, useMapEvents } from "react-leaflet";
 import type { VehiclePosition, RailShape, StopInfo } from "@/lib/types";
 import { useRailShapes, useRouteShape, useRouteStops } from "@/lib/hooks";
 import { headwayColor, formatStatusLabel } from "@/lib/utils";
@@ -409,6 +409,8 @@ export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, 
       maxBoundsViscosity={1.0}
       className="absolute inset-0 h-full w-full"
       scrollWheelZoom
+      zoomControl={false}
+      attributionControl={false}
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
@@ -416,6 +418,10 @@ export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, 
         subdomains="abcd"
         maxZoom={19}
       />
+      {/* Bottom-right corner: Leaflet prepends each bottom control, so mounting
+          attribution first leaves the zoom buttons stacked above it. */}
+      <AttributionControl position="bottomright" />
+      <ZoomControl position="bottomright" />
       <FlyToHandler flyTo={flyTo} />
       <OneFingerZoom />
       <RailLines />
