@@ -8,6 +8,19 @@
   width: 100%;
 }
 
+/* Keep Leaflet's zoom control clear of the floating nav island on desktop;
+   drop it entirely on mobile, where pinch-to-zoom is the norm. */
+@media (min-width: 640px) and (max-width: 1400px) {
+  .leaflet-top .leaflet-control-zoom {
+    margin-top: 64px !important;
+  }
+}
+@media (max-width: 639px) {
+  .leaflet-control-zoom {
+    display: none !important;
+  }
+}
+
 /* Leaflet popup / tooltip dark theme */
 .leaflet-tooltip {
   background: #1A2535 !important;

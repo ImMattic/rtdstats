@@ -86,7 +86,7 @@ export default function VehicleSearch({ vehicles, onSelect, onSelectStop }: Prop
     groupedRoutes.rail.length + groupedRoutes.bus.length + groupedRoutes.other.length > 0;
 
   return (
-    <div ref={containerRef} className="absolute top-3 right-3 z-[1000]">
+    <div ref={containerRef} className="absolute right-3 top-16 z-[1000] min-[1760px]:top-3">
       {/* Mobile collapsed: icon button */}
       {!mobileExpanded && (
         <button

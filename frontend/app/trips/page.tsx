@@ -188,7 +188,7 @@ function TripsContent() {
   const selectedRouteName = routes.data?.routes.find((r) => r.route_id === routeId)?.short_name;
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 text-gray-900">
+    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 pb-6 pt-24 text-gray-900">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Trip Explorer</h1>
@@ -534,7 +534,7 @@ export default function TripsPage() {
   return (
     <Suspense
       fallback={
-        <div className="mx-auto w-full max-w-7xl px-4 py-6">
+        <div className="mx-auto w-full max-w-7xl px-4 pb-6 pt-24">
           <p className="text-sm text-gray-500">Loading…</p>
         </div>
       }

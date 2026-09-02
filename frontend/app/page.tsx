@@ -8,7 +8,7 @@ import VehicleDialog from "@/components/map/VehicleDialog";
 import StopDialog from "@/components/map/StopDialog";
 import VehicleSearch from "@/components/map/VehicleSearch";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
-import { headwayColor } from "@/lib/utils";
+import { cn, headwayColor } from "@/lib/utils";
 
 // Leaflet must be loaded client-side only
 const VehicleMap = dynamic(() => import("@/components/map/VehicleMap"), {
@@ -95,49 +95,59 @@ function HomePageInner() {
   const totalRoutes = new Set(vehicles.map((v) => v.route_id)).size;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {/* Status bar */}
-      <div className="flex items-center justify-between bg-surface-card border-b border-surface-border px-4 py-2 text-sm text-gray-300">
-        <div className="flex items-center gap-4">
-          <span className="font-medium">
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      {/* Status bar — tucked beneath the nav island; expands on hover */}
+      <div className="group pointer-events-none absolute inset-x-0 top-16 z-[1000] flex justify-center px-3">
+        <div className="pointer-events-auto flex items-center gap-0 overflow-hidden rounded-full border border-surface-border bg-surface-card/90 px-3 py-1.5 text-sm text-gray-300 shadow-lg shadow-black/30 backdrop-blur-md transition-all duration-300">
+          <span className="flex items-center gap-2 whitespace-nowrap font-medium">
+            <span
+              className={cn(
+                "inline-block h-2 w-2 rounded-full",
+                isError ? "bg-red-500" : isLoading ? "bg-amber-400" : "bg-emerald-400",
+              )}
+            />
             {isLoading
               ? "Connecting…"
               : isError
                 ? "Feed unavailable"
                 : `${vehicles.length} vehicles · ${totalRoutes} routes`}
           </span>
-          {data && (
-            <span className="text-gray-400 text-xs">
-              Updated {new Date(dataUpdatedAt).toLocaleTimeString()}
-            </span>
-          )}
-        </div>
 
-        {/* Frequency legend */}
-        <div className="hidden sm:flex items-center gap-2 text-xs text-gray-500">
-          <span>Headway:</span>
-          {(
-            [
-              { label: "<15m",  color: headwayColor(10)  },
-              { label: "20m",   color: headwayColor(18)  },
-              { label: "30m",   color: headwayColor(25)  },
-              { label: "40m",   color: headwayColor(35)  },
-              { label: "50m",   color: headwayColor(45)  },
-              { label: "60m+",  color: headwayColor(99)  },
-            ] as const
-          ).map(({ label, color }) => (
-            <span key={label} className="flex items-center gap-1">
-              <span
-                className="inline-block h-3 w-3 rounded-full border-2"
-                style={{ borderColor: color, backgroundColor: "transparent" }}
-              />
-              {label}
-            </span>
-          ))}
+          {/* Revealed on hover */}
+          <div className="grid grid-cols-[0fr] transition-[grid-template-columns] duration-300 ease-out group-hover:grid-cols-[1fr]">
+            <div className="flex min-w-0 items-center gap-3 overflow-hidden pl-3">
+              {data && (
+                <span className="whitespace-nowrap text-xs text-gray-400">
+                  Updated {new Date(dataUpdatedAt).toLocaleTimeString()}
+                </span>
+              )}
+              <div className="hidden items-center gap-2 whitespace-nowrap text-xs text-gray-500 sm:flex">
+                <span>Headway:</span>
+                {(
+                  [
+                    { label: "<15m",  color: headwayColor(10)  },
+                    { label: "20m",   color: headwayColor(18)  },
+                    { label: "30m",   color: headwayColor(25)  },
+                    { label: "40m",   color: headwayColor(35)  },
+                    { label: "50m",   color: headwayColor(45)  },
+                    { label: "60m+",  color: headwayColor(99)  },
+                  ] as const
+                ).map(({ label, color }) => (
+                  <span key={label} className="flex items-center gap-1">
+                    <span
+                      className="inline-block h-3 w-3 rounded-full border-2"
+                      style={{ borderColor: color, backgroundColor: "transparent" }}
+                    />
+                    {label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Map — fills whatever height is left below the nav + status bars */}
+      {/* Map — fills the whole area; the nav island and status pill float over it */}
       <div className="relative min-h-0 flex-1">
         {isError ? (
           <div className="absolute inset-0 flex items-center justify-center">

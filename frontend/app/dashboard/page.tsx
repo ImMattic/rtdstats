@@ -159,7 +159,7 @@ export default function DashboardPage() {
     routes.data?.routes.find((r) => r.route_id === routeId)?.short_name;
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 text-gray-900">
+    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 pb-6 pt-24 text-gray-900">
       {/* Header + controls */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
