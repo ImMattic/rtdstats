@@ -15,8 +15,8 @@ export default function NavBar() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <header className="pointer-events-none fixed inset-x-0 top-0 z-[1100] flex justify-center px-3 pt-3">
-      <div className="pointer-events-auto w-full max-w-6xl">
+    <header className="pointer-events-none fixed inset-x-0 top-0 z-[1100] flex justify-center px-4 pt-3">
+      <div className="pointer-events-auto w-full max-w-7xl">
         <div className="flex items-center gap-4 rounded-full border border-rtd-darkred bg-rtd-red/95 px-4 py-2 text-white shadow-xl shadow-black/30 backdrop-blur-md sm:gap-8 sm:px-5">
           <Link
             href="/"
@@ -57,36 +57,65 @@ export default function NavBar() {
             aria-label="Toggle navigation menu"
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((open) => !open)}
-            className="sm:hidden text-white/80 hover:text-white transition-colors"
+            className="sm:hidden -mr-1 grid h-8 w-8 place-items-center text-white/80 transition-colors hover:text-white"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-6 h-6">
-              {menuOpen ? (
-                <path d="M6 6l12 12M18 6L6 18" />
-              ) : (
-                <path d="M4 7h16M4 12h16M4 17h16" />
-              )}
-            </svg>
+            <span className="relative block h-4 w-6" aria-hidden="true">
+              <span
+                className={cn(
+                  "absolute left-0 block h-0.5 w-6 rounded-full bg-current transition-all duration-300 ease-in-out motion-reduce:transition-none",
+                  menuOpen ? "top-1/2 -translate-y-1/2 rotate-45" : "top-0",
+                )}
+              />
+              <span
+                className={cn(
+                  "absolute left-0 top-1/2 block h-0.5 w-6 -translate-y-1/2 rounded-full bg-current transition-all duration-200 ease-in-out motion-reduce:transition-none",
+                  menuOpen ? "scale-x-0 opacity-0" : "scale-x-100 opacity-100",
+                )}
+              />
+              <span
+                className={cn(
+                  "absolute left-0 block h-0.5 w-6 rounded-full bg-current transition-all duration-300 ease-in-out motion-reduce:transition-none",
+                  menuOpen ? "bottom-1/2 translate-y-1/2 -rotate-45" : "bottom-0",
+                )}
+              />
+            </span>
           </button>
         </div>
-        {menuOpen && (
-          <nav className="sm:hidden mt-2 flex flex-col gap-1 rounded-2xl border border-rtd-darkred bg-rtd-red/95 p-2 text-white shadow-xl shadow-black/30 backdrop-blur-md">
-            {NAV_LINKS.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={() => setMenuOpen(false)}
-                className={cn(
-                  "text-sm font-medium px-3 py-2 rounded-xl transition-colors",
-                  pathname === link.href
-                    ? "bg-rtd-darkred text-white"
-                    : "text-white/80 hover:text-white hover:bg-rtd-darkred/60",
-                )}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
-        )}
+        <div
+          className={cn(
+            "grid overflow-hidden transition-[grid-template-rows,opacity,margin] duration-300 ease-out sm:hidden motion-reduce:transition-none",
+            menuOpen ? "mt-2 grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+          )}
+        >
+          <div className="min-h-0">
+            <nav
+              aria-hidden={!menuOpen}
+              className={cn(
+                "flex flex-col gap-1 rounded-2xl border border-rtd-darkred bg-rtd-red/95 p-2 text-white shadow-xl shadow-black/30 backdrop-blur-md transition-transform duration-300 ease-out motion-reduce:transition-none",
+                menuOpen ? "translate-y-0" : "-translate-y-2",
+              )}
+            >
+              {NAV_LINKS.map((link, i) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  tabIndex={menuOpen ? undefined : -1}
+                  onClick={() => setMenuOpen(false)}
+                  style={{ transitionDelay: menuOpen ? `${80 + i * 55}ms` : "0ms" }}
+                  className={cn(
+                    "rounded-xl px-3 py-2 text-sm font-medium transition-all duration-300 ease-out motion-reduce:transition-none motion-reduce:translate-x-0 motion-reduce:opacity-100",
+                    menuOpen ? "translate-x-0 opacity-100" : "-translate-x-3 opacity-0",
+                    pathname === link.href
+                      ? "bg-rtd-darkred text-white"
+                      : "text-white/80 hover:bg-rtd-darkred/60 hover:text-white",
+                  )}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </nav>
+          </div>
+        </div>
       </div>
     </header>
   );

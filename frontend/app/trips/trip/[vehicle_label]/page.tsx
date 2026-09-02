@@ -97,7 +97,7 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
   const playback = usePlayback(playbackStartMs, playbackEndMs);
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 text-gray-900">
+    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 pb-6 pt-24 text-gray-900">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500">
         <Link href={backHref} className="hover:text-rtd-blue">
@@ -293,7 +293,7 @@ export default function TripDetailPage({
   return (
     <Suspense
       fallback={
-        <div className="mx-auto w-full max-w-7xl px-4 py-6">
+        <div className="mx-auto w-full max-w-7xl px-4 pb-6 pt-24">
           <p className="text-sm text-gray-500">Loading…</p>
         </div>
       }

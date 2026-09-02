@@ -8,12 +8,10 @@
   width: 100%;
 }
 
-/* Keep Leaflet's zoom control clear of the floating nav island on desktop;
-   drop it entirely on mobile, where pinch-to-zoom is the norm. */
-@media (min-width: 640px) and (max-width: 1400px) {
-  .leaflet-top .leaflet-control-zoom {
-    margin-top: 64px !important;
-  }
+/* Zoom control sits in the bottom-right corner, stacked above the attribution;
+   dropped on mobile, where pinch / double-tap-drag zoom is the norm. */
+.leaflet-control-zoom {
+  margin-bottom: 6px !important;
 }
 @media (max-width: 639px) {
   .leaflet-control-zoom {
@@ -81,4 +79,41 @@
 .animate-dialog-in {
   animation: dialog-in 260ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform, opacity;
+}
+
+/* Map status widget — one cycle step fading into the next */
+@keyframes cycle-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-cycle-in {
+  animation: cycle-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Map status widget — search field taking over the pill */
+@keyframes search-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.animate-search-in {
+  animation: search-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-cycle-in,
+  .animate-search-in {
+    animation: none;
+  }
 }
