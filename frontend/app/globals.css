@@ -34,6 +34,36 @@
   border-top-color: #263040 !important;
 }
 
+/* Leaflet attribution control dark theme */
+.leaflet-control-attribution {
+  background: rgba(26, 37, 53, 0.8) !important;
+  color: #94a3b8 !important;
+}
+.leaflet-control-attribution a {
+  color: #cbd5e1 !important;
+}
+
+/* Leaflet zoom control dark theme */
+.leaflet-bar {
+  border: 1px solid #263040 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+}
+.leaflet-bar a,
+.leaflet-control-zoom a {
+  background-color: #1A2535 !important;
+  color: #f1f5f9 !important;
+  border-bottom: 1px solid #263040 !important;
+}
+.leaflet-bar a:hover,
+.leaflet-control-zoom a:hover {
+  background-color: #263040 !important;
+  color: #ffffff !important;
+}
+.leaflet-bar a.leaflet-disabled {
+  background-color: #141d29 !important;
+  color: #475569 !important;
+}
+
 @keyframes dialog-in {
   0% {
     opacity: 0;
