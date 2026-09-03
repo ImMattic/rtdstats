@@ -1,4 +1,4 @@
-import { formatDelay, formatTime, formatDateTime, routeColor } from "@/lib/utils";
+import { cn, formatDelay, formatTime, formatDateTime, routeColor } from "@/lib/utils";
 import type { VehiclePosition } from "@/lib/types";
 
 interface Props {
@@ -20,7 +20,7 @@ export default function VehicleDialog({ vehicle: v, onClose, isStuck = false }: 
   const delayText = (isLate || isEarly) ? formatDelay(v.delay_seconds) : "";
 
   return (
-    <div className="animate-dialog-in absolute bottom-6 left-1/2 z-[9999] w-80 -translate-x-1/2 rounded-xl bg-white/95 shadow-2xl ring-1 ring-black/5 backdrop-blur-sm">
+    <div className="animate-dialog-in absolute bottom-6 left-1/2 z-[9999] w-80 -translate-x-1/2 rounded-xl bg-overlay/95 shadow-2xl ring-1 ring-line-strong backdrop-blur-sm">
       {/* Header */}
       <div
         className="flex items-center justify-between rounded-t-xl px-4 py-3 text-white"
@@ -45,41 +45,36 @@ export default function VehicleDialog({ vehicle: v, onClose, isStuck = false }: 
       </div>
 
       {/* Body */}
-      <div className="px-4 py-3 space-y-2 text-sm text-gray-900">
+      <div className="px-4 py-3 space-y-2 text-sm text-fg">
         {/* Current stop */}
         <div className="flex items-start gap-2">
-          <span className="mt-0.5 h-2 w-2 rounded-full bg-rtd-blue flex-shrink-0" />
+          <span className="mt-0.5 h-2 w-2 rounded-full bg-accent flex-shrink-0" />
           <div>
-            <p className="text-gray-900 text-xs">
+            <p className="text-fg-subtle text-xs">
               {STATUS_LABELS[v.current_status ?? -1] ?? "At"}
             </p>
-            <p className="font-medium text-gray-900">{v.stop_name ?? v.stop_id ?? "Unknown stop"}</p>
+            <p className="font-medium text-fg">{v.stop_name ?? v.stop_id ?? "Unknown stop"}</p>
           </div>
         </div>
 
         {/* On-time status */}
         <div className="flex items-center gap-2">
           <span
-            className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-              isStuck
-                ? "bg-orange-100 text-orange-700"
-                : isLate
-                  ? "bg-red-100 text-red-700"
-                  : isEarly
-                    ? "bg-yellow-100 text-yellow-700"
-                    : "bg-green-100 text-green-700"
-            }`}
+            className={cn(
+              "rounded-full px-2 py-0.5 text-xs font-semibold",
+              isStuck ? "status-warn" : isLate ? "status-danger" : isEarly ? "status-warn" : "status-ok",
+            )}
           >
             {isStuck ? "Stuck" : isLate ? "Late" : isEarly ? "Early" : "On time"}
           </span>
-          {delayText && <span className="font-mono text-gray-700">{delayText}</span>}
+          {delayText && <span className="font-mono text-fg-muted">{delayText}</span>}
         </div>
 
         {/* Headway */}
         {v.headway_minutes !== null && (
-          <p className="text-gray-500 text-xs">
+          <p className="text-fg-subtle text-xs">
             Real-time headway:{" "}
-            <span className="font-medium text-gray-800">
+            <span className="font-medium text-fg-muted">
               {v.headway_minutes} min
             </span>
           </p>
@@ -87,26 +82,26 @@ export default function VehicleDialog({ vehicle: v, onClose, isStuck = false }: 
 
         {/* Occupancy */}
         {v.occupancy_status && v.occupancy_status !== "UNKNOWN" && (
-          <p className="text-gray-500 text-xs">
+          <p className="text-fg-subtle text-xs">
             Occupancy:{" "}
-            <span className="font-medium text-gray-800">
+            <span className="font-medium text-fg-muted">
               {v.occupancy_status.replace(/_/g, " ")}
             </span>
           </p>
         )}
 
         {/* Last updated */}
-        <p className="text-gray-400 text-xs">
+        <p className="text-fg-subtle text-xs">
           Updated {formatDateTime(v.timestamp)}
         </p>
 
         {/* Links */}
-        <div className="pt-1.5 border-t border-gray-100 flex flex-wrap gap-x-3 gap-y-1">
+        <div className="pt-1.5 border-t border-line flex flex-wrap gap-x-3 gap-y-1">
           <a
             href={`https://app.rtd-denver.com/route/${v.route_short_name}/schedule`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-rtd-blue hover:underline"
+            className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
           >
             RTD schedule
             <svg className="h-3 w-3 opacity-70" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -122,7 +117,7 @@ export default function VehicleDialog({ vehicle: v, onClose, isStuck = false }: 
             }
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-rtd-blue hover:underline"
+            className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
           >
             GDT overview
             <svg className="h-3 w-3 opacity-70" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">

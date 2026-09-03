@@ -1,7 +1,8 @@
 "use client";
 import { memo, useMemo, useState } from "react";
 import type { FrequencyRouteStats } from "@/lib/types";
-import { headwayColor } from "@/lib/utils";
+import { bestTextOn, headwayColor } from "@/lib/utils";
+import { useTheme } from "@/lib/useTheme";
 
 type SortKey = keyof Pick<
   FrequencyRouteStats,
@@ -18,14 +19,14 @@ interface Props {
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   return (
-    <span className={`ml-1 inline-block ${active ? "text-gray-700" : "text-gray-300"}`}>
+    <span className={`ml-1 inline-block ${active ? "text-fg-muted" : "text-fg-subtle/60"}`}>
       {active && dir === "desc" ? "▼" : "▲"}
     </span>
   );
 }
 
-function FrequencyBadge({ minutes }: { minutes: number }) {
-  const color = headwayColor(minutes);
+function FrequencyBadge({ minutes, mode }: { minutes: number; mode: "dark" | "light" }) {
+  const color = headwayColor(minutes, mode);
   const label =
     minutes <= 0
       ? "—"
@@ -36,8 +37,8 @@ function FrequencyBadge({ minutes }: { minutes: number }) {
           : "Low";
   return (
     <span
-      className="rounded-full px-2 py-0.5 text-xs font-semibold text-white"
-      style={{ backgroundColor: color }}
+      className="rounded-full px-2 py-0.5 text-xs font-semibold"
+      style={{ backgroundColor: color, color: bestTextOn(color) }}
     >
       {label}
     </span>
@@ -45,6 +46,7 @@ function FrequencyBadge({ minutes }: { minutes: number }) {
 }
 
 function FrequencyTable({ routes, onRowClick }: Props) {
+  const { resolvedTheme } = useTheme();
   const [sortKey, setSortKey] = useState<SortKey>("avg_headway_minutes");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [page, setPage] = useState(0);
@@ -76,16 +78,16 @@ function FrequencyTable({ routes, onRowClick }: Props) {
   }
 
   if (!routes.length) {
-    return <p className="text-sm text-gray-500 py-4">No frequency data yet.</p>;
+    return <p className="text-sm text-fg-subtle py-4">No frequency data yet.</p>;
   }
 
-  const thClass = "px-3 py-2 cursor-pointer select-none whitespace-nowrap hover:text-gray-700";
+  const thClass = "px-3 py-2 cursor-pointer select-none whitespace-nowrap hover:text-fg";
 
   return (
     <div className="space-y-2">
-      <div className="overflow-x-auto rounded border border-gray-200">
-        <table className="min-w-full text-sm text-gray-800">
-          <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+      <div className="overflow-x-auto rounded border border-line">
+        <table className="min-w-full text-sm text-fg-muted">
+          <thead className="bg-raised text-xs uppercase text-fg-subtle">
             <tr>
               <th
                 className={`${thClass} text-left`}
@@ -120,19 +122,19 @@ function FrequencyTable({ routes, onRowClick }: Props) {
               <th className="w-6"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-line">
             {pageRows.map((r) => (
               <tr
                 key={r.route_id}
-                className={`group hover:bg-gray-50 ${onRowClick ? "cursor-pointer" : ""}`}
+                className={`group hover:bg-raised ${onRowClick ? "cursor-pointer" : ""}`}
                 onClick={() => onRowClick?.(r.route_id)}
               >
-                <td className="px-3 py-2 font-bold text-gray-900">{r.route_short_name}</td>
+                <td className="px-3 py-2 font-bold text-fg">{r.route_short_name}</td>
                 <td className="px-3 py-2 text-right">{r.vehicle_count}</td>
                 <td className="px-3 py-2 text-right">
                   {r.avg_headway_minutes > 0 ? `${r.avg_headway_minutes} min` : "—"}
                 </td>
-                <td className="px-3 py-2 text-right text-gray-500">
+                <td className="px-3 py-2 text-right text-fg-subtle">
                   {r.min_headway_minutes > 0 && r.min_headway_minutes !== r.max_headway_minutes
                     ? `${r.min_headway_minutes}–${r.max_headway_minutes} min`
                     : r.avg_headway_minutes > 0
@@ -140,9 +142,9 @@ function FrequencyTable({ routes, onRowClick }: Props) {
                       : "—"}
                 </td>
                 <td className="px-3 py-2 text-center">
-                  <FrequencyBadge minutes={r.avg_headway_minutes} />
+                  <FrequencyBadge minutes={r.avg_headway_minutes} mode={resolvedTheme} />
                 </td>
-                <td className="pr-3 text-gray-300 group-hover:text-gray-500 transition-colors select-none">›</td>
+                <td className="pr-3 text-fg-subtle group-hover:text-fg-muted transition-colors select-none">›</td>
               </tr>
             ))}
           </tbody>
@@ -150,7 +152,7 @@ function FrequencyTable({ routes, onRowClick }: Props) {
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-end gap-3 text-xs text-gray-500">
+        <div className="flex items-center justify-end gap-3 text-xs text-fg-subtle">
           <span>
             {page * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE + PAGE_SIZE, sorted.length)} of{" "}
             {sorted.length}
@@ -158,14 +160,14 @@ function FrequencyTable({ routes, onRowClick }: Props) {
           <button
             onClick={() => setPage((p) => p - 1)}
             disabled={page === 0}
-            className="px-2 py-0.5 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="px-2 py-0.5 rounded hover:bg-raised disabled:opacity-30 disabled:cursor-not-allowed"
           >
             ‹
           </button>
           <button
             onClick={() => setPage((p) => p + 1)}
             disabled={page >= totalPages - 1}
-            className="px-2 py-0.5 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="px-2 py-0.5 rounded hover:bg-raised disabled:opacity-30 disabled:cursor-not-allowed"
           >
             ›
           </button>

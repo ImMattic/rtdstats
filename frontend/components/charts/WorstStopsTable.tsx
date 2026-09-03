@@ -1,6 +1,7 @@
 "use client";
 import type { WorstStop } from "@/lib/types";
 import { cn, formatDelayMin, formatNumber, onTimeColor } from "@/lib/utils";
+import { useTheme } from "@/lib/useTheme";
 
 interface Props {
   stops: WorstStop[];
@@ -8,14 +9,16 @@ interface Props {
 
 /** Stops ranked by average arrival delay — where riders wait longest. */
 export default function WorstStopsTable({ stops }: Props) {
+  const { resolvedTheme } = useTheme();
+
   if (!stops.length) {
-    return <p className="py-6 text-center text-sm text-gray-500">No stop-level delay data yet.</p>;
+    return <p className="py-6 text-center text-sm text-fg-subtle">No stop-level delay data yet.</p>;
   }
 
   return (
-    <div className="overflow-x-auto rounded border border-gray-200">
-      <table className="min-w-full text-sm text-gray-800">
-        <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+    <div className="overflow-x-auto rounded border border-line">
+      <table className="min-w-full text-sm text-fg-muted">
+        <thead className="bg-raised text-xs uppercase text-fg-subtle">
           <tr>
             <th className="px-3 py-2 text-left">#</th>
             <th className="px-3 py-2 text-left">Stop</th>
@@ -24,26 +27,26 @@ export default function WorstStopsTable({ stops }: Props) {
             <th className="px-3 py-2 text-right">Samples</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-line">
           {stops.map((s, i) => (
-            <tr key={`${s.stop_id}-${i}`} className="hover:bg-gray-50">
-              <td className="px-3 py-2 text-gray-400">{i + 1}</td>
+            <tr key={`${s.stop_id}-${i}`} className="hover:bg-raised">
+              <td className="px-3 py-2 text-fg-subtle">{i + 1}</td>
               <td className="px-3 py-2">
-                <span className="font-medium text-gray-900">{s.stop_name ?? s.stop_id}</span>
-                {s.stop_name && <span className="ml-1 text-xs text-gray-400">#{s.stop_id}</span>}
+                <span className="font-medium text-fg">{s.stop_name ?? s.stop_id}</span>
+                {s.stop_name && <span className="ml-1 text-xs text-fg-subtle">#{s.stop_id}</span>}
               </td>
               <td
                 className={cn(
                   "px-3 py-2 text-right font-mono font-semibold",
-                  s.avg_delay_seconds > 300 ? "text-red-600" : "text-gray-700",
+                  s.avg_delay_seconds > 300 ? "text-danger" : "text-fg-muted",
                 )}
               >
                 {formatDelayMin(s.avg_delay_seconds)}
               </td>
-              <td className="px-3 py-2 text-right font-mono" style={{ color: onTimeColor(s.on_time_pct) }}>
+              <td className="px-3 py-2 text-right font-mono" style={{ color: onTimeColor(s.on_time_pct, resolvedTheme) }}>
                 {s.on_time_pct.toFixed(0)}%
               </td>
-              <td className="px-3 py-2 text-right font-mono text-gray-400">
+              <td className="px-3 py-2 text-right font-mono text-fg-subtle">
                 {formatNumber(s.observations)}
               </td>
             </tr>

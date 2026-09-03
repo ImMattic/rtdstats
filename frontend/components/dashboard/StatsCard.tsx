@@ -6,19 +6,19 @@ interface Props {
 }
 
 const accentClasses = {
-  green: "text-green-600",
-  orange: "text-orange-500",
-  red: "text-red-600",
-  blue: "text-rtd-blue",
-  default: "text-gray-900",
+  green: "text-ok",
+  orange: "text-warn",
+  red: "text-danger",
+  blue: "text-accent",
+  default: "text-fg",
 };
 
 export default function StatsCard({ title, value, subtitle, accent = "default" }: Props) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <p className="text-sm text-gray-500 font-medium">{title}</p>
+    <div className="rounded-xl border border-line bg-card p-5 shadow-card">
+      <p className="text-sm text-fg-subtle font-medium">{title}</p>
       <p className={`mt-1 text-3xl font-bold ${accentClasses[accent]}`}>{value}</p>
-      {subtitle && <p className="mt-1 text-xs text-gray-400">{subtitle}</p>}
+      {subtitle && <p className="mt-1 text-xs text-fg-subtle">{subtitle}</p>}
     </div>
   );
 }

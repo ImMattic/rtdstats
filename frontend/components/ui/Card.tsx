@@ -5,10 +5,10 @@ interface CardProps {
   className?: string;
 }
 
-/** The shared white panel used across the dashboard and historical pages. */
+/** The shared panel used across the dashboard and trips pages. */
 export function Card({ children, className }: CardProps) {
   return (
-    <div className={cn("rounded-xl border border-gray-200 bg-white p-5 shadow-sm", className)}>
+    <div className={cn("rounded-xl border border-line bg-card p-5 shadow-card", className)}>
       {children}
     </div>
   );
@@ -25,8 +25,8 @@ export function SectionHeading({ title, subtitle, right }: SectionHeadingProps) 
   return (
     <div className="mb-4 flex items-start justify-between gap-3">
       <div>
-        <h2 className="text-base font-semibold text-gray-900">{title}</h2>
-        {subtitle && <p className="mt-0.5 text-xs text-gray-500">{subtitle}</p>}
+        <h2 className="text-base font-semibold text-fg">{title}</h2>
+        {subtitle && <p className="mt-0.5 text-xs text-fg-subtle">{subtitle}</p>}
       </div>
       {right}
     </div>

@@ -2,6 +2,7 @@
 import { useMemo, useState } from "react";
 import type { OnTimeRouteStats } from "@/lib/types";
 import { cn, formatDelayMin, formatNumber, onTimeColor } from "@/lib/utils";
+import { useTheme } from "@/lib/useTheme";
 
 const PAGE_SIZE = 10;
 
@@ -13,6 +14,7 @@ interface Props {
 type SortKey = "route" | "on_time_pct" | "avg_delay_seconds" | "total_observations";
 
 export default function ScorecardTable({ routes, onSelectRoute }: Props) {
+  const { resolvedTheme } = useTheme();
   const [sortKey, setSortKey] = useState<SortKey>("on_time_pct");
   const [asc, setAsc] = useState(false);
   const [page, setPage] = useState(0);
@@ -44,13 +46,13 @@ export default function ScorecardTable({ routes, onSelectRoute }: Props) {
   }
 
   if (!routes.length) {
-    return <p className="py-6 text-center text-sm text-gray-500">No route data yet.</p>;
+    return <p className="py-6 text-center text-sm text-fg-subtle">No route data yet.</p>;
   }
 
   const Header = ({ k, label, align = "right" }: { k: SortKey; label: string; align?: "left" | "right" }) => (
     <th
       className={cn(
-        "cursor-pointer select-none px-3 py-2 text-xs uppercase text-gray-500 hover:text-gray-800",
+        "cursor-pointer select-none px-3 py-2 text-xs uppercase text-fg-subtle hover:text-fg",
         align === "right" ? "text-right" : "text-left",
       )}
       onClick={() => toggle(k)}
@@ -61,9 +63,9 @@ export default function ScorecardTable({ routes, onSelectRoute }: Props) {
 
   return (
     <div className="space-y-2">
-      <div className="overflow-x-auto rounded border border-gray-200">
-        <table className="min-w-full text-sm text-gray-800">
-          <thead className="bg-gray-50">
+      <div className="overflow-x-auto rounded border border-line">
+        <table className="min-w-full text-sm text-fg-muted">
+          <thead className="bg-raised">
             <tr>
               <Header k="route" label="Route" align="left" />
               <Header k="on_time_pct" label="On-time" />
@@ -71,21 +73,21 @@ export default function ScorecardTable({ routes, onSelectRoute }: Props) {
               <Header k="total_observations" label="Samples" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-line">
             {pageRows.map((r) => (
               <tr
                 key={r.route_id}
-                className={cn("hover:bg-gray-50", onSelectRoute && "cursor-pointer")}
+                className={cn("hover:bg-raised", onSelectRoute && "cursor-pointer")}
                 onClick={() => onSelectRoute?.(r.route_id)}
               >
-                <td className="px-3 py-2 font-bold text-gray-900">{r.route_short_name}</td>
+                <td className="px-3 py-2 font-bold text-fg">{r.route_short_name}</td>
                 <td className="px-3 py-2 text-right">
                   <span className="inline-flex items-center gap-2 justify-end">
                     <span
                       className="inline-block h-2 w-2 rounded-full"
-                      style={{ backgroundColor: onTimeColor(r.on_time_pct) }}
+                      style={{ backgroundColor: onTimeColor(r.on_time_pct, resolvedTheme) }}
                     />
-                    <span className="font-mono font-semibold" style={{ color: onTimeColor(r.on_time_pct) }}>
+                    <span className="font-mono font-semibold" style={{ color: onTimeColor(r.on_time_pct, resolvedTheme) }}>
                       {r.on_time_pct.toFixed(1)}%
                     </span>
                   </span>
@@ -93,12 +95,12 @@ export default function ScorecardTable({ routes, onSelectRoute }: Props) {
                 <td
                   className={cn(
                     "px-3 py-2 text-right font-mono",
-                    r.avg_delay_seconds > 300 ? "text-red-600" : "text-gray-600",
+                    r.avg_delay_seconds > 300 ? "text-danger" : "text-fg-muted",
                   )}
                 >
                   {formatDelayMin(r.avg_delay_seconds)}
                 </td>
-                <td className="px-3 py-2 text-right font-mono text-gray-400">
+                <td className="px-3 py-2 text-right font-mono text-fg-subtle">
                   {formatNumber(r.total_observations)}
                 </td>
               </tr>
@@ -108,7 +110,7 @@ export default function ScorecardTable({ routes, onSelectRoute }: Props) {
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-end gap-3 text-xs text-gray-500">
+        <div className="flex items-center justify-end gap-3 text-xs text-fg-subtle">
           <span>
             {page * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE + PAGE_SIZE, sorted.length)} of{" "}
             {sorted.length}
@@ -116,14 +118,14 @@ export default function ScorecardTable({ routes, onSelectRoute }: Props) {
           <button
             onClick={() => setPage((p) => p - 1)}
             disabled={page === 0}
-            className="px-2 py-0.5 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="px-2 py-0.5 rounded hover:bg-raised disabled:opacity-30 disabled:cursor-not-allowed"
           >
             ‹
           </button>
           <button
             onClick={() => setPage((p) => p + 1)}
             disabled={page >= totalPages - 1}
-            className="px-2 py-0.5 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="px-2 py-0.5 rounded hover:bg-raised disabled:opacity-30 disabled:cursor-not-allowed"
           >
             ›
           </button>

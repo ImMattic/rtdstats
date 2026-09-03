@@ -28,6 +28,7 @@ import OccupancyChart from "@/components/charts/OccupancyChart";
 import WorstStopsTable from "@/components/charts/WorstStopsTable";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { formatDelayMin, onTimeColor } from "@/lib/utils";
+import { useTheme } from "@/lib/useTheme";
 
 const DAY_OPTIONS = [1, 7];
 
@@ -48,6 +49,7 @@ function delta(m?: { value: number; previous: number | null }): number | null {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { resolvedTheme } = useTheme();
   const [days, setDays] = useState(7);
   const [routeId, setRouteId] = useState<string>("");
   const [occDirection, setOccDirection] = useState<number | undefined>(undefined);
@@ -159,20 +161,20 @@ export default function DashboardPage() {
     routes.data?.routes.find((r) => r.route_id === routeId)?.short_name;
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 pb-6 pt-24 text-gray-900">
+    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 pb-6 pt-24 text-fg">
       {/* Header + controls */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white">Transit Performance Dashboard</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-fg">Transit Performance Dashboard</h1>
+          <p className="text-sm text-fg-subtle">
             Reliability, frequency, service delivery &amp; demand across RTD
             {selectedRouteName ? ` · Route ${selectedRouteName}` : " · all routes"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <div ref={routeComboRef} className="relative">
-            <div className="flex items-center gap-1 rounded border border-gray-200 px-2 py-1.5 text-sm focus-within:ring-2 focus-within:ring-rtd-blue bg-white">
-              <svg className="h-3.5 w-3.5 shrink-0 text-gray-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <div className="flex items-center gap-1 rounded border border-line px-2 py-1.5 text-sm focus-within:ring-2 focus-within:ring-accent bg-card">
+              <svg className="h-3.5 w-3.5 shrink-0 text-fg-subtle" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                 <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clipRule="evenodd" />
               </svg>
               <input
@@ -181,13 +183,13 @@ export default function DashboardPage() {
                 placeholder={selectedRouteName ? `Route ${selectedRouteName}` : "All routes"}
                 onChange={(e) => setRouteSearch(e.target.value)}
                 onFocus={() => setRouteDropdownOpen(true)}
-                className="w-44 bg-transparent outline-none placeholder-gray-700"
+                className="w-44 bg-transparent outline-none text-fg placeholder-fg-subtle"
               />
               {routeId && (
                 <button
                   onClick={() => { setRouteId(""); setRouteSearch(""); setRouteDropdownOpen(false); }}
                   aria-label="Clear route filter"
-                  className="shrink-0 text-gray-400 hover:text-gray-600"
+                  className="shrink-0 text-fg-subtle hover:text-fg-muted"
                 >
                   <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                     <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
@@ -196,28 +198,28 @@ export default function DashboardPage() {
               )}
             </div>
             {routeDropdownOpen && (
-              <ul className="absolute left-0 top-full z-50 mt-1 max-h-64 w-64 overflow-y-auto rounded border border-gray-200 bg-white shadow-lg">
+              <ul className="absolute left-0 top-full z-50 mt-1 max-h-64 w-64 overflow-y-auto rounded border border-line bg-card shadow-card">
                 <li>
                   <button
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => { setRouteId(""); setRouteSearch(""); setRouteDropdownOpen(false); }}
-                    className="w-full px-3 py-2 text-left text-sm text-gray-500 hover:bg-gray-50"
+                    className="w-full px-3 py-2 text-left text-sm text-fg-subtle hover:bg-raised"
                   >
                     All routes
                   </button>
                 </li>
                 {groupedRoutes.rail.length > 0 && (
                   <>
-                    <li className="border-t border-gray-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Rail</li>
+                    <li className="border-t border-line px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">Rail</li>
                     {groupedRoutes.rail.map((r) => (
                       <li key={r.route_id}>
                         <button
                           onMouseDown={(e) => e.preventDefault()}
                           onClick={() => { setRouteId(r.route_id); setRouteSearch(""); setRouteDropdownOpen(false); }}
-                          className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ${r.route_id === routeId ? "bg-blue-50 font-medium text-rtd-blue" : "text-gray-700"}`}
+                          className={`w-full px-3 py-2 text-left text-sm hover:bg-raised ${r.route_id === routeId ? "bg-accent/10 font-medium text-accent" : "text-fg-muted"}`}
                         >
                           <span className="font-medium">{r.short_name}</span>
-                          <span className="ml-1.5 text-gray-400">— {r.long_name}</span>
+                          <span className="ml-1.5 text-fg-subtle">— {r.long_name}</span>
                         </button>
                       </li>
                     ))}
@@ -225,16 +227,16 @@ export default function DashboardPage() {
                 )}
                 {groupedRoutes.bus.length > 0 && (
                   <>
-                    <li className="border-t border-gray-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Bus</li>
+                    <li className="border-t border-line px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">Bus</li>
                     {groupedRoutes.bus.map((r) => (
                       <li key={r.route_id}>
                         <button
                           onMouseDown={(e) => e.preventDefault()}
                           onClick={() => { setRouteId(r.route_id); setRouteSearch(""); setRouteDropdownOpen(false); }}
-                          className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ${r.route_id === routeId ? "bg-blue-50 font-medium text-rtd-blue" : "text-gray-700"}`}
+                          className={`w-full px-3 py-2 text-left text-sm hover:bg-raised ${r.route_id === routeId ? "bg-accent/10 font-medium text-accent" : "text-fg-muted"}`}
                         >
                           <span className="font-medium">{r.short_name}</span>
-                          <span className="ml-1.5 text-gray-400">— {r.long_name}</span>
+                          <span className="ml-1.5 text-fg-subtle">— {r.long_name}</span>
                         </button>
                       </li>
                     ))}
@@ -242,23 +244,23 @@ export default function DashboardPage() {
                 )}
                 {groupedRoutes.other.length > 0 && (
                   <>
-                    <li className="border-t border-gray-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Other</li>
+                    <li className="border-t border-line px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">Other</li>
                     {groupedRoutes.other.map((r) => (
                       <li key={r.route_id}>
                         <button
                           onMouseDown={(e) => e.preventDefault()}
                           onClick={() => { setRouteId(r.route_id); setRouteSearch(""); setRouteDropdownOpen(false); }}
-                          className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ${r.route_id === routeId ? "bg-blue-50 font-medium text-rtd-blue" : "text-gray-700"}`}
+                          className={`w-full px-3 py-2 text-left text-sm hover:bg-raised ${r.route_id === routeId ? "bg-accent/10 font-medium text-accent" : "text-fg-muted"}`}
                         >
                           <span className="font-medium">{r.short_name}</span>
-                          <span className="ml-1.5 text-gray-400">— {r.long_name}</span>
+                          <span className="ml-1.5 text-fg-subtle">— {r.long_name}</span>
                         </button>
                       </li>
                     ))}
                   </>
                 )}
                 {groupedRoutes.rail.length === 0 && groupedRoutes.bus.length === 0 && groupedRoutes.other.length === 0 && (
-                  <li className="px-3 py-2 text-sm text-gray-400">No routes found</li>
+                  <li className="px-3 py-2 text-sm text-fg-subtle">No routes found</li>
                 )}
               </ul>
             )}
@@ -270,8 +272,8 @@ export default function DashboardPage() {
                 onClick={() => setDays(d)}
                 className={`rounded px-3 py-1 font-medium transition-colors ${
                   days === d
-                    ? "bg-rtd-blue text-white"
-                    : "bg-white border border-gray-200 text-gray-600 hover:border-rtd-blue"
+                    ? "bg-accent text-accent-ink"
+                    : "bg-card border border-line text-fg-muted hover:border-accent"
                 }`}
               >
                 {d}d
@@ -288,7 +290,7 @@ export default function DashboardPage() {
           title="On-Time Rate"
           value={ov ? `${ov.on_time_pct.value.toFixed(1)}%` : "—"}
           subtitle="± 5 mins"
-          accentColor={ov ? onTimeColor(ov.on_time_pct.value) : undefined}
+          accentColor={ov ? onTimeColor(ov.on_time_pct.value, resolvedTheme) : undefined}
         />
         <KpiCard
           title="Avg Delay"
@@ -298,12 +300,12 @@ export default function DashboardPage() {
         <KpiCard
           title="Stuck Alerts"
           value={alerts.isLoading ? "…" : String(alertCount)}
-          accentColor={alertCount > 0 ? "#111827" : "#16a34a"}
+          accentColor={alertCount > 0 ? "rgb(var(--fg))" : "rgb(var(--ok))"}
         />
       </div>
 
       {/* ── Reliability ─────────────────────────────────────────────── */}
-      <h2 className="pt-2 text-lg font-bold text-gray-400">Reliability</h2>
+      <h2 className="pt-2 text-lg font-bold text-fg-subtle">Reliability</h2>
 
       <Card>
         <SectionHeading
@@ -347,7 +349,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Frequency & Service Delivery ────────────────────────────── */}
-      <h2 className="pt-2 text-lg font-bold text-gray-400">Frequency &amp; Service Delivery</h2>
+      <h2 className="pt-2 text-lg font-bold text-fg-subtle">Frequency &amp; Service Delivery</h2>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
@@ -360,7 +362,7 @@ export default function DashboardPage() {
             }
           />
           {!routeId ? (
-            <p className="py-8 text-center text-sm text-gray-500">
+            <p className="py-8 text-center text-sm text-fg-subtle">
               Pick a route above to see its scheduled headways through the day.
             </p>
           ) : scheduleFreq.isLoading ? (
@@ -376,7 +378,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Live Demand ─────────────────────────────────────────────── */}
-      <h2 className="pt-2 text-lg font-bold text-gray-400">Live Demand</h2>
+      <h2 className="pt-2 text-lg font-bold text-fg-subtle">Live Demand</h2>
 
       <Card>
         <SectionHeading

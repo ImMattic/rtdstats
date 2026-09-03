@@ -4,14 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Tooltip, useMap } from "react-leaflet";
 import type { VehicleStopEvent, VehiclePositionTrack } from "@/lib/types";
 import { interpolateTrackPosition, formatTime } from "@/lib/utils";
+import { useTheme } from "@/lib/useTheme";
 import { createVehicleIcon } from "./vehicleIcon";
 
 const DENVER_CENTER: [number, number] = [39.7392, -104.9903];
 
-function stopDelayColor(seconds: number): string {
-  if (seconds > 300) return "#dc2626";  // red — late
-  if (seconds < -300) return "#2563eb"; // blue — early
-  return "#16a34a";                     // green — on time
+function stopDelayColor(seconds: number, mode: "dark" | "light"): string {
+  if (seconds > 300) return mode === "light" ? "#dc2626" : "#EC3A35"; // late
+  if (seconds < -300) return mode === "light" ? "#2563eb" : "#5B9BF5"; // early
+  return "#16a34a";                                                   // on time
 }
 
 function BoundsAdjuster({
@@ -49,6 +50,8 @@ interface Props {
 }
 
 export default function VehicleTripMap({ positions, stops, routeColor, isRail = false, highlightStop, playbackMs }: Props) {
+  const { resolvedTheme } = useTheme();
+  const basemap = resolvedTheme === "light" ? "light_all" : "dark_all";
   const [mapClickStop, setMapClickStop] = useState<VehicleStopEvent | null>(null);
 
   const isPlayback = playbackMs != null;
@@ -110,8 +113,9 @@ export default function VehicleTripMap({ positions, stops, routeColor, isRail = 
   return (
     <MapContainer center={center} zoom={13} className="h-full w-full" scrollWheelZoom>
       <TileLayer
+        key={basemap}
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        url={`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png${cartoApiKey ? `?key=${cartoApiKey}` : ""}`}
+        url={`https://{s}.basemaps.cartocdn.com/${basemap}/{z}/{x}/{y}.png${cartoApiKey ? `?key=${cartoApiKey}` : ""}`}
         subdomains="abcd"
         maxZoom={19}
       />
@@ -141,7 +145,7 @@ export default function VehicleTripMap({ positions, stops, routeColor, isRail = 
             pathOptions={{
               color: "#ffffff",
               weight: 1.5,
-              fillColor: stopDelayColor(stop.delay_seconds),
+              fillColor: stopDelayColor(stop.delay_seconds, resolvedTheme),
               fillOpacity: 0.9,
             }}
             eventHandlers={{

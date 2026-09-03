@@ -1,7 +1,8 @@
 "use client";
 import { useMemo, useState } from "react";
 import type { HeatmapCell } from "@/lib/types";
-import { DOW_LABELS, formatHour, onTimeColor } from "@/lib/utils";
+import { DOW_LABELS, delayColor, formatHour, onTimeColor } from "@/lib/utils";
+import { useChartTheme } from "@/lib/useChartTheme";
 
 interface Props {
   cells: HeatmapCell[];
@@ -13,16 +14,19 @@ interface Props {
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 const DOWS = [1, 2, 3, 4, 5, 6, 0]; // Mon..Sun for display
 
-function delayColor(seconds: number): string {
-  // green (early/on-time) → red (very late). On-time is within ±300s (5 min).
-  if (seconds <= 0) return "#16a34a";
-  if (seconds <= 300) return "#65a30d";
-  if (seconds <= 600) return "#eab308";
-  if (seconds <= 900) return "#ea580c";
-  return "#dc2626";
-}
+const LEGEND: Record<"dark" | "light", { ontime: string[]; delay: string[] }> = {
+  light: {
+    ontime: ["#dc2626", "#f97316", "#eab308", "#c8d614", "#16a34a"],
+    delay: ["#16a34a", "#eab308", "#dc2626"],
+  },
+  dark: {
+    ontime: ["#EC3A35", "#f97316", "#eab308", "#c8d614", "#16a34a"],
+    delay: ["#16a34a", "#eab308", "#EC3A35"],
+  },
+};
 
 export default function Heatmap({ cells, metric = "ontime", onCellClick }: Props) {
+  const theme = useChartTheme();
   const [hover, setHover] = useState<HeatmapCell | null>(null);
 
   const lookup = useMemo(() => {
@@ -32,7 +36,7 @@ export default function Heatmap({ cells, metric = "ontime", onCellClick }: Props
   }, [cells]);
 
   if (!cells.length) {
-    return <p className="py-8 text-center text-sm text-gray-500">No heatmap data yet.</p>;
+    return <p className="py-8 text-center text-sm text-fg-subtle">No heatmap data yet.</p>;
   }
 
   return (
@@ -42,23 +46,23 @@ export default function Heatmap({ cells, metric = "ontime", onCellClick }: Props
           {/* Hour axis */}
           <div className="flex pl-10">
             {HOURS.map((h) => (
-              <div key={h} className="w-[18px] text-center text-[8px] text-gray-400">
+              <div key={h} className="w-[18px] text-center text-[8px] text-fg-subtle">
                 {h % 3 === 0 ? formatHour(h) : ""}
               </div>
             ))}
           </div>
           {DOWS.map((dow) => (
             <div key={dow} className="flex items-center">
-              <div className="w-10 pr-1 text-right text-[10px] font-medium text-gray-500">
+              <div className="w-10 pr-1 text-right text-[10px] font-medium text-fg-muted">
                 {DOW_LABELS[dow]}
               </div>
               {HOURS.map((h) => {
                 const cell = lookup.get(`${dow}-${h}`);
                 const color = !cell
-                  ? "#f1f5f9"
+                  ? theme.grid
                   : metric === "ontime"
-                    ? onTimeColor(cell.on_time_pct)
-                    : delayColor(cell.avg_delay_seconds);
+                    ? onTimeColor(cell.on_time_pct, theme.mode)
+                    : delayColor(cell.avg_delay_seconds, theme.mode);
                 return (
                   <div
                     key={h}
@@ -75,27 +79,24 @@ export default function Heatmap({ cells, metric = "ontime", onCellClick }: Props
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+      <div className="mt-3 flex items-center justify-between text-xs text-fg-subtle">
         <div className="h-4">
           {hover && (
             <span>
-              <span className="font-semibold text-gray-700">
+              <span className="font-semibold text-fg-muted">
                 {DOW_LABELS[hover.dow]} {formatHour(hover.hour)}
               </span>{" "}
               · {hover.on_time_pct.toFixed(0)}% on-time · {(hover.avg_delay_seconds / 60).toFixed(1)}m avg ·{" "}
               {hover.observations.toLocaleString()} samples
               {onCellClick && (
-                <span className="ml-2 font-medium text-blue-600">· Click to view trips →</span>
+                <span className="ml-2 font-medium text-accent">· Click to view trips →</span>
               )}
             </span>
           )}
         </div>
         <div className="flex items-center gap-1">
           <span>{metric === "ontime" ? "worse" : "early"}</span>
-          {(metric === "ontime"
-            ? ["#dc2626", "#f97316", "#eab308", "#c8d614", "#16a34a"]
-            : ["#16a34a", "#eab308", "#dc2626"]
-          ).map((c) => (
+          {LEGEND[theme.mode][metric === "ontime" ? "ontime" : "delay"].map((c) => (
             <span key={c} className="h-3 w-3 rounded-sm" style={{ backgroundColor: c }} />
           ))}
           <span>{metric === "ontime" ? "better" : "late"}</span>
