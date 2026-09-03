@@ -27,12 +27,6 @@ const OCCUPANCY_LABELS: Record<string, string> = {
   UNKNOWN: "—",
 };
 
-function delayClass(seconds: number): string {
-  if (seconds > 300) return "text-danger font-semibold";
-  if (seconds < -300) return "text-accent font-semibold";
-  return "text-ok";
-}
-
 function delayBadge(seconds: number): string {
   if (seconds > 600) return "status-danger";
   if (seconds > 300) return "status-warn";
@@ -47,6 +41,121 @@ function StatBox({ label, value, sub }: { label: string; value: string; sub?: st
       <p className="mt-1 text-2xl font-bold text-fg">{value}</p>
       {sub && <p className="mt-0.5 text-xs text-fg-subtle">{sub}</p>}
     </div>
+  );
+}
+
+function hhmm(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+/** Fill colour for a solid (observed) timeline node. */
+function nodeFill(seconds: number | null): string {
+  if (seconds === null) return "bg-fg-subtle";
+  if (seconds > 600) return "bg-danger";
+  if (seconds > 300) return "bg-warn";
+  if (seconds < -300) return "bg-accent";
+  return "bg-ok";
+}
+
+/**
+ * Full stop-by-stop schedule for the trip's direction: every RTD timepoint and
+ * intermediate stop from origin to terminus. Stops the vehicle was geofenced at
+ * ("tracked") carry an actual time + delay; the rest show the schedule only.
+ */
+function StopTimeline({
+  stops,
+  onHover,
+}: {
+  stops: VehicleStopEvent[];
+  onHover: (s: VehicleStopEvent | null) => void;
+}) {
+  return (
+    <ol className="max-h-[560px] overflow-y-auto pr-1">
+      {stops.map((stop, i) => {
+        const isFirst = i === 0;
+        const isLast = i === stops.length - 1;
+        const terminus = isFirst ? "Origin" : isLast ? "Terminus" : null;
+        return (
+          <li
+            key={`${stop.stop_id}-${stop.stop_sequence}`}
+            className="group flex gap-3 rounded px-1.5 hover:bg-raised"
+            onMouseEnter={() => onHover(stop)}
+            onMouseLeave={() => onHover(null)}
+          >
+            {/* Rail */}
+            <div className="flex w-3 shrink-0 flex-col items-center">
+              <span className={`w-px ${isFirst ? "h-3" : "h-3 bg-line-strong"}`} />
+              <span
+                className={
+                  stop.observed
+                    ? `${stop.is_timepoint ? "h-3.5 w-3.5" : "h-2.5 w-2.5"} rounded-full ${nodeFill(
+                        stop.delay_seconds,
+                      )} ring-2 ring-card`
+                    : `${
+                        stop.is_timepoint ? "h-3 w-3 border-fg-subtle" : "h-2.5 w-2.5 border-line-strong"
+                      } rounded-full border-2 bg-card`
+                }
+              />
+              <span className={`w-px flex-1 ${isLast ? "" : "bg-line-strong"}`} />
+            </div>
+
+            {/* Content */}
+            <div className="flex flex-1 items-start justify-between gap-3 py-2">
+              <div className="min-w-0">
+                <p
+                  className={`truncate text-sm ${
+                    stop.is_timepoint ? "font-semibold text-fg" : "font-medium text-fg-muted"
+                  }`}
+                >
+                  {stop.stop_name ?? stop.stop_id}
+                </p>
+                <p className="mt-0.5 text-[11px] text-fg-subtle">
+                  #{stop.stop_sequence}
+                  {terminus && (
+                    <span className="ml-1.5 rounded bg-raised px-1 py-px font-medium uppercase tracking-wide text-fg-muted">
+                      {terminus}
+                    </span>
+                  )}
+                  {stop.observed && stop.occupancy_status && stop.occupancy_status !== "UNKNOWN" && (
+                    <span className="ml-1.5">
+                      · {OCCUPANCY_LABELS[stop.occupancy_status] ?? stop.occupancy_status}
+                    </span>
+                  )}
+                </p>
+              </div>
+
+              <div className="shrink-0 text-right">
+                {stop.observed ? (
+                  <>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <span className="text-sm tabular-nums text-fg">{hhmm(stop.actual_time)}</span>
+                      <span
+                        className={`rounded-full px-1.5 py-0.5 text-[11px] ${delayBadge(
+                          stop.delay_seconds ?? 0,
+                        )}`}
+                      >
+                        {formatDelay(stop.delay_seconds) || "On time"}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-[11px] tabular-nums text-fg-subtle">
+                      sched {hhmm(stop.scheduled_time)}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-sm tabular-nums text-fg-muted">
+                      {hhmm(stop.scheduled_time)}
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-fg-subtle">scheduled</div>
+                  </>
+                )}
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -81,6 +190,9 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
   const lastOccupancy = data?.positions.length
     ? data.positions[data.positions.length - 1].occupancy_status
     : null;
+
+  const observedStopCount =
+    data?.observed_stop_count ?? data?.stops.filter((s) => s.observed).length ?? 0;
 
   // Prefer the trip's actual extent (first→last snapshot) over the padded
   // query bounds for the header timestamp.
@@ -155,7 +267,11 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
               value={
                 data.avg_delay_seconds !== null ? formatDelayMin(data.avg_delay_seconds) : "—"
               }
-              sub={data.stops.length ? `across ${data.stops.length} stops` : "no stop data"}
+              sub={
+                observedStopCount
+                  ? `across ${observedStopCount} tracked stop${observedStopCount === 1 ? "" : "s"}`
+                  : "no tracked stops"
+              }
             />
             <StatBox
               label="On-Time Rate"
@@ -177,64 +293,37 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* Stop timeline */}
             <Card className="lg:col-span-1">
-              <SectionHeading title="Stop Arrival Timeline" />
+              <SectionHeading
+                title="Stop Timeline"
+                subtitle={
+                  data.stops.length
+                    ? `Every scheduled stop, origin → terminus · ${observedStopCount}/${data.stops.length} tracked`
+                    : undefined
+                }
+              />
               {data.stops.length === 0 ? (
                 <p className="py-6 text-center text-sm text-fg-subtle">
-                  Stop arrival events are derived from geofencing. Data may not be available for
-                  all trips or older time windows.
+                  No schedule found for this trip. The stop timeline is built from RTD&rsquo;s
+                  static schedule for the trip&rsquo;s direction — it may be unavailable for
+                  added/modified trips or older time windows.
                 </p>
               ) : (
-                <div className="overflow-x-auto rounded border border-line">
-                  <table className="min-w-full text-sm text-fg-muted">
-                    <thead className="bg-raised text-xs uppercase text-fg-subtle">
-                      <tr>
-                        <th className="px-3 py-2 text-left">#</th>
-                        <th className="px-3 py-2 text-left">Stop</th>
-                        <th className="px-3 py-2 text-right">Scheduled</th>
-                        <th className="px-3 py-2 text-right">Actual</th>
-                        <th className="px-3 py-2 text-right">Delay</th>
-                        <th className="px-3 py-2 text-left">Occupancy</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-line">
-                      {data.stops.map((stop) => (
-                        <tr
-                          key={`${stop.stop_id}-${stop.stop_sequence}`}
-                          className="hover:bg-raised cursor-default"
-                          onMouseEnter={() => setHoveredStop(stop)}
-                          onMouseLeave={() => setHoveredStop(null)}
-                        >
-                          <td className="px-3 py-2 text-fg-subtle">{stop.stop_sequence}</td>
-                          <td className="px-3 py-2 font-medium">
-                            {stop.stop_name ?? stop.stop_id}
-                          </td>
-                          <td className="px-3 py-2 text-right text-fg-subtle">
-                            {new Date(stop.scheduled_time).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </td>
-                          <td className="px-3 py-2 text-right">
-                            {new Date(stop.actual_time).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </td>
-                          <td className={`px-3 py-2 text-right ${delayClass(stop.delay_seconds)}`}>
-                            <span
-                              className={`inline-block rounded-full px-2 py-0.5 text-xs ${delayBadge(stop.delay_seconds)}`}
-                            >
-                              {formatDelay(stop.delay_seconds) || "On time"}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-fg-muted">
-                            {OCCUPANCY_LABELS[stop.occupancy_status ?? "UNKNOWN"] ?? "—"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <>
+                  <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-fg-subtle">
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 rounded-full bg-ok" /> tracked (colour = delay)
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 rounded-full border-2 border-line-strong bg-card" />{" "}
+                      scheduled only
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-3 w-3 rounded-full border-2 border-fg-subtle bg-card" />{" "}
+                      timepoint
+                    </span>
+                  </div>
+                  <StopTimeline stops={data.stops} onHover={setHoveredStop} />
+                </>
               )}
             </Card>
 

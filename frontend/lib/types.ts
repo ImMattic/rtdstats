@@ -369,9 +369,18 @@ export interface VehicleStopEvent {
   stop_lat: number | null;
   stop_lon: number | null;
   stop_sequence: number;
-  scheduled_time: string;
-  actual_time: string;
-  delay_seconds: number;
+  stop_headsign?: string | null;
+  /** RTD schedule-adherence timepoint (vs. an intermediate stop). */
+  is_timepoint?: boolean;
+  /** GTFS pickup_type / drop_off_type — "1" = not available (terminus). */
+  pickup_type?: string | null;
+  drop_off_type?: string | null;
+  /** null when the stop has no schedule time and no observed arrival. */
+  scheduled_time: string | null;
+  /** false when this scheduled stop was never geofenced on this run. */
+  observed?: boolean;
+  actual_time: string | null;
+  delay_seconds: number | null;
   occupancy_status: string | null;
   actual_lat: number | null;
   actual_lon: number | null;
@@ -399,6 +408,8 @@ export interface VehicleTripResponse {
   start: string;
   end: string;
   stops: VehicleStopEvent[];
+  scheduled_stop_count?: number;
+  observed_stop_count?: number;
   positions: VehiclePositionTrack[];
   avg_delay_seconds: number | null;
   on_time_pct: number | null;

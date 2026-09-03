@@ -69,7 +69,7 @@ export default function VehicleTripMap({ positions, stops, routeColor, isRail = 
   // Where was the vehicle at this stop's *scheduled* arrival time? Interpolated
   // from the position track — a late vehicle lands behind the stop on the route.
   const highlight = useMemo(() => {
-    if (!activeStop) return null;
+    if (!activeStop?.scheduled_time) return null;
     const pos = interpolateTrackPosition(positions, activeStop.scheduled_time);
     if (!pos) return null;
     return { ...pos, routeColor, isRail };
@@ -135,19 +135,33 @@ export default function VehicleTripMap({ positions, stops, routeColor, isRail = 
         />
       )}
 
-      {/* Stop markers, colored by delay */}
-      {stops.map((stop) =>
-        stop.stop_lat && stop.stop_lon ? (
+      {/* Stop markers: solid + delay-coloured where the vehicle was tracked,
+          small hollow dots for scheduled-only stops. */}
+      {stops.map((stop) => {
+        if (!stop.stop_lat || !stop.stop_lon) return null;
+        const tracked = stop.observed !== false && stop.delay_seconds != null;
+        const outline = resolvedTheme === "light" ? "#ffffff" : "#0D0E11";
+        return (
           <CircleMarker
             key={`${stop.stop_id}-${stop.stop_sequence}`}
             center={[stop.stop_lat, stop.stop_lon]}
-            radius={7}
-            pathOptions={{
-              color: "#ffffff",
-              weight: 1.5,
-              fillColor: stopDelayColor(stop.delay_seconds, resolvedTheme),
-              fillOpacity: 0.9,
-            }}
+            radius={tracked ? 7 : 4}
+            pathOptions={
+              tracked
+                ? {
+                    color: "#ffffff",
+                    weight: 1.5,
+                    fillColor: stopDelayColor(stop.delay_seconds ?? 0, resolvedTheme),
+                    fillOpacity: 0.9,
+                  }
+                : {
+                    color: fillColor,
+                    weight: 1.5,
+                    fillColor: outline,
+                    fillOpacity: 1,
+                    opacity: 0.7,
+                  }
+            }
             eventHandlers={{
               click: () =>
                 setMapClickStop((prev) =>
@@ -162,14 +176,20 @@ export default function VehicleTripMap({ positions, stops, routeColor, isRail = 
             <Tooltip direction="top" offset={[0, -10]} opacity={1}>
               <span className="font-semibold">{stop.stop_name ?? stop.stop_id}</span>
               <br />
-              <span>
-                {stop.delay_seconds > 0 ? "+" : ""}
-                {(stop.delay_seconds / 60).toFixed(1)}m
-              </span>
+              {tracked ? (
+                <span>
+                  {(stop.delay_seconds ?? 0) > 0 ? "+" : ""}
+                  {((stop.delay_seconds ?? 0) / 60).toFixed(1)}m
+                </span>
+              ) : (
+                <span>
+                  {stop.scheduled_time ? `sched ${formatTime(stop.scheduled_time)}` : "scheduled"}
+                </span>
+              )}
             </Tooltip>
           </CircleMarker>
-        ) : null,
-      )}
+        );
+      })}
 
       {/* Hover marker: where the vehicle was at the hovered stop's scheduled arrival time */}
       {highlight && (
@@ -185,7 +205,9 @@ export default function VehicleTripMap({ positions, stops, routeColor, isRail = 
           )}
         >
           <Tooltip direction="top" offset={[0, -4]} opacity={1} permanent>
-            <span className="font-semibold">Scheduled {activeStop ? formatTime(activeStop.scheduled_time) : ""}</span>
+            <span className="font-semibold">
+              Scheduled {activeStop?.scheduled_time ? formatTime(activeStop.scheduled_time) : ""}
+            </span>
           </Tooltip>
         </Marker>
       )}
