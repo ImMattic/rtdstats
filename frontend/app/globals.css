@@ -2,10 +2,118 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Ensure the Leaflet map fills its container */
+/* ============================================================
+   Design tokens — "Last Train" (dark) / "First Train" (light)
+
+   Dark is the bare :root default (Transit Console ground + the
+   Signal accent triad — RTD Midblue/Teal/Orange — re-stepped for
+   this surface). Light is opt-in via [data-theme="light"], with a
+   prefers-color-scheme fallback for the moment before the no-flash
+   script in layout.tsx runs (or with JS disabled).
+
+   Colours are stored as space-separated RGB triples so Tailwind's
+   `rgb(var(--x) / <alpha-value>)` helper can add opacity. RTD's
+   brand red and the route/line colours (rtd-red, rtd-a..rtd-w, etc.
+   in tailwind.config.ts) are intentionally NOT tokenised — they're
+   fixed brand/GTFS colours, not theme-dependent.
+
+   The Signal palette (brand anchors + the per-theme accent steps and
+   why light ≠ dark) is documented in frontend/DESIGN_TOKENS.md.
+   ============================================================ */
+:root {
+  --canvas: 13 14 17;      /* #0D0E11 */
+  --card: 22 24 28;        /* #16181C */
+  --raised: 30 33 38;      /* #1E2126 */
+  --overlay: 40 44 51;     /* #282C33 */
+  --line: 43 47 54;        /* #2B2F36 */
+  --line-2: 59 65 74;      /* #3B414A */
+
+  --fg: 236 238 241;       /* #ECEEF1 */
+  --fg-muted: 162 168 178; /* #A2A8B2 */
+  --fg-subtle: 124 131 142;/* #7C838E */
+
+  /* Signal accents, re-stepped to clear 4.5:1+ on --card */
+  --accent: 65 193 239;    /* #41C1EF — RTD Midblue: interactive */
+  --accent-ink: 13 14 17;  /* text placed ON a filled accent chip */
+  --ok: 0 148 131;         /* #009483 — RTD Teal: on-time / good */
+  --warn: 246 135 31;      /* #F6871F — RTD Orange: attention */
+  --danger: 240 62 72;     /* #F03E48 — RTD Red, lightened for ink use */
+
+  --status-alpha: 0.16;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.45), 0 14px 36px -16px rgb(0 0 0 / 0.7);
+  --font-display: ui-sans-serif, system-ui, sans-serif;
+
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --canvas: 244 245 247;   /* #F4F5F7 */
+  --card: 255 255 255;     /* #FFFFFF */
+  --raised: 236 238 241;   /* #ECEEF1 */
+  --overlay: 255 255 255;  /* #FFFFFF */
+  --line: 220 223 229;     /* #DCDFE5 — a hairline you can actually see on --canvas */
+  --line-2: 197 202 210;   /* #C5CAD2 */
+
+  --fg: 21 24 29;          /* #15181D */
+  --fg-muted: 91 97 106;   /* #5B616A — a clear step down from --fg, not near-black */
+  --fg-subtle: 122 129 139;/* #7A818B */
+
+  /* Signal accents — deepened + re-saturated for weight on white. Dark mode
+     uses the bright brand steps; light must NOT reuse them (a bright accent
+     dissolves on white the same way a deep one vibrates on near-black). All
+     four clear 4.5:1 on #FFFFFF. Full rationale: frontend/DESIGN_TOKENS.md. */
+  --accent: 4 120 156;     /* #04789C — Signal Blue, deep  (5.0:1 on #fff) */
+  --accent-ink: 255 255 255;
+  --ok: 0 122 107;         /* #007A6B — Signal Teal, deep  (5.2:1) */
+  --warn: 180 77 8;        /* #B44D08 — Signal Orange, deep (5.2:1) */
+  --danger: 197 12 43;     /* #C50C2B — Signal Red         (6.1:1) */
+
+  --status-alpha: 0.12;
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.06), 0 12px 28px -14px rgb(16 24 40 / 0.18);
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: light) {
+  /* Keep every value in lock-step with :root[data-theme="light"] above. */
+  :root:not([data-theme]) {
+    --canvas: 244 245 247;
+    --card: 255 255 255;
+    --raised: 236 238 241;
+    --overlay: 255 255 255;
+    --line: 220 223 229;
+    --line-2: 197 202 210;
+    --fg: 21 24 29;
+    --fg-muted: 91 97 106;
+    --fg-subtle: 122 129 139;
+    --accent: 4 120 156;
+    --accent-ink: 255 255 255;
+    --ok: 0 122 107;
+    --warn: 180 77 8;
+    --danger: 197 12 43;
+    --status-alpha: 0.12;
+    --shadow-card: 0 1px 2px rgb(16 24 40 / 0.06), 0 12px 28px -14px rgb(16 24 40 / 0.18);
+    color-scheme: light;
+  }
+}
+
+body {
+  background-color: rgb(var(--canvas));
+  color: rgb(var(--fg));
+  /* Ease the theme flip on page chrome (map tiles swap instantly regardless). */
+  transition: background-color 220ms ease, color 220ms ease;
+}
+
+/* Ensure the Leaflet map fills its container.
+   `background` is !important because leaflet/dist/leaflet.css is imported after
+   this file (layout.tsx) and its own `.leaflet-container { background: #ddd }`
+   would otherwise win on source order — that grey is what flashes in the
+   not-yet-tiled area during a fast zoom-out. Keeping it --canvas makes the
+   gap read as the map ground instead of a flash-bang in dark mode. */
 .leaflet-container {
   height: 100%;
   width: 100%;
+  background: rgb(var(--canvas)) !important;
 }
 
 /* Zoom control sits in the bottom-right corner, stacked above the attribution;
@@ -19,47 +127,47 @@
   }
 }
 
-/* Leaflet popup / tooltip dark theme */
+/* Leaflet popup / tooltip — token-aware */
 .leaflet-tooltip {
-  background: #1A2535 !important;
-  border: 1px solid #263040 !important;
-  color: #f1f5f9 !important;
+  background: rgb(var(--overlay)) !important;
+  border: 1px solid rgb(var(--line-2)) !important;
+  color: rgb(var(--fg)) !important;
   border-radius: 6px !important;
   font-size: 12px !important;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+  box-shadow: var(--shadow-card) !important;
 }
 .leaflet-tooltip::before {
-  border-top-color: #263040 !important;
+  border-top-color: rgb(var(--line-2)) !important;
 }
 
-/* Leaflet attribution control dark theme */
+/* Leaflet attribution control — token-aware */
 .leaflet-control-attribution {
-  background: rgba(26, 37, 53, 0.8) !important;
-  color: #94a3b8 !important;
+  background: rgb(var(--overlay) / 0.82) !important;
+  color: rgb(var(--fg-subtle)) !important;
 }
 .leaflet-control-attribution a {
-  color: #cbd5e1 !important;
+  color: rgb(var(--fg-muted)) !important;
 }
 
-/* Leaflet zoom control dark theme */
+/* Leaflet zoom control — token-aware */
 .leaflet-bar {
-  border: 1px solid #263040 !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+  border: 1px solid rgb(var(--line-2)) !important;
+  box-shadow: var(--shadow-card) !important;
 }
 .leaflet-bar a,
 .leaflet-control-zoom a {
-  background-color: #1A2535 !important;
-  color: #f1f5f9 !important;
-  border-bottom: 1px solid #263040 !important;
+  background-color: rgb(var(--overlay)) !important;
+  color: rgb(var(--fg)) !important;
+  border-bottom: 1px solid rgb(var(--line-2)) !important;
 }
 .leaflet-bar a:hover,
 .leaflet-control-zoom a:hover {
-  background-color: #263040 !important;
-  color: #ffffff !important;
+  background-color: rgb(var(--raised)) !important;
+  color: rgb(var(--fg)) !important;
 }
 .leaflet-bar a.leaflet-disabled {
-  background-color: #141d29 !important;
-  color: #475569 !important;
+  background-color: rgb(var(--card)) !important;
+  color: rgb(var(--fg-subtle)) !important;
 }
 
 @keyframes dialog-in {
@@ -111,9 +219,76 @@
   animation: search-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+@layer components {
+  .press {
+    transition: transform 120ms ease;
+  }
+  .press:active {
+    transform: scale(0.96);
+  }
+
+  /* Status tint — semi-transparent status-colour wash + full-strength text.
+     Use instead of light-mode-only patterns like `bg-red-50 text-red-700`. */
+  .status-ok {
+    background-color: rgb(var(--ok) / var(--status-alpha));
+    color: rgb(var(--ok));
+    border: 1px solid rgb(var(--ok) / 0.3);
+  }
+  .status-warn {
+    background-color: rgb(var(--warn) / var(--status-alpha));
+    color: rgb(var(--warn));
+    border: 1px solid rgb(var(--warn) / 0.3);
+  }
+  .status-info {
+    background-color: rgb(var(--accent) / var(--status-alpha));
+    color: rgb(var(--accent));
+    border: 1px solid rgb(var(--accent) / 0.3);
+  }
+  .status-danger {
+    background-color: rgb(var(--danger) / var(--status-alpha));
+    color: rgb(var(--danger));
+    border: 1px solid rgb(var(--danger) / 0.3);
+  }
+}
+
+/* Custom range slider (trip playback) */
+input[type="range"].rtd-range {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+input[type="range"].rtd-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  width: 14px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid currentColor;
+  margin-top: -6px;
+  cursor: pointer;
+}
+input[type="range"].rtd-range::-moz-range-thumb {
+  height: 14px;
+  width: 14px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid currentColor;
+  cursor: pointer;
+}
+
+/* Native date/time picker indicator stays visible on dark. */
+:root:not([data-theme="light"]) input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.85);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-cycle-in,
-  .animate-search-in {
+  .animate-search-in,
+  .animate-dialog-in {
     animation: none;
+  }
+  body {
+    transition: none;
   }
 }

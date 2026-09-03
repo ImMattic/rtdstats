@@ -32,14 +32,14 @@ export default function KpiCard({
   const showDelta = delta !== null && delta !== undefined && Number.isFinite(delta);
   const tone = showDelta ? deltaTone(delta as number, lowerIsBetter) : "flat";
   const toneClass =
-    tone === "good" ? "text-green-600" : tone === "bad" ? "text-red-600" : "text-gray-400";
+    tone === "good" ? "text-ok" : tone === "bad" ? "text-danger" : "text-fg-subtle";
   const arrow = !showDelta ? "" : (delta as number) > 0 ? "▲" : (delta as number) < 0 ? "▼" : "—";
 
   return (
     <Card className="flex flex-col justify-between">
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{title}</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-fg-subtle">{title}</p>
       <p
-        className="mt-1 text-3xl font-bold"
+        className="mt-1 text-3xl font-bold text-fg"
         style={accentColor ? { color: accentColor } : undefined}
       >
         {value}
@@ -51,7 +51,7 @@ export default function KpiCard({
             {deltaSuffix}
           </span>
         )}
-        {subtitle && <span className="text-xs text-gray-400">{subtitle}</span>}
+        {subtitle && <span className="text-xs text-fg-subtle">{subtitle}</span>}
       </div>
     </Card>
   );

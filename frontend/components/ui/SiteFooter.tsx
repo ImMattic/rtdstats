@@ -8,7 +8,7 @@ export default function SiteFooter() {
   if (pathname === "/") return null;
 
   return (
-    <footer className="border-t border-surface-border bg-surface-card py-2 text-center text-xs text-gray-500">
+    <footer className="border-t border-line bg-card py-2 text-center text-xs text-fg-subtle">
       Made with ❤️ in Broomfield, CO
     </footer>
   );

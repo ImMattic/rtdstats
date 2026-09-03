@@ -1,4 +1,5 @@
 import { clsx, type ClassValue } from "clsx";
+import type { ResolvedTheme } from "@/lib/useTheme";
 
 export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
@@ -10,15 +11,48 @@ export function routeColor(hex: string): string {
   return clean === "#" || clean === "#888888" ? "#6b7280" : clean;
 }
 
-/** Frequency headway → border color for vehicle markers. */
-export function headwayColor(headwayMinutes: number | null): string {
-  if (headwayMinutes === null || headwayMinutes === 0) return "#6b7280"; // unknown – gray
-  if (headwayMinutes < 15)  return "#1B7A3D"; // <15 min – green
+/**
+ * White or near-black — whichever reads better as text on top of `hex`.
+ * Used for badges/pills whose background is a data-driven color (headway,
+ * route brand color) rather than a theme token, so a fixed text color can't
+ * be relied on to stay legible.
+ */
+export function bestTextOn(hex: string): string {
+  const clean = hex.startsWith("#") ? hex.slice(1) : hex;
+  if (clean.length !== 6) return "#FFFFFF";
+  const r = parseInt(clean.slice(0, 2), 16) / 255;
+  const g = parseInt(clean.slice(2, 4), 16) / 255;
+  const b = parseInt(clean.slice(4, 6), 16) / 255;
+  const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const luminance = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  // Contrast against white vs. against near-black — pick whichever is higher.
+  const contrastWhite = 1.05 / (luminance + 0.05);
+  const contrastDark = (luminance + 0.05) / 0.05;
+  return contrastWhite >= contrastDark ? "#FFFFFF" : "#0D0E11";
+}
+
+/**
+ * Frequency headway → marker/badge color, re-stepped per theme so the ramp
+ * clears contrast against both the dark ("Last Train") and light ("First
+ * Train") chart surfaces. Pair with `bestTextOn` for any fixed-text badge.
+ */
+export function headwayColor(headwayMinutes: number | null, mode: ResolvedTheme = "dark"): string {
+  if (mode === "light") {
+    if (headwayMinutes === null || headwayMinutes === 0) return "#6b7280";
+    if (headwayMinutes < 15) return "#1B7A3D";
+    if (headwayMinutes <= 20) return "#7CB342";
+    if (headwayMinutes <= 30) return "#F2C12E";
+    if (headwayMinutes <= 40) return "#EF8C28";
+    if (headwayMinutes <= 50) return "#D9512E";
+    return "#991B1B";
+  }
+  if (headwayMinutes === null || headwayMinutes === 0) return "#7C838E"; // unknown – gray
+  if (headwayMinutes < 15) return "#368F51";  // <15 min – green
   if (headwayMinutes <= 20) return "#7CB342"; // ≤20 min – yellow-green
   if (headwayMinutes <= 30) return "#F2C12E"; // ≤30 min – yellow
   if (headwayMinutes <= 40) return "#EF8C28"; // ≤40 min – orange
-  if (headwayMinutes <= 50) return "#D9512E"; // ≤50 min – orange-red
-  return "#8C1D18";                           // 60+ min – deep red
+  if (headwayMinutes <= 50) return "#DA522F"; // ≤50 min – orange-red
+  return "#CD5B4F";                           // 60+ min – deep red
 }
 
 /** Format seconds as "+Xm Ys" / "" / "-Xm Ys". Returns "" for exactly 0 (badge already says "On time"). */
@@ -46,13 +80,50 @@ export function formatDateTime(iso: string): string {
   });
 }
 
-/** Color for an on-time percentage across five tiers. */
-export function onTimeColor(pct: number): string {
-  if (pct >= 80) return "#16a34a"; // green
-  if (pct >= 65) return "#c8d614"; // chartreuse (yellow-leaning)
+/** Color for an on-time percentage across five tiers, re-stepped per theme. */
+export function onTimeColor(pct: number, mode: ResolvedTheme = "dark"): string {
+  if (mode === "light") {
+    if (pct >= 80) return "#16a34a";
+    if (pct >= 65) return "#c8d614";
+    if (pct >= 50) return "#eab308";
+    if (pct >= 35) return "#f97316";
+    return "#dc2626";
+  }
+  if (pct >= 80) return "#16a34a"; // green — already bright enough for dark
+  if (pct >= 65) return "#c8d614"; // chartreuse
   if (pct >= 50) return "#eab308"; // yellow
   if (pct >= 35) return "#f97316"; // orange
-  return "#dc2626";                // red
+  return "#EC3A35";                // red, lightened to clear the dark card
+}
+
+/** Color for an average delay in seconds — early/on-time (cool) → very late (warm/red). */
+export function delayColor(seconds: number, mode: ResolvedTheme = "dark"): string {
+  if (mode === "light") {
+    if (seconds <= 0) return "#16a34a";
+    if (seconds <= 300) return "#65a30d";
+    if (seconds <= 600) return "#eab308";
+    if (seconds <= 900) return "#ea580c";
+    return "#dc2626";
+  }
+  if (seconds <= 0) return "#16a34a";
+  if (seconds <= 300) return "#65a30d";
+  if (seconds <= 600) return "#eab308";
+  if (seconds <= 900) return "#ea580c";
+  return "#EC3A35";
+}
+
+/** Service-delivered-vs-scheduled percentage → bar color, re-stepped per theme. */
+export function deliveredColor(pct: number, mode: ResolvedTheme = "dark"): string {
+  if (mode === "light") {
+    if (pct >= 95) return "#16a34a";
+    if (pct >= 85) return "#65a30d";
+    if (pct >= 70) return "#ea580c";
+    return "#dc2626";
+  }
+  if (pct >= 95) return "#16a34a";
+  if (pct >= 85) return "#65a30d";
+  if (pct >= 70) return "#ea580c";
+  return "#EC3A35";
 }
 
 /** Compact integer with thousands separators (e.g. 12,345). */

@@ -6,6 +6,7 @@ import { MapContainer, TileLayer, Marker, Tooltip, Polyline, CircleMarker, ZoomC
 import type { VehiclePosition, RailShape, StopInfo } from "@/lib/types";
 import { useRailShapes, useRouteShape, useRouteStops } from "@/lib/hooks";
 import { headwayColor, formatStatusLabel } from "@/lib/utils";
+import { useTheme } from "@/lib/useTheme";
 import { createVehicleIcon, iconPx } from "./vehicleIcon";
 
 const DENVER_CENTER: [number, number] = [39.7392, -104.9903];
@@ -80,6 +81,7 @@ function RailLines() {
 }
 
 const VehicleMarkers = memo(function VehicleMarkers({ vehicles, onVehicleClick, selectedVehicle }: Props) {
+  const { resolvedTheme } = useTheme();
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
 
   useMapEvents({
@@ -118,7 +120,7 @@ const VehicleMarkers = memo(function VehicleMarkers({ vehicles, onVehicleClick, 
               icon={createVehicleIcon(
                 v.bearing,
                 v.route_color,
-                headwayColor(v.headway_minutes),
+                headwayColor(v.headway_minutes, resolvedTheme),
                 isSelected ? "#FFFFFF" : "#000000",
                 zoom,
                 RAIL_TYPES.has(v.route_type),
@@ -135,7 +137,7 @@ const VehicleMarkers = memo(function VehicleMarkers({ vehicles, onVehicleClick, 
             </Marker>
           );
         }),
-    [vehicles, zoom, onVehicleClick, selectedKey],
+    [vehicles, zoom, onVehicleClick, selectedKey, resolvedTheme],
   );
 
   return <>{markers}</>;
@@ -381,6 +383,8 @@ function OneFingerZoom() {
 }
 
 export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, flyTo, selectedStop, onStopClick }: Props) {
+  const { resolvedTheme } = useTheme();
+  const basemap = resolvedTheme === "light" ? "light_all" : "dark_all";
   const [cartoApiKey, setCartoApiKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -413,8 +417,9 @@ export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, 
       attributionControl={false}
     >
       <TileLayer
+        key={basemap}
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        url={`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png${cartoApiKey ? `?key=${cartoApiKey}` : ""}`}
+        url={`https://{s}.basemaps.cartocdn.com/${basemap}/{z}/{x}/{y}.png${cartoApiKey ? `?key=${cartoApiKey}` : ""}`}
         subdomains="abcd"
         maxZoom={19}
       />

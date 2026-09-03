@@ -1,8 +1,9 @@
 """Vehicle drill-down: active vehicles for a time window + per-vehicle trip detail."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, text
@@ -14,10 +15,12 @@ from app.models.vehicle_position import VehiclePosition
 from app.models.stop_arrival import StopArrivalEvent
 from app.models.trip_update import TripUpdate
 from app.services.gtfs_decoder import load_gtfs_static_data, load_trip_endpoint_sequences
+from app.services.gtfs_schedule import load_trip_stop_sequence
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
 _settings = get_settings()
+_DENVER = ZoneInfo("America/Denver")
 
 
 def _validated_range(
@@ -285,6 +288,8 @@ async def get_vehicle_trip(
             "start": start.isoformat(),
             "end": end.isoformat(),
             "stops": [],
+            "scheduled_stop_count": 0,
+            "observed_stop_count": 0,
             "positions": [],
             "avg_delay_seconds": None,
             "on_time_pct": None,
@@ -323,32 +328,118 @@ async def get_vehicle_trip(
             )
             .order_by(StopArrivalEvent.stop_sequence.asc())
         )
-        for ev in (await db.execute(arrival_stmt)).scalars().all():
-            stop_info = stops_static.get(ev.stop_id, {})
-            stops_list.append(
-                {
-                    "stop_id": ev.stop_id,
-                    "stop_name": stop_info.get("stop_name"),
-                    "stop_lat": stop_info.get("stop_lat"),
-                    "stop_lon": stop_info.get("stop_lon"),
-                    "stop_sequence": ev.stop_sequence,
-                    "scheduled_time": ev.scheduled_time.isoformat(),
-                    "actual_time": ev.actual_time.isoformat(),
-                    "delay_seconds": ev.delay_seconds,
-                    "occupancy_status": _occupancy_at(ev.actual_time),
-                    "actual_lat": ev.actual_lat,
-                    "actual_lon": ev.actual_lon,
-                    "actual_bearing": ev.actual_bearing,
-                }
-            )
+        # Geofenced arrivals, keyed by stop_sequence — the subset of stops we
+        # actually observed the vehicle reach.
+        observed: dict[int, StopArrivalEvent] = {
+            ev.stop_sequence: ev
+            for ev in (await db.execute(arrival_stmt)).scalars().all()
+        }
+
+        # The full RTD schedule for this trip: every stop, origin → destination.
+        schedule = load_trip_stop_sequence(resolved_trip_id)
+
+        if schedule:
+            # Anchor the GTFS service day so stops we never geofenced still get
+            # an absolute scheduled time.
+            anchor = _service_day_anchor(schedule, observed, pos_rows)
+            scheduled_seqs = {s["stop_sequence"] for s in schedule}
+            for s in schedule:
+                seq = s["stop_sequence"]
+                ev = observed.get(seq)
+                if ev is not None:
+                    scheduled_iso = ev.scheduled_time.isoformat()
+                elif anchor is not None and s["arrival_secs"] is not None:
+                    scheduled_iso = (
+                        anchor + timedelta(seconds=s["arrival_secs"])
+                    ).isoformat()
+                else:
+                    scheduled_iso = None
+                stops_list.append(
+                    {
+                        "stop_id": s["stop_id"],
+                        "stop_name": s["stop_name"],
+                        "stop_lat": s["stop_lat"],
+                        "stop_lon": s["stop_lon"],
+                        "stop_sequence": seq,
+                        "stop_headsign": s["stop_headsign"],
+                        "is_timepoint": s["is_timepoint"],
+                        "pickup_type": s["pickup_type"],
+                        "drop_off_type": s["drop_off_type"],
+                        "scheduled_time": scheduled_iso,
+                        "observed": ev is not None,
+                        "actual_time": ev.actual_time.isoformat() if ev else None,
+                        "delay_seconds": ev.delay_seconds if ev else None,
+                        "occupancy_status": _occupancy_at(ev.actual_time) if ev else None,
+                        "actual_lat": ev.actual_lat if ev else None,
+                        "actual_lon": ev.actual_lon if ev else None,
+                        "actual_bearing": ev.actual_bearing if ev else None,
+                    }
+                )
+
+            # Keep any observed arrival whose stop_sequence isn't in the current
+            # schedule (GTFS bundle drift) rather than silently dropping it.
+            for seq, ev in sorted(observed.items()):
+                if seq in scheduled_seqs:
+                    continue
+                stop_info = stops_static.get(ev.stop_id, {})
+                stops_list.append(
+                    {
+                        "stop_id": ev.stop_id,
+                        "stop_name": stop_info.get("stop_name"),
+                        "stop_lat": stop_info.get("stop_lat"),
+                        "stop_lon": stop_info.get("stop_lon"),
+                        "stop_sequence": ev.stop_sequence,
+                        "stop_headsign": None,
+                        "is_timepoint": True,
+                        "pickup_type": "0",
+                        "drop_off_type": "0",
+                        "scheduled_time": ev.scheduled_time.isoformat(),
+                        "observed": True,
+                        "actual_time": ev.actual_time.isoformat(),
+                        "delay_seconds": ev.delay_seconds,
+                        "occupancy_status": _occupancy_at(ev.actual_time),
+                        "actual_lat": ev.actual_lat,
+                        "actual_lon": ev.actual_lon,
+                        "actual_bearing": ev.actual_bearing,
+                    }
+                )
+            stops_list.sort(key=lambda s: s["stop_sequence"])
+        else:
+            # Trip absent from the bundled static schedule — fall back to the
+            # geofenced arrivals alone (pre-full-timeline behaviour).
+            for seq, ev in sorted(observed.items()):
+                stop_info = stops_static.get(ev.stop_id, {})
+                stops_list.append(
+                    {
+                        "stop_id": ev.stop_id,
+                        "stop_name": stop_info.get("stop_name"),
+                        "stop_lat": stop_info.get("stop_lat"),
+                        "stop_lon": stop_info.get("stop_lon"),
+                        "stop_sequence": ev.stop_sequence,
+                        "stop_headsign": None,
+                        "is_timepoint": True,
+                        "pickup_type": "0",
+                        "drop_off_type": "0",
+                        "scheduled_time": ev.scheduled_time.isoformat(),
+                        "observed": True,
+                        "actual_time": ev.actual_time.isoformat(),
+                        "delay_seconds": ev.delay_seconds,
+                        "occupancy_status": _occupancy_at(ev.actual_time),
+                        "actual_lat": ev.actual_lat,
+                        "actual_lon": ev.actual_lon,
+                        "actual_bearing": ev.actual_bearing,
+                    }
+                )
 
     avg_delay: float | None = None
     on_time_pct: float | None = None
-    if stops_list:
-        delays = [s["delay_seconds"] for s in stops_list]
-        avg_delay = sum(delays) / len(delays)
-        on_time_count = sum(1 for d in delays if abs(d) <= 300)
-        on_time_pct = round(on_time_count / len(delays) * 100, 1)
+    observed_delays = [
+        s["delay_seconds"] for s in stops_list if s["observed"] and s["delay_seconds"] is not None
+    ]
+    if observed_delays:
+        avg_delay = sum(observed_delays) / len(observed_delays)
+        on_time_count = sum(1 for d in observed_delays if abs(d) <= 300)
+        on_time_pct = round(on_time_count / len(observed_delays) * 100, 1)
 
     positions = [
         {
@@ -375,11 +466,57 @@ async def get_vehicle_trip(
         "start": start.isoformat(),
         "end": end.isoformat(),
         "stops": stops_list,
+        "scheduled_stop_count": len(stops_list),
+        "observed_stop_count": sum(1 for s in stops_list if s["observed"]),
         "positions": positions,
         "avg_delay_seconds": avg_delay,
         "on_time_pct": on_time_pct,
         "observation_count": len(pos_rows),
     }
+
+
+def _service_day_anchor(
+    schedule: tuple[dict, ...],
+    observed: dict[int, StopArrivalEvent],
+    pos_rows: list,
+) -> datetime | None:
+    """UTC instant of this trip's GTFS service-day midnight (America/Denver).
+
+    Lets us put an absolute clock on scheduled stops the vehicle was never
+    geofenced at.  Prefer an observed arrival (its ``scheduled_time`` minus the
+    stop's seconds-since-midnight offset is exact); otherwise infer the service
+    date from the position track, testing the day before / after as well so a
+    trip that runs past midnight still resolves.
+    """
+    secs_by_seq = {s["stop_sequence"]: s["arrival_secs"] for s in schedule}
+
+    for seq, ev in observed.items():
+        offset = secs_by_seq.get(seq)
+        if offset is not None:
+            return ev.scheduled_time - timedelta(seconds=offset)
+
+    if not pos_rows or not schedule:
+        return None
+    first_offset = schedule[0]["arrival_secs"]
+    if first_offset is None:
+        return None
+    track_start = pos_rows[0].timestamp
+    if track_start.tzinfo is None:
+        track_start = track_start.replace(tzinfo=timezone.utc)
+    local_date = track_start.astimezone(_DENVER).date()
+
+    best: datetime | None = None
+    best_gap: float | None = None
+    for delta_days in (0, -1, 1):
+        midnight = datetime.combine(
+            local_date + timedelta(days=delta_days), time(0, 0), tzinfo=_DENVER
+        ).astimezone(timezone.utc)
+        gap = abs(
+            ((midnight + timedelta(seconds=first_offset)) - track_start).total_seconds()
+        )
+        if best_gap is None or gap < best_gap:
+            best_gap, best = gap, midnight
+    return best
 
 
 async def _delay_map(

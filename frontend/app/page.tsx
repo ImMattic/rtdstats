@@ -111,8 +111,8 @@ function HomePageInner() {
       <div className="relative min-h-0 flex-1">
         {isError ? (
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center text-gray-500">
-              <p className="text-lg font-medium">Backend unreachable</p>
+            <div className="text-center text-fg-subtle">
+              <p className="text-lg font-medium text-fg">Backend unreachable</p>
               <p className="text-sm mt-1">Make sure the API server is running.</p>
             </div>
           </div>

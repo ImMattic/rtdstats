@@ -4,14 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Tooltip, useMap } from "react-leaflet";
 import type { VehicleStopEvent, VehiclePositionTrack } from "@/lib/types";
 import { interpolateTrackPosition, formatTime } from "@/lib/utils";
+import { useTheme } from "@/lib/useTheme";
 import { createVehicleIcon } from "./vehicleIcon";
 
 const DENVER_CENTER: [number, number] = [39.7392, -104.9903];
 
-function stopDelayColor(seconds: number): string {
-  if (seconds > 300) return "#dc2626";  // red — late
-  if (seconds < -300) return "#2563eb"; // blue — early
-  return "#16a34a";                     // green — on time
+function stopDelayColor(seconds: number, mode: "dark" | "light"): string {
+  if (seconds > 300) return mode === "light" ? "#dc2626" : "#EC3A35"; // late
+  if (seconds < -300) return mode === "light" ? "#2563eb" : "#5B9BF5"; // early
+  return "#16a34a";                                                   // on time
 }
 
 function BoundsAdjuster({
@@ -49,6 +50,8 @@ interface Props {
 }
 
 export default function VehicleTripMap({ positions, stops, routeColor, isRail = false, highlightStop, playbackMs }: Props) {
+  const { resolvedTheme } = useTheme();
+  const basemap = resolvedTheme === "light" ? "light_all" : "dark_all";
   const [mapClickStop, setMapClickStop] = useState<VehicleStopEvent | null>(null);
 
   const isPlayback = playbackMs != null;
@@ -66,7 +69,7 @@ export default function VehicleTripMap({ positions, stops, routeColor, isRail = 
   // Where was the vehicle at this stop's *scheduled* arrival time? Interpolated
   // from the position track — a late vehicle lands behind the stop on the route.
   const highlight = useMemo(() => {
-    if (!activeStop) return null;
+    if (!activeStop?.scheduled_time) return null;
     const pos = interpolateTrackPosition(positions, activeStop.scheduled_time);
     if (!pos) return null;
     return { ...pos, routeColor, isRail };
@@ -110,8 +113,9 @@ export default function VehicleTripMap({ positions, stops, routeColor, isRail = 
   return (
     <MapContainer center={center} zoom={13} className="h-full w-full" scrollWheelZoom>
       <TileLayer
+        key={basemap}
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        url={`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png${cartoApiKey ? `?key=${cartoApiKey}` : ""}`}
+        url={`https://{s}.basemaps.cartocdn.com/${basemap}/{z}/{x}/{y}.png${cartoApiKey ? `?key=${cartoApiKey}` : ""}`}
         subdomains="abcd"
         maxZoom={19}
       />
@@ -131,19 +135,33 @@ export default function VehicleTripMap({ positions, stops, routeColor, isRail = 
         />
       )}
 
-      {/* Stop markers, colored by delay */}
-      {stops.map((stop) =>
-        stop.stop_lat && stop.stop_lon ? (
+      {/* Stop markers: solid + delay-coloured where the vehicle was tracked,
+          small hollow dots for scheduled-only stops. */}
+      {stops.map((stop) => {
+        if (!stop.stop_lat || !stop.stop_lon) return null;
+        const tracked = stop.observed !== false && stop.delay_seconds != null;
+        const outline = resolvedTheme === "light" ? "#ffffff" : "#0D0E11";
+        return (
           <CircleMarker
             key={`${stop.stop_id}-${stop.stop_sequence}`}
             center={[stop.stop_lat, stop.stop_lon]}
-            radius={7}
-            pathOptions={{
-              color: "#ffffff",
-              weight: 1.5,
-              fillColor: stopDelayColor(stop.delay_seconds),
-              fillOpacity: 0.9,
-            }}
+            radius={tracked ? 7 : 4}
+            pathOptions={
+              tracked
+                ? {
+                    color: "#ffffff",
+                    weight: 1.5,
+                    fillColor: stopDelayColor(stop.delay_seconds ?? 0, resolvedTheme),
+                    fillOpacity: 0.9,
+                  }
+                : {
+                    color: fillColor,
+                    weight: 1.5,
+                    fillColor: outline,
+                    fillOpacity: 1,
+                    opacity: 0.7,
+                  }
+            }
             eventHandlers={{
               click: () =>
                 setMapClickStop((prev) =>
@@ -158,14 +176,20 @@ export default function VehicleTripMap({ positions, stops, routeColor, isRail = 
             <Tooltip direction="top" offset={[0, -10]} opacity={1}>
               <span className="font-semibold">{stop.stop_name ?? stop.stop_id}</span>
               <br />
-              <span>
-                {stop.delay_seconds > 0 ? "+" : ""}
-                {(stop.delay_seconds / 60).toFixed(1)}m
-              </span>
+              {tracked ? (
+                <span>
+                  {(stop.delay_seconds ?? 0) > 0 ? "+" : ""}
+                  {((stop.delay_seconds ?? 0) / 60).toFixed(1)}m
+                </span>
+              ) : (
+                <span>
+                  {stop.scheduled_time ? `sched ${formatTime(stop.scheduled_time)}` : "scheduled"}
+                </span>
+              )}
             </Tooltip>
           </CircleMarker>
-        ) : null,
-      )}
+        );
+      })}
 
       {/* Hover marker: where the vehicle was at the hovered stop's scheduled arrival time */}
       {highlight && (
@@ -181,7 +205,9 @@ export default function VehicleTripMap({ positions, stops, routeColor, isRail = 
           )}
         >
           <Tooltip direction="top" offset={[0, -4]} opacity={1} permanent>
-            <span className="font-semibold">Scheduled {activeStop ? formatTime(activeStop.scheduled_time) : ""}</span>
+            <span className="font-semibold">
+              Scheduled {activeStop?.scheduled_time ? formatTime(activeStop.scheduled_time) : ""}
+            </span>
           </Tooltip>
         </Marker>
       )}

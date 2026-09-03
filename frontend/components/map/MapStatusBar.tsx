@@ -11,6 +11,7 @@ import {
 import { useRoutes, useStopsSearch } from "@/lib/hooks";
 import type { StopInfo, VehiclePosition } from "@/lib/types";
 import { cn, headwayColor } from "@/lib/utils";
+import { useTheme } from "@/lib/useTheme";
 
 interface Props {
   vehicles: VehiclePosition[];
@@ -22,16 +23,6 @@ interface Props {
   onSelect: (vehicle: VehiclePosition) => void;
   onSelectStop: (stop: StopInfo) => void;
 }
-
-/** Headway colour key — same buckets used by the map markers. */
-const LEGEND = [
-  { label: "<15", color: headwayColor(10) },
-  { label: "20", color: headwayColor(18) },
-  { label: "30", color: headwayColor(25) },
-  { label: "40", color: headwayColor(35) },
-  { label: "50", color: headwayColor(45) },
-  { label: "60+", color: headwayColor(99) },
-] as const;
 
 const CYCLE_COUNT = 3;
 const SEARCH_WIDTH = "min(90vw, 23rem)";
@@ -46,8 +37,23 @@ export default function MapStatusBar({
   onSelect,
   onSelectStop,
 }: Props) {
+  const { resolvedTheme } = useTheme();
   const [mode, setMode] = useState<"status" | "search">("status");
   const [cycle, setCycle] = useState(0);
+
+  /** Headway colour key — same buckets used by the map markers. */
+  const legend = useMemo(
+    () =>
+      [
+        { label: "<15", color: headwayColor(10, resolvedTheme) },
+        { label: "20", color: headwayColor(18, resolvedTheme) },
+        { label: "30", color: headwayColor(25, resolvedTheme) },
+        { label: "40", color: headwayColor(35, resolvedTheme) },
+        { label: "50", color: headwayColor(45, resolvedTheme) },
+        { label: "60+", color: headwayColor(99, resolvedTheme) },
+      ] as const,
+    [resolvedTheme],
+  );
   const [query, setQuery] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
@@ -155,15 +161,15 @@ export default function MapStatusBar({
   const cycleBody = () => {
     if (cycle === 0) {
       return (
-        <span className="flex items-center gap-2 font-medium text-gray-200">
+        <span className="flex items-center gap-2 font-medium text-fg-muted">
           <span
             className={cn(
               "inline-block h-2 w-2 shrink-0 rounded-full",
               isError
-                ? "bg-red-500"
+                ? "bg-danger"
                 : isLoading
-                  ? "bg-amber-400"
-                  : "bg-emerald-400",
+                  ? "bg-warn"
+                  : "bg-ok",
             )}
           />
           {isLoading
@@ -176,7 +182,7 @@ export default function MapStatusBar({
     }
     if (cycle === 1) {
       return (
-        <span className="text-xs text-gray-300">
+        <span className="text-xs text-fg-muted">
           {dataUpdatedAt
             ? `Updated ${new Date(dataUpdatedAt).toLocaleTimeString()}`
             : "Awaiting data…"}
@@ -184,9 +190,9 @@ export default function MapStatusBar({
       );
     }
     return (
-      <span className="flex items-center gap-1.5 text-[11px] text-gray-400">
-        <span className="text-gray-500">Headway</span>
-        {LEGEND.map(({ label, color }) => (
+      <span className="flex items-center gap-1.5 text-[11px] text-fg-subtle">
+        <span className="text-fg-subtle">Headway</span>
+        {legend.map(({ label, color }) => (
           <span key={label} className="flex items-center gap-1">
             <span
               className="inline-block h-2.5 w-2.5 rounded-full border-2"
@@ -204,7 +210,7 @@ export default function MapStatusBar({
       <div ref={anchorRef} className="pointer-events-auto relative flex items-center">
         {/* Search — separate button on the left; expands to take over the info box */}
         <div
-          className="flex h-9 shrink-0 items-center overflow-hidden rounded-full border border-surface-border bg-surface-card/90 shadow-lg shadow-black/30 backdrop-blur-md transition-[width,margin] duration-300 ease-out"
+          className="flex h-9 shrink-0 items-center overflow-hidden rounded-full border border-line bg-card/90 shadow-lg shadow-black/30 backdrop-blur-md transition-[width,margin] duration-300 ease-out"
           style={{
             width: mode === "search" ? SEARCH_WIDTH : "2.25rem",
             marginRight: mode === "search" ? 0 : "0.5rem",
@@ -216,13 +222,13 @@ export default function MapStatusBar({
               type="button"
               onClick={openSearch}
               aria-label="Search routes and stations"
-              className="flex h-9 w-9 shrink-0 items-center justify-center text-gray-400 transition-colors hover:text-gray-200"
+              className="flex h-9 w-9 shrink-0 items-center justify-center text-fg-subtle transition-colors hover:text-fg-muted"
             >
               <SearchIcon />
             </button>
           ) : (
             <div className="animate-search-in flex w-full items-center gap-2 px-3">
-              <SearchIcon className="shrink-0 text-gray-500" />
+              <SearchIcon className="shrink-0 text-fg-subtle" />
               <input
                 ref={inputRef}
                 type="search"
@@ -233,13 +239,13 @@ export default function MapStatusBar({
                 }}
                 onFocus={() => setDropdownOpen(true)}
                 placeholder="Search route or station…"
-                className="min-w-0 flex-1 bg-transparent text-base text-gray-200 placeholder-gray-500 outline-none sm:text-sm"
+                className="min-w-0 flex-1 bg-transparent text-base text-fg-muted placeholder-fg-subtle outline-none sm:text-sm"
               />
               <button
                 type="button"
                 onClick={closeSearch}
                 aria-label="Close search"
-                className="shrink-0 text-gray-500 transition-colors hover:text-gray-300"
+                className="shrink-0 text-fg-subtle transition-colors hover:text-fg-muted"
               >
                 <ClearIcon />
               </button>
@@ -250,8 +256,10 @@ export default function MapStatusBar({
         {/* Info box — tap to cycle; collapses when search takes over */}
         <div
           className={cn(
-            "flex h-9 shrink-0 items-center overflow-hidden rounded-full border border-surface-border bg-surface-card/90 text-sm text-gray-300 shadow-lg shadow-black/30 backdrop-blur-md transition-[width,opacity] duration-300 ease-out",
-            mode === "search" && "pointer-events-none",
+            "group flex h-9 shrink-0 items-center overflow-hidden rounded-full border border-line bg-card/90 text-sm text-fg-muted shadow-lg shadow-black/30 backdrop-blur-md transition-[width,opacity,background-color,border-color,box-shadow] duration-300 ease-out",
+            mode === "search"
+              ? "pointer-events-none"
+              : "cursor-pointer hover:border-line-strong hover:bg-card hover:shadow-black/40",
           )}
           style={{
             width:
@@ -271,7 +279,7 @@ export default function MapStatusBar({
             onClick={advance}
             aria-label="Cycle map info"
             tabIndex={mode === "search" ? -1 : 0}
-            className="flex items-center gap-2 whitespace-nowrap px-3"
+            className="flex items-center whitespace-nowrap px-3 transition-transform duration-150 ease-out active:scale-[0.97]"
           >
             <span key={cycle} className="animate-cycle-in inline-flex items-center">
               {cycleBody()}
@@ -281,7 +289,7 @@ export default function MapStatusBar({
 
         {mode === "search" && dropdownOpen && (
           <ul
-            className="absolute left-1/2 top-full z-[1001] mt-2 max-h-80 -translate-x-1/2 overflow-y-auto rounded-lg border border-gray-700 bg-gray-900/95 shadow-lg backdrop-blur-sm"
+            className="absolute left-1/2 top-full z-[1001] mt-2 max-h-80 -translate-x-1/2 overflow-y-auto rounded-lg border border-line-strong bg-overlay/95 shadow-lg backdrop-blur-sm"
             style={{ width: SEARCH_WIDTH }}
           >
             {(
@@ -299,8 +307,8 @@ export default function MapStatusBar({
                 <Fragment key={label}>
                   <li
                     className={cn(
-                      "px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-500",
-                      divider && "border-t border-gray-700",
+                      "px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle",
+                      divider && "border-t border-line-strong",
                     )}
                   >
                     {label}
@@ -310,17 +318,17 @@ export default function MapStatusBar({
                       <button
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => handleSelectRoute(r.route_id)}
-                        className="flex w-full items-center gap-3 border-t border-gray-800 px-3 py-2.5 text-left transition-colors hover:bg-gray-800"
+                        className="flex w-full items-center gap-3 border-t border-line px-3 py-2.5 text-left transition-colors hover:bg-raised"
                       >
                         <span
                           className="h-3 w-3 shrink-0 rounded-full"
                           style={{ backgroundColor: `#${r.color}` }}
                         />
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-gray-100">
+                          <p className="text-sm font-semibold text-fg">
                             {r.short_name}
                           </p>
-                          <p className="truncate text-xs text-gray-400">
+                          <p className="truncate text-xs text-fg-subtle">
                             {r.long_name}
                           </p>
                         </div>
@@ -335,8 +343,8 @@ export default function MapStatusBar({
               <>
                 <li
                   className={cn(
-                    "px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-500",
-                    hasRoutes && "border-t border-gray-700",
+                    "px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle",
+                    hasRoutes && "border-t border-line-strong",
                   )}
                 >
                   Stations
@@ -346,18 +354,18 @@ export default function MapStatusBar({
                     <button
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => handleSelectStop(stop)}
-                      className="flex w-full items-center gap-3 border-t border-gray-800 px-3 py-2.5 text-left transition-colors hover:bg-gray-800"
+                      className="flex w-full items-center gap-3 border-t border-line px-3 py-2.5 text-left transition-colors hover:bg-raised"
                     >
-                      <span className="shrink-0 text-gray-500">
+                      <span className="shrink-0 text-fg-subtle">
                         <StationIcon />
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-gray-100">
+                        <p className="text-sm font-semibold text-fg">
                           {stop.stop_name}
                         </p>
                         <div className="mt-0.5 flex flex-wrap items-center gap-1">
                           {stop.stop_desc && (
-                            <span className="mr-1 text-xs text-gray-400">
+                            <span className="mr-1 text-xs text-fg-subtle">
                               {stop.stop_desc}
                             </span>
                           )}
@@ -371,7 +379,7 @@ export default function MapStatusBar({
                             </span>
                           ))}
                           {stop.routes.length > 6 && (
-                            <span className="text-[10px] text-gray-500">
+                            <span className="text-[10px] text-fg-subtle">
                               +{stop.routes.length - 6}
                             </span>
                           )}
@@ -384,7 +392,7 @@ export default function MapStatusBar({
             )}
 
             {totalGroups === 0 && (
-              <li className="px-3 py-3 text-sm text-gray-500">
+              <li className="px-3 py-3 text-sm text-fg-subtle">
                 No routes or stations found
               </li>
             )}

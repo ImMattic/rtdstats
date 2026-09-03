@@ -61,19 +61,20 @@ export default function TripPlaybackControls({ playback, startMs, endMs, routeCo
           value={currentMs}
           onChange={(e) => seek(Number(e.target.value))}
           aria-label="Playback timeline"
-          className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full"
+          className="rtd-range h-1.5 flex-1 cursor-pointer appearance-none rounded-full"
           style={{
-            background: `linear-gradient(to right, ${accent} 0%, ${accent} ${progress}%, #d1d5db ${progress}%, #d1d5db 100%)`,
+            background: `linear-gradient(to right, ${accent} 0%, ${accent} ${progress}%, rgb(var(--line-2)) ${progress}%, rgb(var(--line-2)) 100%)`,
+            color: accent,
           }}
         />
 
-        <span className="shrink-0 font-mono text-xs tabular-nums text-gray-600">
+        <span className="shrink-0 font-mono text-xs tabular-nums text-fg-muted">
           {clockWithSeconds(currentMs)} / {clockWithSeconds(endMs)}
         </span>
       </div>
 
       <div className="flex items-center gap-1.5">
-        <span className="mr-1 text-xs text-gray-400">Speed</span>
+        <span className="mr-1 text-xs text-fg-subtle">Speed</span>
         {SPEEDS.map((s) => {
           const isActive = s === speed;
           return (
@@ -84,7 +85,7 @@ export default function TripPlaybackControls({ playback, startMs, endMs, routeCo
               className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition ${
                 isActive
                   ? "text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  : "bg-raised text-fg-muted hover:bg-line"
               }`}
               style={isActive ? { backgroundColor: accent } : undefined}
             >

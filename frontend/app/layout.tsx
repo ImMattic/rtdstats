@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import "leaflet/dist/leaflet.css";
 import NavBar from "@/components/ui/NavBar";
@@ -10,6 +11,11 @@ const inter = Inter({ subsets: ["latin"] });
 
 const description =
   "Real-time vehicle positions, on-time performance, and delay tracking for Denver's RTD light rail, commuter rail, and bus network.";
+
+// Runs before hydration so the theme is painted before first paint (no flash).
+// Mirrors lib/useTheme.ts's resolve logic: an explicit "dark"/"light" wins,
+// "system" (or nothing stored yet) follows the OS setting.
+const THEME_INIT = `(function(){try{var p=localStorage.getItem('rtdstats-theme');var t=(p==='dark'||p==='light')?p:((window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark');document.documentElement.dataset.theme=t;}catch(e){document.documentElement.dataset.theme='dark';}})();`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(
@@ -46,8 +52,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={`${inter.className} bg-surface text-gray-100 antialiased`}>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${inter.className} bg-canvas text-fg antialiased`}>
+        <Script
+          id="theme-init"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: THEME_INIT }}
+        />
         <Providers>
           <div className="flex min-h-dvh flex-col">
             <NavBar />

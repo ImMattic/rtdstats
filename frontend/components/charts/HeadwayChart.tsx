@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import type { HourHeadway } from "@/lib/types";
 import { formatHour, headwayColor } from "@/lib/utils";
+import { useChartTheme } from "@/lib/useChartTheme";
 
 interface Props {
   headways: HourHeadway[];
@@ -19,6 +20,7 @@ interface Props {
 
 /** Scheduled headway (minutes between buses/trains) by hour of day. */
 function HeadwayChart({ headways }: Props) {
+  const theme = useChartTheme();
   const data = useMemo(
     () =>
       headways
@@ -28,27 +30,33 @@ function HeadwayChart({ headways }: Props) {
   );
 
   if (!data.length) {
-    return <p className="py-8 text-center text-sm text-gray-500">No scheduled-frequency data for this route.</p>;
+    return <p className="py-8 text-center text-sm text-fg-subtle">No scheduled-frequency data for this route.</p>;
   }
 
   return (
     <ResponsiveContainer width="100%" height={220}>
       <BarChart data={data} margin={{ left: 4, right: 8, top: 8 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-        <XAxis dataKey="label" tick={{ fontSize: 9, fill: "#64748b" }} interval={1} />
+        <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} vertical={false} />
+        <XAxis dataKey="label" tick={{ fontSize: 9, fill: theme.axis }} interval={1} />
         <YAxis
           tickFormatter={(v) => `${v}m`}
-          tick={{ fontSize: 11, fill: "#4b5563" }}
+          tick={{ fontSize: 11, fill: theme.text }}
           width={36}
           reversed
         />
         <Tooltip
           formatter={(value: number) => [`${value.toFixed(0)} min`, "Headway"]}
-          contentStyle={{ fontSize: 12, borderRadius: 8 }}
+          contentStyle={{
+            fontSize: 12,
+            borderRadius: 8,
+            background: theme.tooltipBg,
+            border: `1px solid ${theme.tooltipBorder}`,
+            color: theme.tooltipText,
+          }}
         />
         <Bar dataKey="headway" radius={[4, 4, 0, 0]}>
           {data.map((d) => (
-            <Cell key={d.hour} fill={headwayColor(d.headway)} />
+            <Cell key={d.hour} fill={headwayColor(d.headway, theme.mode)} />
           ))}
         </Bar>
       </BarChart>

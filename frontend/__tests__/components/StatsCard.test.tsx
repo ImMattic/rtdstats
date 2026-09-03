@@ -24,21 +24,21 @@ describe("StatsCard", () => {
     expect(screen.queryByText("last 7 days")).not.toBeInTheDocument();
   });
 
-  it("applies green accent class", () => {
+  it("applies green (on-time) accent class", () => {
     render(<StatsCard title="Rate" value="85%" accent="green" />);
     const valueEl = screen.getByText("85%");
-    expect(valueEl.className).toMatch(/green/);
+    expect(valueEl.className).toMatch(/text-ok/);
   });
 
-  it("applies red accent class", () => {
+  it("applies red (critical) accent class", () => {
     render(<StatsCard title="Rate" value="50%" accent="red" />);
     const valueEl = screen.getByText("50%");
-    expect(valueEl.className).toMatch(/red/);
+    expect(valueEl.className).toMatch(/text-danger/);
   });
 
-  it("applies default gray when no accent provided", () => {
+  it("applies default foreground token when no accent provided", () => {
     render(<StatsCard title="Rate" value="75%" />);
     const valueEl = screen.getByText("75%");
-    expect(valueEl.className).toMatch(/gray-900/);
+    expect(valueEl.className).toMatch(/text-fg\b/);
   });
 });

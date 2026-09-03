@@ -13,7 +13,7 @@ import type { VehicleStopEvent } from "@/lib/types";
 
 const VehicleTripMap = dynamic(() => import("@/components/map/VehicleTripMap"), {
   ssr: false,
-  loading: () => <div className="h-full animate-pulse rounded bg-gray-800" />,
+  loading: () => <div className="h-full animate-pulse rounded bg-raised" />,
 });
 
 const OCCUPANCY_LABELS: Record<string, string> = {
@@ -27,26 +27,135 @@ const OCCUPANCY_LABELS: Record<string, string> = {
   UNKNOWN: "—",
 };
 
-function delayClass(seconds: number): string {
-  if (seconds > 300) return "text-red-600 font-semibold";
-  if (seconds < -300) return "text-blue-600 font-semibold";
-  return "text-green-600";
-}
-
 function delayBadge(seconds: number): string {
-  if (seconds > 600) return "bg-red-100 text-red-700";
-  if (seconds > 300) return "bg-orange-100 text-orange-700";
-  if (seconds < -300) return "bg-blue-100 text-blue-700";
-  return "bg-green-100 text-green-700";
+  if (seconds > 600) return "status-danger";
+  if (seconds > 300) return "status-warn";
+  if (seconds < -300) return "status-info";
+  return "status-ok";
 }
 
 function StatBox({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-gray-900">{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-gray-400">{sub}</p>}
+    <div className="rounded-lg border border-line bg-card p-4 shadow-card">
+      <p className="text-xs text-fg-subtle">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-fg">{value}</p>
+      {sub && <p className="mt-0.5 text-xs text-fg-subtle">{sub}</p>}
     </div>
+  );
+}
+
+function hhmm(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+/** Fill colour for a solid (observed) timeline node. */
+function nodeFill(seconds: number | null): string {
+  if (seconds === null) return "bg-fg-subtle";
+  if (seconds > 600) return "bg-danger";
+  if (seconds > 300) return "bg-warn";
+  if (seconds < -300) return "bg-accent";
+  return "bg-ok";
+}
+
+/**
+ * Full stop-by-stop schedule for the trip's direction: every RTD timepoint and
+ * intermediate stop from origin to terminus. Stops the vehicle was geofenced at
+ * ("tracked") carry an actual time + delay; the rest show the schedule only.
+ */
+function StopTimeline({
+  stops,
+  onHover,
+}: {
+  stops: VehicleStopEvent[];
+  onHover: (s: VehicleStopEvent | null) => void;
+}) {
+  return (
+    <ol className="max-h-[560px] overflow-y-auto pr-1">
+      {stops.map((stop, i) => {
+        const isFirst = i === 0;
+        const isLast = i === stops.length - 1;
+        const terminus = isFirst ? "Origin" : isLast ? "Terminus" : null;
+        return (
+          <li
+            key={`${stop.stop_id}-${stop.stop_sequence}`}
+            className="group flex gap-3 rounded px-1.5 hover:bg-raised"
+            onMouseEnter={() => onHover(stop)}
+            onMouseLeave={() => onHover(null)}
+          >
+            {/* Rail */}
+            <div className="flex w-3 shrink-0 flex-col items-center">
+              <span className={`w-px ${isFirst ? "h-3" : "h-3 bg-line-strong"}`} />
+              <span
+                className={
+                  stop.observed
+                    ? `${stop.is_timepoint ? "h-3.5 w-3.5" : "h-2.5 w-2.5"} rounded-full ${nodeFill(
+                        stop.delay_seconds,
+                      )} ring-2 ring-card`
+                    : `${
+                        stop.is_timepoint ? "h-3 w-3 border-fg-subtle" : "h-2.5 w-2.5 border-line-strong"
+                      } rounded-full border-2 bg-card`
+                }
+              />
+              <span className={`w-px flex-1 ${isLast ? "" : "bg-line-strong"}`} />
+            </div>
+
+            {/* Content */}
+            <div className="flex flex-1 items-start justify-between gap-3 py-2">
+              <div className="min-w-0">
+                <p
+                  className={`truncate text-sm ${
+                    stop.is_timepoint ? "font-semibold text-fg" : "font-medium text-fg-muted"
+                  }`}
+                >
+                  {stop.stop_name ?? stop.stop_id}
+                </p>
+                <p className="mt-0.5 text-[11px] text-fg-subtle">
+                  #{stop.stop_sequence}
+                  {terminus && (
+                    <span className="ml-1.5 rounded bg-raised px-1 py-px font-medium uppercase tracking-wide text-fg-muted">
+                      {terminus}
+                    </span>
+                  )}
+                  {stop.observed && stop.occupancy_status && stop.occupancy_status !== "UNKNOWN" && (
+                    <span className="ml-1.5">
+                      · {OCCUPANCY_LABELS[stop.occupancy_status] ?? stop.occupancy_status}
+                    </span>
+                  )}
+                </p>
+              </div>
+
+              <div className="shrink-0 text-right">
+                {stop.observed ? (
+                  <>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <span className="text-sm tabular-nums text-fg">{hhmm(stop.actual_time)}</span>
+                      <span
+                        className={`rounded-full px-1.5 py-0.5 text-[11px] ${delayBadge(
+                          stop.delay_seconds ?? 0,
+                        )}`}
+                      >
+                        {formatDelay(stop.delay_seconds) || "On time"}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-[11px] tabular-nums text-fg-subtle">
+                      sched {hhmm(stop.scheduled_time)}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-sm tabular-nums text-fg-muted">
+                      {hhmm(stop.scheduled_time)}
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-fg-subtle">scheduled</div>
+                  </>
+                )}
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -82,6 +191,9 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
     ? data.positions[data.positions.length - 1].occupancy_status
     : null;
 
+  const observedStopCount =
+    data?.observed_stop_count ?? data?.stops.filter((s) => s.observed).length ?? 0;
+
   // Prefer the trip's actual extent (first→last snapshot) over the padded
   // query bounds for the header timestamp.
   const tripStart = data?.positions.length ? data.positions[0].timestamp : start;
@@ -97,20 +209,20 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
   const playback = usePlayback(playbackStartMs, playbackEndMs);
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 pb-6 pt-24 text-gray-900">
+    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 pb-6 pt-24 text-fg">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-gray-500">
-        <Link href={backHref} className="hover:text-rtd-blue">
+      <div className="flex items-center gap-2 text-sm text-fg-subtle">
+        <Link href={backHref} className="hover:text-accent">
           Trips
         </Link>
         <span>/</span>
-        <span className="text-gray-700">#{vehicleLabel}</span>
+        <span className="text-fg-muted">#{vehicleLabel}</span>
       </div>
 
       {/* Header */}
       <div>
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-bold text-white">Vehicle #{vehicleLabel}</h1>
+          <h1 className="text-2xl font-bold text-fg">Vehicle #{vehicleLabel}</h1>
           {data?.route_short_name && (
             <span
               className="rounded px-2.5 py-1 text-sm font-bold text-white"
@@ -121,10 +233,10 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
           )}
         </div>
         {data?.route_long_name && (
-          <p className="mt-0.5 text-sm text-gray-500">{data.route_long_name}</p>
+          <p className="mt-0.5 text-sm text-fg-subtle">{data.route_long_name}</p>
         )}
         {(tripStart || tripEnd) && (
-          <p className="mt-0.5 text-xs text-gray-400">
+          <p className="mt-0.5 text-xs text-fg-subtle">
             {tripStart
               ? new Date(tripStart).toLocaleString([], {
                   dateStyle: "medium",
@@ -141,7 +253,7 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
 
       {isLoading && <LoadingSpinner />}
       {isError && (
-        <p className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+        <p className="status-danger rounded px-4 py-3 text-sm">
           Failed to load trip data.
         </p>
       )}
@@ -155,7 +267,11 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
               value={
                 data.avg_delay_seconds !== null ? formatDelayMin(data.avg_delay_seconds) : "—"
               }
-              sub={data.stops.length ? `across ${data.stops.length} stops` : "no stop data"}
+              sub={
+                observedStopCount
+                  ? `across ${observedStopCount} tracked stop${observedStopCount === 1 ? "" : "s"}`
+                  : "no tracked stops"
+              }
             />
             <StatBox
               label="On-Time Rate"
@@ -177,64 +293,37 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* Stop timeline */}
             <Card className="lg:col-span-1">
-              <SectionHeading title="Stop Arrival Timeline" />
+              <SectionHeading
+                title="Stop Timeline"
+                subtitle={
+                  data.stops.length
+                    ? `Every scheduled stop, origin → terminus · ${observedStopCount}/${data.stops.length} tracked`
+                    : undefined
+                }
+              />
               {data.stops.length === 0 ? (
-                <p className="py-6 text-center text-sm text-gray-500">
-                  Stop arrival events are derived from geofencing. Data may not be available for
-                  all trips or older time windows.
+                <p className="py-6 text-center text-sm text-fg-subtle">
+                  No schedule found for this trip. The stop timeline is built from RTD&rsquo;s
+                  static schedule for the trip&rsquo;s direction — it may be unavailable for
+                  added/modified trips or older time windows.
                 </p>
               ) : (
-                <div className="overflow-x-auto rounded border border-gray-200">
-                  <table className="min-w-full text-sm text-gray-800">
-                    <thead className="bg-gray-50 text-xs uppercase text-gray-500">
-                      <tr>
-                        <th className="px-3 py-2 text-left">#</th>
-                        <th className="px-3 py-2 text-left">Stop</th>
-                        <th className="px-3 py-2 text-right">Scheduled</th>
-                        <th className="px-3 py-2 text-right">Actual</th>
-                        <th className="px-3 py-2 text-right">Delay</th>
-                        <th className="px-3 py-2 text-left">Occupancy</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {data.stops.map((stop) => (
-                        <tr
-                          key={`${stop.stop_id}-${stop.stop_sequence}`}
-                          className="hover:bg-gray-50 cursor-default"
-                          onMouseEnter={() => setHoveredStop(stop)}
-                          onMouseLeave={() => setHoveredStop(null)}
-                        >
-                          <td className="px-3 py-2 text-gray-400">{stop.stop_sequence}</td>
-                          <td className="px-3 py-2 font-medium">
-                            {stop.stop_name ?? stop.stop_id}
-                          </td>
-                          <td className="px-3 py-2 text-right text-gray-500">
-                            {new Date(stop.scheduled_time).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </td>
-                          <td className="px-3 py-2 text-right">
-                            {new Date(stop.actual_time).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </td>
-                          <td className={`px-3 py-2 text-right ${delayClass(stop.delay_seconds)}`}>
-                            <span
-                              className={`inline-block rounded-full px-2 py-0.5 text-xs ${delayBadge(stop.delay_seconds)}`}
-                            >
-                              {formatDelay(stop.delay_seconds) || "On time"}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-gray-600">
-                            {OCCUPANCY_LABELS[stop.occupancy_status ?? "UNKNOWN"] ?? "—"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <>
+                  <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-fg-subtle">
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 rounded-full bg-ok" /> tracked (colour = delay)
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 rounded-full border-2 border-line-strong bg-card" />{" "}
+                      scheduled only
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-3 w-3 rounded-full border-2 border-fg-subtle bg-card" />{" "}
+                      timepoint
+                    </span>
+                  </div>
+                  <StopTimeline stops={data.stops} onHover={setHoveredStop} />
+                </>
               )}
             </Card>
 
@@ -245,12 +334,12 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
                 subtitle="Press play to replay the trip, or hover a stop for its scheduled position"
               />
               {data.positions.length === 0 && data.stops.length === 0 ? (
-                <p className="py-6 text-center text-sm text-gray-500">
+                <p className="py-6 text-center text-sm text-fg-subtle">
                   No position data available.
                 </p>
               ) : (
                 <>
-                  <div className="h-[420px] overflow-hidden rounded border border-gray-200">
+                  <div className="h-[420px] overflow-hidden rounded border border-line">
                     <VehicleTripMap
                       positions={data.positions}
                       stops={data.stops}
@@ -274,7 +363,7 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
           </div>
 
           {data.trip_id && (
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-fg-subtle">
               Trip ID: <span className="font-mono">{data.trip_id}</span>
             </p>
           )}
@@ -294,7 +383,7 @@ export default function TripDetailPage({
     <Suspense
       fallback={
         <div className="mx-auto w-full max-w-7xl px-4 pb-6 pt-24">
-          <p className="text-sm text-gray-500">Loading…</p>
+          <p className="text-sm text-fg-subtle">Loading…</p>
         </div>
       }
     >

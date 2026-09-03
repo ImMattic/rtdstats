@@ -30,10 +30,30 @@ const config: Config = {
         "rtd-n":        "#904199",
         "rtd-r":        "#C1D32F",
         "rtd-w":        "#0091B3",
-        // ── UI surface ───────────────────────────────────────────────────
-        "surface":      "#0F1923",
-        "surface-card": "#1A2535",
-        "surface-border":"#263040",
+        // ── Theme surfaces (CSS-var backed — flip with data-theme) ────────
+        // "Last Train" (dark, default) / "First Train" (light) — see globals.css.
+        canvas:     "rgb(var(--canvas) / <alpha-value>)",
+        card:       "rgb(var(--card) / <alpha-value>)",
+        raised:     "rgb(var(--raised) / <alpha-value>)",
+        overlay:    "rgb(var(--overlay) / <alpha-value>)",
+        line:       "rgb(var(--line) / <alpha-value>)",
+        "line-strong": "rgb(var(--line-2) / <alpha-value>)",
+        fg:         "rgb(var(--fg) / <alpha-value>)",
+        "fg-muted": "rgb(var(--fg-muted) / <alpha-value>)",
+        "fg-subtle":"rgb(var(--fg-subtle) / <alpha-value>)",
+        // Signal accent triad — interactive / good / attention / critical.
+        accent:       "rgb(var(--accent) / <alpha-value>)",
+        "accent-ink": "rgb(var(--accent-ink) / <alpha-value>)",
+        ok:           "rgb(var(--ok) / <alpha-value>)",
+        warn:         "rgb(var(--warn) / <alpha-value>)",
+        danger:       "rgb(var(--danger) / <alpha-value>)",
+        // ── Legacy aliases — old dark-only names kept working ─────────────
+        "surface":       "rgb(var(--canvas) / <alpha-value>)",
+        "surface-card":  "rgb(var(--card) / <alpha-value>)",
+        "surface-border":"rgb(var(--line) / <alpha-value>)",
+      },
+      boxShadow: {
+        card: "var(--shadow-card)",
       },
     },
   },

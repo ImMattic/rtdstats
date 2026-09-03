@@ -14,6 +14,7 @@ estimate trips-per-day, headway-by-hour, and span of service per direction.
 from __future__ import annotations
 
 import csv
+import functools
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -265,6 +266,78 @@ def load_trip_stop_schedule(
     if _trip_stop_schedule_cache is None:
         _trip_stop_schedule_cache = _build_trip_stop_schedule(gtfs_static_root)
     return _trip_stop_schedule_cache
+
+
+@functools.lru_cache(maxsize=512)
+def load_trip_stop_sequence(
+    trip_id: str,
+    gtfs_static_root: Path | None = None,
+) -> tuple[dict[str, Any], ...]:
+    """Every scheduled stop for one trip — origin terminus → destination terminus.
+
+    Unlike ``load_trip_stop_schedule`` (timepoint stops only, cached for *all*
+    trips at once), this keeps **every** stop the trip serves.  Holding that for
+    all ~20k trips would be ~800k rows — too much for a small VM — so instead
+    each call scans ``stop_times.txt`` for the one ``trip_id`` (a cheap
+    ``str.startswith`` prefilter, then ``csv`` only parses the ~20-60 matching
+    lines) and the result is LRU-cached for repeat views of the same trip.
+
+    Returns a tuple (immutable, so ``lru_cache`` can hold it) of dicts ordered
+    by ``stop_sequence``::
+
+        {stop_sequence, stop_id, stop_name, stop_lat, stop_lon, arrival_secs,
+         stop_headsign, is_timepoint, pickup_type, drop_off_type}
+
+    Empty tuple when the trip is not in the bundled static schedule (e.g. RTD
+    added it after this GTFS bundle was cut).
+    """
+    if not trip_id:
+        return ()
+
+    root = gtfs_static_root or resolve_gtfs_static_root()
+    _, stops = load_gtfs_static_data(gtfs_static_root=root)
+
+    prefix = f'"{trip_id}",'
+    rows: list[dict[str, Any]] = []
+    for folder in TRANSIT_FOLDERS:
+        f = root / folder / "stop_times.txt"
+        if not f.exists():
+            continue
+        with f.open("r", encoding="utf-8", newline="") as handle:
+            header = handle.readline()
+            matched = [line for line in handle if line.startswith(prefix)]
+        if not matched:
+            continue
+        for row in csv.DictReader([header, *matched]):
+            seq_str = row.get("stop_sequence")
+            stop_id = (row.get("stop_id") or "").strip()
+            if not seq_str or not stop_id:
+                continue
+            try:
+                seq = int(seq_str)
+            except ValueError:
+                continue
+            stop = stops.get(stop_id, {})
+            rows.append(
+                {
+                    "stop_sequence": seq,
+                    "stop_id": stop_id,
+                    "stop_name": stop.get("stop_name") or None,
+                    "stop_lat": stop.get("stop_lat"),
+                    "stop_lon": stop.get("stop_lon"),
+                    "arrival_secs": _parse_gtfs_time(
+                        row.get("arrival_time") or row.get("departure_time")
+                    ),
+                    "stop_headsign": (row.get("stop_headsign") or "").strip() or None,
+                    "is_timepoint": row.get("timepoint") == "1",
+                    "pickup_type": (row.get("pickup_type") or "0").strip() or "0",
+                    "drop_off_type": (row.get("drop_off_type") or "0").strip() or "0",
+                }
+            )
+        break  # a trip_id lives in exactly one feed folder
+
+    rows.sort(key=lambda r: r["stop_sequence"])
+    return tuple(rows)
 
 
 def scheduled_trips_for_daytype(route_id: str, daytype: str) -> int | None:
