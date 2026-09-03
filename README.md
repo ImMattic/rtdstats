@@ -62,7 +62,7 @@ rtdstats/
 - [Node.js 20+](https://nodejs.org/) _(only needed for frontend-only development)_
 - [Python 3.11+](https://www.python.org/) _(only needed for backend-only development)_
 
-### Run with Docker (recommended)
+### Run with Docker
 
 This is the fastest way to get a fully working local environment.
 
