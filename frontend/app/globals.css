@@ -16,6 +16,9 @@
    brand red and the route/line colours (rtd-red, rtd-a..rtd-w, etc.
    in tailwind.config.ts) are intentionally NOT tokenised — they're
    fixed brand/GTFS colours, not theme-dependent.
+
+   The Signal palette (brand anchors + the per-theme accent steps and
+   why light ≠ dark) is documented in frontend/DESIGN_TOKENS.md.
    ============================================================ */
 :root {
   --canvas: 13 14 17;      /* #0D0E11 */
@@ -44,48 +47,52 @@
 }
 
 :root[data-theme="light"] {
-  --canvas: 245 246 247;   /* #F5F6F7 */
-  --card: 255 255 255;
-  --raised: 238 240 242;   /* #EEF0F2 */
-  --overlay: 255 255 255;
-  --line: 225 227 231;     /* #E1E3E7 */
-  --line-2: 201 205 211;   /* #C9CDD3 */
+  --canvas: 244 245 247;   /* #F4F5F7 */
+  --card: 255 255 255;     /* #FFFFFF */
+  --raised: 236 238 241;   /* #ECEEF1 */
+  --overlay: 255 255 255;  /* #FFFFFF */
+  --line: 220 223 229;     /* #DCDFE5 — a hairline you can actually see on --canvas */
+  --line-2: 197 202 210;   /* #C5CAD2 */
 
-  --fg: 20 22 26;          /* #14161A */
-  --fg-muted: 74 76 79;    /* #4A4C4F */
-  --fg-subtle: 102 107 115;/* #666B73 */
+  --fg: 21 24 29;          /* #15181D */
+  --fg-muted: 91 97 106;   /* #5B616A — a clear step down from --fg, not near-black */
+  --fg-subtle: 122 129 139;/* #7A818B */
 
-  /* Same Signal accents, re-stepped to clear 4.5:1+ on white */
-  --accent: 0 128 164;     /* #0080A4 */
+  /* Signal accents — deepened + re-saturated for weight on white. Dark mode
+     uses the bright brand steps; light must NOT reuse them (a bright accent
+     dissolves on white the same way a deep one vibrates on near-black). All
+     four clear 4.5:1 on #FFFFFF. Full rationale: frontend/DESIGN_TOKENS.md. */
+  --accent: 4 120 156;     /* #04789C — Signal Blue, deep  (5.0:1 on #fff) */
   --accent-ink: 255 255 255;
-  --ok: 0 133 118;         /* #008576 */
-  --warn: 183 95 0;        /* #B75F00 */
-  --danger: 206 14 45;     /* #CE0E2D — RTD Red already clears on white */
+  --ok: 0 122 107;         /* #007A6B — Signal Teal, deep  (5.2:1) */
+  --warn: 180 77 8;        /* #B44D08 — Signal Orange, deep (5.2:1) */
+  --danger: 197 12 43;     /* #C50C2B — Signal Red         (6.1:1) */
 
-  --status-alpha: 0.10;
-  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.05), 0 14px 32px -16px rgb(16 24 40 / 0.16);
+  --status-alpha: 0.12;
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.06), 0 12px 28px -14px rgb(16 24 40 / 0.18);
 
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: light) {
+  /* Keep every value in lock-step with :root[data-theme="light"] above. */
   :root:not([data-theme]) {
-    --canvas: 245 246 247;
+    --canvas: 244 245 247;
     --card: 255 255 255;
-    --raised: 238 240 242;
+    --raised: 236 238 241;
     --overlay: 255 255 255;
-    --line: 225 227 231;
-    --line-2: 201 205 211;
-    --fg: 20 22 26;
-    --fg-muted: 74 76 79;
-    --fg-subtle: 102 107 115;
-    --accent: 0 128 164;
+    --line: 220 223 229;
+    --line-2: 197 202 210;
+    --fg: 21 24 29;
+    --fg-muted: 91 97 106;
+    --fg-subtle: 122 129 139;
+    --accent: 4 120 156;
     --accent-ink: 255 255 255;
-    --ok: 0 133 118;
-    --warn: 183 95 0;
-    --danger: 206 14 45;
-    --status-alpha: 0.10;
-    --shadow-card: 0 1px 2px rgb(16 24 40 / 0.05), 0 14px 32px -16px rgb(16 24 40 / 0.16);
+    --ok: 0 122 107;
+    --warn: 180 77 8;
+    --danger: 197 12 43;
+    --status-alpha: 0.12;
+    --shadow-card: 0 1px 2px rgb(16 24 40 / 0.06), 0 12px 28px -14px rgb(16 24 40 / 0.18);
     color-scheme: light;
   }
 }
@@ -97,11 +104,16 @@ body {
   transition: background-color 220ms ease, color 220ms ease;
 }
 
-/* Ensure the Leaflet map fills its container */
+/* Ensure the Leaflet map fills its container.
+   `background` is !important because leaflet/dist/leaflet.css is imported after
+   this file (layout.tsx) and its own `.leaflet-container { background: #ddd }`
+   would otherwise win on source order — that grey is what flashes in the
+   not-yet-tiled area during a fast zoom-out. Keeping it --canvas makes the
+   gap read as the map ground instead of a flash-bang in dark mode. */
 .leaflet-container {
   height: 100%;
   width: 100%;
-  background: rgb(var(--canvas));
+  background: rgb(var(--canvas)) !important;
 }
 
 /* Zoom control sits in the bottom-right corner, stacked above the attribution;
