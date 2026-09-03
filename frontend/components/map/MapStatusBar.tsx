@@ -250,8 +250,10 @@ export default function MapStatusBar({
         {/* Info box — tap to cycle; collapses when search takes over */}
         <div
           className={cn(
-            "flex h-9 shrink-0 items-center overflow-hidden rounded-full border border-surface-border bg-surface-card/90 text-sm text-gray-300 shadow-lg shadow-black/30 backdrop-blur-md transition-[width,opacity] duration-300 ease-out",
-            mode === "search" && "pointer-events-none",
+            "group flex h-9 shrink-0 items-center overflow-hidden rounded-full border border-surface-border bg-surface-card/90 text-sm text-gray-300 shadow-lg shadow-black/30 backdrop-blur-md transition-[width,opacity,background-color,border-color,box-shadow] duration-300 ease-out",
+            mode === "search"
+              ? "pointer-events-none"
+              : "cursor-pointer hover:border-gray-500 hover:bg-surface-card hover:shadow-black/40",
           )}
           style={{
             width:
@@ -271,11 +273,12 @@ export default function MapStatusBar({
             onClick={advance}
             aria-label="Cycle map info"
             tabIndex={mode === "search" ? -1 : 0}
-            className="flex items-center gap-2 whitespace-nowrap px-3"
+            className="flex items-center gap-2 whitespace-nowrap px-3 transition-transform duration-150 ease-out active:scale-[0.97]"
           >
             <span key={cycle} className="animate-cycle-in inline-flex items-center">
               {cycleBody()}
             </span>
+            <CycleIcon className="shrink-0 text-gray-500 transition-colors duration-200 group-hover:text-gray-200" />
           </button>
         </div>
 
@@ -406,6 +409,23 @@ function SearchIcon({ className = "" }: { className?: string }) {
       <path
         fillRule="evenodd"
         d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
+function CycleIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      className={`h-3.5 w-3.5 ${className}`}
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path
+        fillRule="evenodd"
+        d="M4.755 10.059a7.5 7.5 0 0 1 12.548-3.364l1.903 1.903h-3.183a.75.75 0 1 0 0 1.5h4.992a.75.75 0 0 0 .75-.75V4.356a.75.75 0 0 0-1.5 0v3.18l-1.9-1.9A9 9 0 0 0 3.306 9.67a.75.75 0 1 0 1.45.388Zm15.408 3.352a.75.75 0 0 0-.919.53 7.5 7.5 0 0 1-12.548 3.364l-1.902-1.903h3.183a.75.75 0 0 0 0-1.5H2.984a.75.75 0 0 0-.75.75v4.992a.75.75 0 0 0 1.5 0v-3.18l1.9 1.9a9 9 0 0 0 15.059-4.035.75.75 0 0 0-.53-.918Z"
         clipRule="evenodd"
       />
     </svg>
