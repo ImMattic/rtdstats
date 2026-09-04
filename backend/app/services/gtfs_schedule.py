@@ -37,6 +37,10 @@ _trip_stop_schedule_cache: dict[str, list[tuple[int, str, int, float, float]]] |
 # None until first load.
 _direction_info_cache: dict[str, dict[str, dict[str, Any]]] | None = None
 
+# {trip_id: (stop_sequence, stop_id, arrival_secs, stop_lat, stop_lon)} for the
+# *first* timepoint of each trip — its origin terminal.  None until first load.
+_trip_origin_cache: dict[str, tuple[int, str, int, float, float]] | None = None
+
 
 def _parse_gtfs_time(value: str | None) -> int | None:
     """Parse a GTFS ``HH:MM:SS`` time into seconds since midnight.
@@ -266,6 +270,27 @@ def load_trip_stop_schedule(
     if _trip_stop_schedule_cache is None:
         _trip_stop_schedule_cache = _build_trip_stop_schedule(gtfs_static_root)
     return _trip_stop_schedule_cache
+
+
+def load_trip_origin_timepoints(
+    gtfs_static_root: Path | None = None,
+) -> dict[str, tuple[int, str, int, float, float]]:
+    """{trip_id: (stop_sequence, stop_id, arrival_secs, stop_lat, stop_lon)} — origins.
+
+    The trip's *first* timepoint: where the run starts and where the scheduled
+    time is a **departure**, not an arrival.  ``services/ontime.py`` times this
+    stop by watching the vehicle leave rather than by geofencing its first
+    sighting (a bus lays over at the gate for minutes before it pulls out).
+
+    Built from the unfiltered timepoint schedule on purpose — the shape-dist
+    schedule drops timepoints that sit too close together, and dropping a trip's
+    origin there must not turn its departure into an anonymous mid-route stop.
+    """
+    global _trip_origin_cache
+    if _trip_origin_cache is None:
+        base = load_trip_stop_schedule(gtfs_static_root)
+        _trip_origin_cache = {tid: tps[0] for tid, tps in base.items() if tps}
+    return _trip_origin_cache
 
 
 @functools.lru_cache(maxsize=512)

@@ -62,6 +62,8 @@ function nodeFill(seconds: number | null): string {
  * Full stop-by-stop schedule for the trip's direction: every RTD timepoint and
  * intermediate stop from origin to terminus. Stops the vehicle was geofenced at
  * ("tracked") carry an actual time + delay; the rest show the schedule only.
+ * The origin's actual time is when the vehicle *left*, not when it first showed
+ * up there — see `event_type` on VehicleStopEvent.
  */
 function StopTimeline({
   stops,
@@ -139,7 +141,8 @@ function StopTimeline({
                       </span>
                     </div>
                     <div className="mt-0.5 text-[11px] tabular-nums text-fg-subtle">
-                      sched {hhmm(stop.scheduled_time)}
+                      {stop.event_type === "departure" ? "departed · sched " : "sched "}
+                      {hhmm(stop.scheduled_time)}
                     </div>
                   </>
                 ) : (

@@ -158,6 +158,7 @@ function OccupancyChart({ data, direction, onDirectionChange }: Props) {
           />
           <Tooltip
             formatter={(value: number, name: string) => [`${value.toFixed(1)}%`, name]}
+            cursor={{ fill: theme.cursorFill, stroke: "transparent" }}
             contentStyle={{
               fontSize: 12,
               borderRadius: 8,

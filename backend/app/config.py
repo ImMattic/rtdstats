@@ -62,6 +62,17 @@ class Settings(BaseSettings):
     # live trip_id probably doesn't match the static schedule for that day —
     # drop the event rather than record a bogus delay.
     arrival_max_delay_seconds: int = 10800
+    # The origin terminal is timed by *departure*, not arrival: a vehicle lays
+    # over at the gate (already carrying its next trip_id) long before it pulls
+    # out, so its first geofenced snapshot there is minutes too early.  It
+    # counts as departed once it is this far from the origin stop; the crossing
+    # time is interpolated between the last snapshot inside and the first
+    # outside, so a 30 s poll interval doesn't cost a 30 s error.
+    origin_departure_radius_m: int = 100
+    # If a trip stops appearing in the feed while still parked at its origin, we
+    # never see it leave.  After this much silence, fall back to recording the
+    # last moment it was seen at the stop rather than losing the event.
+    origin_departure_stale_minutes: int = 15
 
     # ── CORS ──────────────────────────────────────────────────────────────────
     cors_origins: list[str] = ["http://localhost:3000"]

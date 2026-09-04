@@ -15,7 +15,7 @@ from app.models.vehicle_position import VehiclePosition
 from app.models.stop_arrival import StopArrivalEvent
 from app.models.trip_update import TripUpdate
 from app.services.gtfs_decoder import load_gtfs_static_data, load_trip_endpoint_sequences
-from app.services.gtfs_schedule import load_trip_stop_sequence
+from app.services.gtfs_schedule import load_trip_origin_timepoints, load_trip_stop_sequence
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
@@ -338,6 +338,15 @@ async def get_vehicle_trip(
         # The full RTD schedule for this trip: every stop, origin → destination.
         schedule = load_trip_stop_sequence(resolved_trip_id)
 
+        # The origin is timed by departure, not arrival (services/ontime.py), so
+        # label it as such rather than letting the UI imply the bus "arrived" at
+        # the stop it started from.
+        origin = load_trip_origin_timepoints().get(resolved_trip_id)
+        origin_seq = origin[0] if origin else None
+
+        def _event_type(seq: int) -> str:
+            return "departure" if seq == origin_seq else "arrival"
+
         if schedule:
             # Anchor the GTFS service day so stops we never geofenced still get
             # an absolute scheduled time.
@@ -367,6 +376,7 @@ async def get_vehicle_trip(
                         "drop_off_type": s["drop_off_type"],
                         "scheduled_time": scheduled_iso,
                         "observed": ev is not None,
+                        "event_type": _event_type(seq) if ev else None,
                         "actual_time": ev.actual_time.isoformat() if ev else None,
                         "delay_seconds": ev.delay_seconds if ev else None,
                         "occupancy_status": _occupancy_at(ev.actual_time) if ev else None,
@@ -395,6 +405,7 @@ async def get_vehicle_trip(
                         "drop_off_type": "0",
                         "scheduled_time": ev.scheduled_time.isoformat(),
                         "observed": True,
+                        "event_type": _event_type(ev.stop_sequence),
                         "actual_time": ev.actual_time.isoformat(),
                         "delay_seconds": ev.delay_seconds,
                         "occupancy_status": _occupancy_at(ev.actual_time),
@@ -422,6 +433,7 @@ async def get_vehicle_trip(
                         "drop_off_type": "0",
                         "scheduled_time": ev.scheduled_time.isoformat(),
                         "observed": True,
+                        "event_type": _event_type(ev.stop_sequence),
                         "actual_time": ev.actual_time.isoformat(),
                         "delay_seconds": ev.delay_seconds,
                         "occupancy_status": _occupancy_at(ev.actual_time),
