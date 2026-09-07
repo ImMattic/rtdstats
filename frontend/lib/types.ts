@@ -348,6 +348,8 @@ export interface ActiveVehicle {
   end_time: string;
   start_stop_name: string | null;
   end_stop_name: string | null;
+  /** False when the trip ended without a geofenced arrival at its terminus stop_sequence. */
+  reached_terminus: boolean;
   last_latitude: number | null;
   last_longitude: number | null;
   last_occupancy_status: string | null;

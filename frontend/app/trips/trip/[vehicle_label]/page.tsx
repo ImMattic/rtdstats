@@ -1,14 +1,15 @@
 "use client";
 import dynamic from "next/dynamic";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useVehicleTrip } from "@/lib/hooks";
+import { useVehicleTrip, useVehicles } from "@/lib/hooks";
 import { usePlayback } from "@/lib/usePlayback";
 import { Card, SectionHeading } from "@/components/ui/Card";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import TripPlaybackControls from "@/components/map/TripPlaybackControls";
-import { formatDelay, formatDelayMin, routeColor } from "@/lib/utils";
+import TripStatusBadge from "@/components/ui/TripStatusBadge";
+import { computeTripStatus, formatDelay, formatDelayMin, isTripInProgress, routeColor } from "@/lib/utils";
 import type { VehicleStopEvent } from "@/lib/types";
 
 const VehicleTripMap = dynamic(() => import("@/components/map/VehicleTripMap"), {
@@ -58,30 +59,192 @@ function nodeFill(seconds: number | null): string {
   return "bg-ok";
 }
 
+/** Routes with this many stops or fewer show every stop; no condensing. */
+const MAX_FULL_STOPS = 20;
+/** Above that, condense down to this many equidistant "anchor" stops. */
+const CONDENSED_STOP_COUNT = 10;
+
+function anchorKeyFor(stop: VehicleStopEvent): string {
+  return `${stop.stop_id}-${stop.stop_sequence}`;
+}
+
+function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
 /**
- * Full stop-by-stop schedule for the trip's direction: every RTD timepoint and
- * intermediate stop from origin to terminus. Stops the vehicle was geofenced at
- * ("tracked") carry an actual time + delay; the rest show the schedule only.
- * The origin's actual time is when the vehicle *left*, not when it first showed
- * up there — see `event_type` on VehicleStopEvent.
+ * Picks up to `count` indices from `pool` (a sorted subset of stop indices
+ * that always includes the first and last stop) whose cumulative
+ * straight-line distance along the full stop sequence is as close to evenly
+ * spaced as the pool allows. Falls back to even spacing through the pool if
+ * coordinates are missing (or the route has no measurable length).
+ */
+function selectEquidistantFromPool(
+  pool: number[],
+  cumulative: number[],
+  count: number,
+): number[] {
+  const m = pool.length;
+  if (m <= count) return pool;
+
+  const total = cumulative[pool[m - 1]];
+  const pickedPool: number[] = [];
+  for (let i = 0; i < count; i++) {
+    let bestJ = 0;
+    if (total > 0) {
+      const target = (total * i) / (count - 1);
+      let bestDiff = Infinity;
+      for (let j = 0; j < m; j++) {
+        const diff = Math.abs(cumulative[pool[j]] - target);
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          bestJ = j;
+        }
+      }
+    } else {
+      bestJ = Math.round((i * (m - 1)) / (count - 1));
+    }
+    // Keep picks strictly increasing, and leave enough room for the picks still to come.
+    const minJ = pickedPool.length ? pickedPool[pickedPool.length - 1] + 1 : 0;
+    const maxJ = m - 1 - (count - 1 - i);
+    pickedPool.push(Math.min(Math.max(bestJ, minJ), maxJ));
+  }
+  pickedPool[0] = 0;
+  pickedPool[pickedPool.length - 1] = m - 1;
+  return pickedPool.map((j) => pool[j]);
+}
+
+/**
+ * Chooses which stops become the condensed view's "anchor" stops. Only RTD
+ * timepoints ever get a geofenced arrival (see `stop_arrival_events` on the
+ * backend), so a non-timepoint anchor could never show a status colour — the
+ * pool is restricted to timepoints (plus the origin/terminus, forced in
+ * regardless of their timepoint flag) so every anchor is capable of showing
+ * one once the vehicle reaches it.
+ */
+function selectEquidistantIndices(stops: VehicleStopEvent[], count: number): number[] {
+  const n = stops.length;
+  if (n <= count) return stops.map((_, i) => i);
+
+  const cumulative = new Array<number>(n).fill(0);
+  for (let i = 1; i < n; i++) {
+    const a = stops[i - 1];
+    const b = stops[i];
+    const d =
+      a.stop_lat != null && a.stop_lon != null && b.stop_lat != null && b.stop_lon != null
+        ? haversineMeters(a.stop_lat, a.stop_lon, b.stop_lat, b.stop_lon)
+        : 0;
+    cumulative[i] = cumulative[i - 1] + d;
+  }
+
+  const pool = stops
+    .map((s, i) => i)
+    .filter((i) => i === 0 || i === n - 1 || stops[i].is_timepoint);
+
+  return selectEquidistantFromPool(pool, cumulative, count);
+}
+
+interface TimelineRow {
+  stop: VehicleStopEvent;
+  anchorKey: string;
+  /** Stops collapsed under this row's caret; 0 for rows that aren't anchors. */
+  childCount: number;
+  expanded: boolean;
+}
+
+/**
+ * Builds the rows the Stop Timeline renders. Routes with more than
+ * MAX_FULL_STOPS stops are condensed to up to CONDENSED_STOP_COUNT equidistant
+ * timepoint "anchor" stops (always including origin + terminus); the stops in
+ * between two anchors collapse under the earlier anchor's drop-down caret
+ * until the user expands it (or the "Show all stops" toggle expands every
+ * anchor).
+ */
+function buildTimelineRows(
+  stops: VehicleStopEvent[],
+  expandedAnchors: Set<string>,
+): TimelineRow[] {
+  if (stops.length <= MAX_FULL_STOPS) {
+    return stops.map((stop) => ({
+      stop,
+      anchorKey: anchorKeyFor(stop),
+      childCount: 0,
+      expanded: false,
+    }));
+  }
+
+  const anchorIndices = selectEquidistantIndices(stops, CONDENSED_STOP_COUNT);
+  const rows: TimelineRow[] = [];
+  for (let i = 0; i < anchorIndices.length; i++) {
+    const anchorIdx = anchorIndices[i];
+    const nextAnchorIdx = anchorIndices[i + 1] ?? stops.length;
+    const anchor = stops[anchorIdx];
+    const key = anchorKeyFor(anchor);
+    const children = stops.slice(anchorIdx + 1, nextAnchorIdx);
+    const expanded = children.length > 0 && expandedAnchors.has(key);
+    rows.push({ stop: anchor, anchorKey: key, childCount: children.length, expanded });
+    if (expanded) {
+      for (const child of children) {
+        rows.push({ stop: child, anchorKey: anchorKeyFor(child), childCount: 0, expanded: false });
+      }
+    }
+  }
+  return rows;
+}
+
+function ChevronIcon({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      className={`h-3 w-3 shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`}
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path
+        fillRule="evenodd"
+        d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
+/**
+ * Stop-by-stop schedule for the trip's direction. Short routes (≤20 stops)
+ * show every stop; longer routes condense to equidistant anchor stops with a
+ * drop-down caret to reveal the stops collapsed between two anchors — see
+ * `buildTimelineRows`. Stops the vehicle was geofenced at ("tracked") carry
+ * an actual time + delay; the rest show the schedule only. The origin's
+ * actual time is when the vehicle *left*, not when it first showed up there
+ * — see `event_type` on VehicleStopEvent.
  */
 function StopTimeline({
-  stops,
+  rows,
   onHover,
+  onToggleAnchor,
 }: {
-  stops: VehicleStopEvent[];
+  rows: TimelineRow[];
   onHover: (s: VehicleStopEvent | null) => void;
+  onToggleAnchor: (anchorKey: string) => void;
 }) {
   return (
     <ol className="max-h-[560px] overflow-y-auto pr-1">
-      {stops.map((stop, i) => {
+      {rows.map((row, i) => {
+        const { stop } = row;
         const isFirst = i === 0;
-        const isLast = i === stops.length - 1;
+        const isLast = i === rows.length - 1;
         const terminus = isFirst ? "Origin" : isLast ? "Terminus" : null;
         return (
           <li
-            key={`${stop.stop_id}-${stop.stop_sequence}`}
-            className="group flex gap-3 rounded px-1.5 hover:bg-raised"
+            key={row.anchorKey}
+            className="group flex gap-1.5 rounded px-1.5 hover:bg-raised"
             onMouseEnter={() => onHover(stop)}
             onMouseLeave={() => onHover(null)}
           >
@@ -102,6 +265,22 @@ function StopTimeline({
               <span className={`w-px flex-1 ${isLast ? "" : "bg-line-strong"}`} />
             </div>
 
+            {/* Drop-down caret — fixed-width slot so stop names still line up
+                on rows that don't have one. */}
+            <div className="flex w-4 shrink-0 items-start pt-[7px]">
+              {row.childCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onToggleAnchor(row.anchorKey)}
+                  aria-expanded={row.expanded}
+                  aria-label={row.expanded ? "Hide stops between" : "Show stops between"}
+                  className="rounded text-fg-subtle hover:text-fg-muted"
+                >
+                  <ChevronIcon expanded={row.expanded} />
+                </button>
+              )}
+            </div>
+
             {/* Content */}
             <div className="flex flex-1 items-start justify-between gap-3 py-2">
               <div className="min-w-0">
@@ -112,17 +291,15 @@ function StopTimeline({
                 >
                   {stop.stop_name ?? stop.stop_id}
                 </p>
-                <p className="mt-0.5 text-[11px] text-fg-subtle">
-                  #{stop.stop_sequence}
+                <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-fg-subtle">
+                  <span>#{stop.stop_sequence}</span>
                   {terminus && (
-                    <span className="ml-1.5 rounded bg-raised px-1 py-px font-medium uppercase tracking-wide text-fg-muted">
+                    <span className="rounded bg-raised px-1 py-px font-medium uppercase tracking-wide text-fg-muted">
                       {terminus}
                     </span>
                   )}
                   {stop.observed && stop.occupancy_status && stop.occupancy_status !== "UNKNOWN" && (
-                    <span className="ml-1.5">
-                      · {OCCUPANCY_LABELS[stop.occupancy_status] ?? stop.occupancy_status}
-                    </span>
+                    <span>· {OCCUPANCY_LABELS[stop.occupancy_status] ?? stop.occupancy_status}</span>
                   )}
                 </p>
               </div>
@@ -162,21 +339,67 @@ function StopTimeline({
   );
 }
 
+/** Expands/collapses every condensed anchor's caret at once. */
+function ShowAllStopsToggle({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: () => void;
+}) {
+  return (
+    <label className="flex select-none items-center gap-2 text-xs text-fg-muted">
+      <span>Show all stops</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={onChange}
+        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+          checked ? "bg-accent" : "bg-line-strong"
+        }`}
+      >
+        <span
+          className={`inline-block h-3.5 w-3.5 transform rounded-full bg-card shadow transition-transform ${
+            checked ? "translate-x-[18px]" : "translate-x-1"
+          }`}
+        />
+      </button>
+    </label>
+  );
+}
+
 const RAIL_TYPES = new Set(["0", "1", "2"]);
 
 function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
   const searchParams = useSearchParams();
   const tripId = searchParams.get("trip_id") ?? undefined;
   const [hoveredStop, setHoveredStop] = useState<VehicleStopEvent | null>(null);
+  const [expandedAnchors, setExpandedAnchors] = useState<Set<string>>(new Set());
+  // Falls back to the trip id the backend resolved, for the (rare) direct
+  // link that lands here without one in the URL — see the effect below.
+  const [resolvedTripId, setResolvedTripId] = useState<string | undefined>(undefined);
   // start/end bound the full extent of this single trip leg (set by the list).
   const start = searchParams.get("start") ?? undefined;
   const end = searchParams.get("end") ?? undefined;
 
-  const { data, isLoading, isError } = useVehicleTrip(vehicleLabel, {
-    trip_id: tripId,
-    start,
-    end,
-  });
+  // Cross-reference the live realtime feed (same one the map page polls) to
+  // tell whether this leg is still being tracked right now.
+  const live = useVehicles();
+  const effectiveTripId = tripId ?? resolvedTripId;
+  const isInProgress = isTripInProgress(live.data?.vehicles, vehicleLabel, effectiveTripId);
+
+  const { data, isLoading, isError } = useVehicleTrip(
+    vehicleLabel,
+    // While in progress, drop the fixed `end` bound so every poll re-asks the
+    // backend for "up to now" and new stops/positions stream in.
+    { trip_id: tripId, start, end: isInProgress ? undefined : end },
+    { live: isInProgress },
+  );
+
+  useEffect(() => {
+    if (data?.trip_id) setResolvedTripId(data.trip_id);
+  }, [data?.trip_id]);
 
   // The breadcrumb returns to the originating list window, not this leg's bounds.
   const retStart = searchParams.get("ret_start");
@@ -196,6 +419,44 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
 
   const observedStopCount =
     data?.observed_stop_count ?? data?.stops.filter((s) => s.observed).length ?? 0;
+
+  const stops = data?.stops ?? [];
+  const isCondensed = stops.length > MAX_FULL_STOPS;
+  // A trip with no known schedule can't be assessed, so default to "reached"
+  // rather than flagging a data gap as an incident — see reached_terminus on
+  // the trips-list endpoint for the same convention.
+  const reachedTerminus = stops.length > 0 ? stops[stops.length - 1].observed === true : true;
+  const tripStatus = computeTripStatus(isInProgress, reachedTerminus);
+
+  // Reset drill-down state whenever a different trip loads.
+  useEffect(() => {
+    setExpandedAnchors(new Set());
+  }, [data?.trip_id]);
+
+  const timelineRows = useMemo(() => buildTimelineRows(stops, expandedAnchors), [stops, expandedAnchors]);
+  // What the map should plot: anchor stops, plus any drilled-down stops the
+  // table currently has expanded.
+  const visibleStops = useMemo(() => timelineRows.map((row) => row.stop), [timelineRows]);
+  const expandableAnchors = useMemo(
+    () => timelineRows.filter((row) => row.childCount > 0),
+    [timelineRows],
+  );
+  const allStopsShown =
+    expandableAnchors.length > 0 && expandableAnchors.every((row) => row.expanded);
+
+  const toggleAnchor = (anchorKey: string) => {
+    setExpandedAnchors((prev) => {
+      const next = new Set(prev);
+      if (next.has(anchorKey)) next.delete(anchorKey);
+      else next.add(anchorKey);
+      return next;
+    });
+  };
+  const toggleAllStops = () => {
+    setExpandedAnchors(
+      allStopsShown ? new Set() : new Set(expandableAnchors.map((row) => row.anchorKey)),
+    );
+  };
 
   // Prefer the trip's actual extent (first→last snapshot) over the padded
   // query bounds for the header timestamp.
@@ -234,6 +495,7 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
               Route {data.route_short_name}
             </span>
           )}
+          {data && <TripStatusBadge status={tripStatus} />}
         </div>
         {data?.route_long_name && (
           <p className="mt-0.5 text-sm text-fg-subtle">{data.route_long_name}</p>
@@ -300,8 +562,15 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
                 title="Stop Timeline"
                 subtitle={
                   data.stops.length
-                    ? `Every scheduled stop, origin → terminus · ${observedStopCount}/${data.stops.length} tracked`
+                    ? isCondensed
+                      ? `${CONDENSED_STOP_COUNT} key stops, origin → terminus · ${observedStopCount}/${data.stops.length} tracked · expand a stop to see more`
+                      : `Every scheduled stop, origin → terminus · ${observedStopCount}/${data.stops.length} tracked`
                     : undefined
+                }
+                right={
+                  isCondensed ? (
+                    <ShowAllStopsToggle checked={allStopsShown} onChange={toggleAllStops} />
+                  ) : undefined
                 }
               />
               {data.stops.length === 0 ? (
@@ -311,22 +580,7 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
                   added/modified trips or older time windows.
                 </p>
               ) : (
-                <>
-                  <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-fg-subtle">
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-2.5 w-2.5 rounded-full bg-ok" /> tracked (colour = delay)
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-2.5 w-2.5 rounded-full border-2 border-line-strong bg-card" />{" "}
-                      scheduled only
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-3 w-3 rounded-full border-2 border-fg-subtle bg-card" />{" "}
-                      timepoint
-                    </span>
-                  </div>
-                  <StopTimeline stops={data.stops} onHover={setHoveredStop} />
-                </>
+                <StopTimeline rows={timelineRows} onHover={setHoveredStop} onToggleAnchor={toggleAnchor} />
               )}
             </Card>
 
@@ -345,7 +599,7 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
                   <div className="h-[420px] overflow-hidden rounded border border-line">
                     <VehicleTripMap
                       positions={data.positions}
-                      stops={data.stops}
+                      stops={visibleStops}
                       routeColor={data.route_color ?? "3b82f6"}
                       isRail={RAIL_TYPES.has(data.route_type ?? "")}
                       highlightStop={hoveredStop}
