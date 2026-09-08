@@ -92,7 +92,8 @@ if [ "$GIT_BEFORE" != "$GIT_AFTER" ]; then
         GTFS_CHANGED=1
     fi
     if [ -n "$(git -C "$REPO" diff --name-only "$GIT_BEFORE" "$GIT_AFTER" -- \
-        backend/app/services/ontime.py backend/app/config.py backend/scripts/backfill_ontime.py)" ]; then
+        backend/app/services/ontime.py backend/app/services/gtfs_schedule.py \
+        backend/app/config.py backend/scripts/backfill_ontime.py)" ]; then
         log "On-time detection logic changed -- backfill owed once the new backend image is live."
         touch "$BACKFILL_MARKER"
     fi
