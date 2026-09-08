@@ -106,7 +106,7 @@ def test_early_arrival_negative_delay():
 
 def test_lateral_distance_rejects_off_route_vehicle():
     scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
-    far = _vp(lat=_STOP_LAT + 0.01)  # ~1.1 km north — well outside 100 m lateral
+    far = _vp(lat=_STOP_LAT + 0.01)  # ~1.1 km north — well outside the 76 m lateral radius
     assert classify_arrival(far, _SCHEDULE, scheduled) is None
 
 
@@ -138,19 +138,24 @@ def test_after_midnight_picks_prior_service_date():
     assert abs(event["delay_seconds"]) < 60
 
 
-def test_in_transit_skips_future_timepoint():
-    # Status=2 (IN_TRANSIT_TO) next stop: vehicle is at the stop location but
-    # hasn't been flagged as arrived yet.  Should return None so we don't lock
-    # in a large negative delay before the bus actually shows up.
+def test_geofence_hit_fires_regardless_of_in_transit_status():
+    # RTD's feed commonly still reports IN_TRANSIT_TO a stop the vehicle is
+    # already sitting at (current_stop_sequence only advances once it pulls
+    # away), so current_status/current_stop_sequence must NOT suppress an
+    # otherwise-valid geofence match — that was the bug that left stops with a
+    # clear arrival in the position track unclassified on the trip page.
     scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
     early_obs = scheduled - timedelta(minutes=3)
     vp = {**_vp(), "current_status": 2, "current_stop_sequence": 5}
-    assert classify_arrival(vp, _SCHEDULE, early_obs) is None
+    event = classify_arrival(vp, _SCHEDULE, early_obs)
+    assert event is not None
+    assert event["stop_sequence"] == 5
+    assert event["delay_seconds"] == -180
 
 
 def test_in_transit_fires_for_past_timepoint():
-    # Status=2 but current_stop_seq points to a LATER stop (6 > 5), so stop 5
-    # is in the past and a nearby match is legitimate.
+    # Status=2 with current_stop_seq pointing to a LATER stop (6 > 5): stop 5
+    # is in the past and a nearby match is legitimate either way.
     scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
     actual = scheduled + timedelta(seconds=40)
     vp = {**_vp(), "current_status": 2, "current_stop_sequence": 6}
@@ -160,7 +165,7 @@ def test_in_transit_fires_for_past_timepoint():
 
 
 def test_stopped_at_fires_normally():
-    # Status=1 (STOPPED_AT): no filtering; nearest timepoint within radius wins.
+    # Status=1 (STOPPED_AT): nearest timepoint within radius wins.
     scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
     actual = scheduled + timedelta(seconds=60)
     vp = {**_vp(), "current_status": 1, "current_stop_sequence": 5}
