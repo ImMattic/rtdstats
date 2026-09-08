@@ -1,8 +1,36 @@
 import { clsx, type ClassValue } from "clsx";
 import type { ResolvedTheme } from "@/lib/useTheme";
+import type { VehiclePosition } from "@/lib/types";
 
 export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
+}
+
+/**
+ * Whether a (vehicle, trip) leg is still being tracked live — i.e. it shows
+ * up in the current GTFS-RT realtime feed under the same vehicle label *and*
+ * trip id. `liveVehicles` is the `vehicles` array from `useVehicles()`.
+ */
+export function isTripInProgress(
+  liveVehicles: VehiclePosition[] | undefined,
+  vehicleLabel: string | null | undefined,
+  tripId: string | null | undefined,
+): boolean {
+  if (!liveVehicles || !vehicleLabel || !tripId) return false;
+  return liveVehicles.some((v) => v.vehicle_label === vehicleLabel && v.trip_id === tripId);
+}
+
+/**
+ * "in_progress" — still showing up in the live feed.
+ * "complete" — finished, and reached its terminus.
+ * "incomplete" — finished, but never geofenced at its terminus (dropped GPS,
+ *   broke down, or otherwise fell off the schedule before the end of the line).
+ */
+export type TripStatus = "in_progress" | "complete" | "incomplete";
+
+export function computeTripStatus(inProgress: boolean, reachedTerminus: boolean): TripStatus {
+  if (inProgress) return "in_progress";
+  return reachedTerminus ? "complete" : "incomplete";
 }
 
 /** Convert a hex color string (with or without #) to a CSS color. */

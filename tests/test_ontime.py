@@ -10,11 +10,13 @@ from datetime import date, timedelta
 from unittest.mock import patch
 
 from app.services.ontime import (
+    OriginDepartureTracker,
     _haversine_m,
     _project_onto_route,
     _scheduled_utc,
     classify_arrival,
     detect_arrivals,
+    reset_detection_state,
 )
 
 # A single trip with one timepoint at Denver Union Station, scheduled 08:00 local.
@@ -181,10 +183,150 @@ def test_detect_arrivals_dedupes_loitering():
         {**_vp(), "timestamp": scheduled},
         {**_vp(), "timestamp": scheduled + timedelta(seconds=30)},  # still at stop
     ]
+    reset_detection_state()
     with patch("app.services.ontime.load_trip_shape_dist_schedule", return_value=_SCHEDULE), \
+         patch("app.services.ontime.load_trip_origin_timepoints", return_value={}), \
          patch("app.services.ontime.load_stop_arrivals_index", return_value={}):
         events = detect_arrivals(rows, scheduled)
     assert len(events) == 1  # one event despite two snapshots near the stop
+
+
+def test_detect_arrivals_times_origin_by_departure():
+    # End-to-end through the ingest entry point: the trip's origin is stop 5, so
+    # the loitering snapshots must NOT be recorded as an arrival — only the
+    # departure, once the bus is seen away from the stop.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    rows = [
+        {**_vp(), "timestamp": scheduled - timedelta(minutes=3)},  # laying over
+        {**_vp(), "timestamp": scheduled},                          # still there
+        {**_vp(lat=_STOP_LAT + 0.0045), "timestamp": scheduled + timedelta(seconds=30)},
+    ]
+    reset_detection_state()
+    with patch("app.services.ontime.load_trip_shape_dist_schedule", return_value=_SCHEDULE), \
+         patch("app.services.ontime.load_trip_origin_timepoints", return_value=_ORIGINS), \
+         patch("app.services.ontime.load_stop_arrivals_index", return_value={}):
+        events = detect_arrivals(rows, scheduled + timedelta(seconds=30))
+    assert len(events) == 1
+    # Departure, not the 3-min-early first sighting.
+    assert events[0]["delay_seconds"] > 0
+    reset_detection_state()
+
+
+# ── Origin departures ─────────────────────────────────────────────────────────
+
+# {trip_id: (seq, stop_id, arrival_secs, lat, lon)} — T1's origin is its stop 5.
+_ORIGINS: dict = {"T1": (5, "S1", _ARR_SECS, _STOP_LAT, _STOP_LON)}
+# ~500 m north of the stop: comfortably outside the 100 m departure circle.
+_AWAY_LAT = _STOP_LAT + 0.0045
+
+
+def _tracker(**kwargs) -> OriginDepartureTracker:
+    return OriginDepartureTracker(_ORIGINS, stop_arrivals={}, **kwargs)
+
+
+def test_origin_dwell_emits_nothing_until_the_vehicle_leaves():
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    t = _tracker()
+    # Three snapshots parked at the gate, starting 3 min before the departure.
+    for offset in (-180, -150, -120):
+        assert t.feed(_vp(), scheduled + timedelta(seconds=offset)) is None
+
+
+def test_origin_departure_is_interpolated_not_the_first_sighting():
+    # The reported bug: bus sits at the gate from 3 min before its scheduled
+    # departure, then pulls out on time.  The old logic recorded the layover.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    t = _tracker()
+    for offset in (-180, -150, -120, -90, -60, -30, 0):
+        assert t.feed(_vp(), scheduled + timedelta(seconds=offset)) is None
+    # Next poll it is 500 m up the road; it crossed 100 m a fifth of the way in.
+    event = t.feed(_vp(lat=_AWAY_LAT), scheduled + timedelta(seconds=30))
+    assert event is not None
+    assert event["stop_sequence"] == 5
+    # ~6 s after schedule (100/500 of a 30 s gap), nowhere near 3 min early.
+    assert 0 <= event["delay_seconds"] <= 15
+    assert event["actual_time"] >= scheduled
+
+
+def test_origin_departure_reports_lateness():
+    # Same shape, but the bus does not pull out until 4 min after schedule.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    t = _tracker()
+    for offset in (-120, 0, 120, 240):
+        assert t.feed(_vp(), scheduled + timedelta(seconds=offset)) is None
+    event = t.feed(_vp(lat=_AWAY_LAT), scheduled + timedelta(seconds=270))
+    assert event is not None
+    assert 240 <= event["delay_seconds"] <= 255  # ~4 min late
+
+
+def test_origin_departure_emitted_once():
+    # A loop route passing its own origin later must not re-record it.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    t = _tracker()
+    assert t.feed(_vp(), scheduled) is None
+    assert t.feed(_vp(lat=_AWAY_LAT), scheduled + timedelta(seconds=30)) is not None
+    assert t.feed(_vp(), scheduled + timedelta(minutes=40)) is None
+    assert t.feed(_vp(lat=_AWAY_LAT), scheduled + timedelta(minutes=41)) is None
+
+
+def test_origin_never_seen_at_stop_yields_nothing():
+    # trip_id attached only after the bus was already away — we cannot know when
+    # it left, so record nothing rather than guessing.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    t = _tracker()
+    assert t.feed(_vp(lat=_AWAY_LAT), scheduled + timedelta(seconds=30)) is None
+    assert t.flush(scheduled + timedelta(hours=1), force=True) == []
+
+
+def test_stale_origin_falls_back_to_last_sighting():
+    # The trip vanishes from the feed while parked: keep the last moment it was
+    # seen at the stop rather than losing the event entirely.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    t = _tracker(stale_after=timedelta(minutes=15))
+    last_seen = scheduled + timedelta(seconds=60)
+    assert t.feed(_vp(), scheduled) is None
+    assert t.feed(_vp(), last_seen) is None
+    assert t.flush(last_seen + timedelta(minutes=5)) == []  # not stale yet
+    events = t.flush(last_seen + timedelta(minutes=20))
+    assert len(events) == 1
+    assert events[0]["actual_time"] == last_seen
+    assert events[0]["delay_seconds"] == 60
+
+
+def test_gps_jump_cannot_push_departure_past_the_next_fix():
+    # A single wild fix 20 km away must not project the crossing outside the
+    # interval we actually observed — clamped to [last inside, this fix].
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    t = _tracker()
+    assert t.feed(_vp(), scheduled) is None
+    later = scheduled + timedelta(seconds=30)
+    event = t.feed(_vp(lat=_STOP_LAT + 0.18), later)
+    assert event is not None
+    assert scheduled <= event["actual_time"] <= later
+
+
+def test_repositioning_within_the_station_is_not_a_departure():
+    # Clear of the 100 m circle, but the feed still has the vehicle at stop 1 —
+    # a shuffle between gates, not the start of the trip.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    t = _tracker()
+    assert t.feed(_vp(), scheduled - timedelta(minutes=5)) is None
+    staged = {**_vp(lat=_AWAY_LAT), "current_status": 1, "current_stop_sequence": 5}
+    assert t.feed(staged, scheduled - timedelta(minutes=4)) is None
+    # Back at the gate, then away with the feed advanced to stop 6: departed.
+    assert t.feed(_vp(), scheduled) is None
+    moving = {**_vp(lat=_AWAY_LAT), "current_status": 2, "current_stop_sequence": 6}
+    event = t.feed(moving, scheduled + timedelta(seconds=30))
+    assert event is not None
+    assert 0 <= event["delay_seconds"] <= 15
+
+
+def test_origin_skipped_by_arrival_classifier():
+    # classify_arrival must leave the origin alone so the layover isn't recorded
+    # as an arrival alongside the departure.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    assert classify_arrival(_vp(), _SCHEDULE, scheduled, skip_sequence=5) is None
+    assert classify_arrival(_vp(), _SCHEDULE, scheduled, skip_sequence=99) is not None
 
 
 # ── Cross-trip misassignment detection ────────────────────────────────────────

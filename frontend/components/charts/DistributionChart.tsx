@@ -61,6 +61,7 @@ function DistributionChart({ bins }: Props) {
         <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11, fill: theme.text }} width={36} />
         <Tooltip
           formatter={(value: number) => [`${value.toFixed(1)}%`, "Share of arrivals"]}
+          cursor={{ fill: theme.cursorFill, stroke: "transparent" }}
           contentStyle={{
             fontSize: 12,
             borderRadius: 8,
@@ -68,6 +69,7 @@ function DistributionChart({ bins }: Props) {
             border: `1px solid ${theme.tooltipBorder}`,
             color: theme.tooltipText,
           }}
+          itemStyle={{ color: theme.tooltipText }}
         />
         <Bar dataKey="pct" radius={[4, 4, 0, 0]}>
           {bins.map((b) => (

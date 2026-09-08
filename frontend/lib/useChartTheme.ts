@@ -10,6 +10,8 @@ export interface ChartTheme {
   tooltipBg: string;
   tooltipBorder: string;
   tooltipText: string;
+  /** Fill for the hover highlight behind a bar — replaces Recharts' un-themed `#ccc` cursor box. */
+  cursorFill: string;
   reference: string;
   /** Signal accent triad, resolved from the active theme's tokens. */
   accent: string;
@@ -27,6 +29,7 @@ const DARK_FALLBACK: ChartTheme = {
   tooltipBg: "rgb(22 24 28)",
   tooltipBorder: "rgb(59 65 74)",
   tooltipText: "rgb(236 238 241)",
+  cursorFill: "rgba(255,255,255,0.06)",
   reference: "rgb(59 65 74)",
   accent: "rgb(65 193 239)",
   ok: "rgb(0 148 131)",
@@ -50,6 +53,7 @@ function read(): ChartTheme {
     tooltipBg: v("--card", DARK_FALLBACK.tooltipBg),
     tooltipBorder: v("--line-2", DARK_FALLBACK.tooltipBorder),
     tooltipText: v("--fg", DARK_FALLBACK.tooltipText),
+    cursorFill: isLight ? "rgba(0,0,0,0.04)" : "rgba(255,255,255,0.06)",
     reference: v("--line-2", DARK_FALLBACK.reference),
     accent: v("--accent", DARK_FALLBACK.accent),
     ok: v("--ok", DARK_FALLBACK.ok),

@@ -55,7 +55,8 @@ function OnTimeChart({ routes }: Props) {
             border: `1px solid ${theme.tooltipBorder}`,
             color: theme.tooltipText,
           }}
-          cursor={{ fill: theme.mode === "light" ? "rgba(0,0,0,0.04)" : "rgba(255,255,255,0.06)" }}
+          itemStyle={{ color: theme.tooltipText }}
+          cursor={{ fill: theme.cursorFill, stroke: "transparent" }}
         />
         <ReferenceLine x={80} stroke={theme.reference} strokeDasharray="4 2" />
         <Bar dataKey="on_time_pct" radius={[0, 4, 4, 0]}>

@@ -1,11 +1,12 @@
 "use client";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useActiveVehicles, useRoutes } from "@/lib/hooks";
+import { useActiveVehicles, useRoutes, useVehicles } from "@/lib/hooks";
 import { Card, SectionHeading } from "@/components/ui/Card";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ExportButton from "@/components/ui/ExportButton";
-import { formatDateTime, routeColor } from "@/lib/utils";
+import TripStatusBadge from "@/components/ui/TripStatusBadge";
+import { computeTripStatus, formatDateTime, isTripInProgress, routeColor } from "@/lib/utils";
 import type { ActiveVehicle } from "@/lib/types";
 
 const OCCUPANCY_SHORT: Record<string, string> = {
@@ -97,6 +98,9 @@ function TripsContent() {
     limit: pageSize,
     offset: (page - 1) * pageSize,
   });
+  // Cross-reference the live realtime feed so each row can show whether its
+  // trip is still in progress or already complete.
+  const live = useVehicles();
 
   const sortedRoutes = useMemo(() => {
     const list = routes.data?.routes ?? [];
@@ -420,6 +424,7 @@ function TripsContent() {
               <table className="min-w-full text-sm text-fg-muted">
                 <thead className="bg-raised text-xs uppercase text-fg-subtle">
                   <tr>
+                    <th className="px-3 py-2 text-left">Status</th>
                     <th className="px-3 py-2 text-left">Route</th>
                     <th className="px-3 py-2 text-left">Vehicle</th>
                     <th className="w-[600px] px-3 py-2 text-left">From → To</th>
@@ -436,6 +441,15 @@ function TripsContent() {
                       className="cursor-pointer hover:bg-accent/10"
                       onClick={() => handleVehicleClick(v)}
                     >
+                      <td className="px-3 py-2">
+                        <TripStatusBadge
+                          variant="dot"
+                          status={computeTripStatus(
+                            isTripInProgress(live.data?.vehicles, v.vehicle_label, v.trip_id),
+                            v.reached_terminus,
+                          )}
+                        />
+                      </td>
                       <td className="px-3 py-2">
                         <RouteBadge shortName={v.route_short_name} color={v.route_color} />
                       </td>

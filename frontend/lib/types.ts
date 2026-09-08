@@ -348,6 +348,8 @@ export interface ActiveVehicle {
   end_time: string;
   start_stop_name: string | null;
   end_stop_name: string | null;
+  /** False when the trip ended without a geofenced arrival at its terminus stop_sequence. */
+  reached_terminus: boolean;
   last_latitude: number | null;
   last_longitude: number | null;
   last_occupancy_status: string | null;
@@ -379,6 +381,12 @@ export interface VehicleStopEvent {
   scheduled_time: string | null;
   /** false when this scheduled stop was never geofenced on this run. */
   observed?: boolean;
+  /**
+   * What `actual_time` measures. The origin is timed by "departure" — when the
+   * vehicle pulled away from the stop — since it sits there on layover long
+   * before the trip starts. Every other stop is an "arrival". null when unobserved.
+   */
+  event_type?: "arrival" | "departure" | null;
   actual_time: string | null;
   delay_seconds: number | null;
   occupancy_status: string | null;

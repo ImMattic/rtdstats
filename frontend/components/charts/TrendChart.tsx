@@ -98,6 +98,7 @@ function TrendChart({ points, granularity, onPointClick }: Props) {
           width={40}
         />
         <Tooltip
+          cursor={{ stroke: theme.grid }}
           content={({ active, payload, label }) => (
             <TrendTooltip
               active={active}

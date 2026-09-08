@@ -49,6 +49,7 @@ function RidershipChart({ data }: Props) {
             <YAxis tickFormatter={(v) => formatCompact(v)} tick={{ fontSize: 11, fill: theme.text }} width={44} />
             <Tooltip
               formatter={(value: number) => [formatNumber(value), "Boardings"]}
+              cursor={{ fill: theme.cursorFill, stroke: "transparent" }}
               contentStyle={{
                 fontSize: 12,
                 borderRadius: 8,

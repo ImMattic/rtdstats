@@ -186,11 +186,18 @@ export function useActiveVehicles(params: ActiveVehiclesParams) {
   });
 }
 
-export function useVehicleTrip(vehicleLabel: string, params: VehicleTripParams) {
+export function useVehicleTrip(
+  vehicleLabel: string,
+  params: VehicleTripParams,
+  options: { live?: boolean } = {},
+) {
   return useQuery({
     queryKey: ["vehicleTrip", vehicleLabel, params],
     queryFn: () => fetchVehicleTrip(vehicleLabel, params),
     enabled: Boolean(vehicleLabel),
+    // While the trip is still in progress, keep polling so new stops/positions
+    // stream in as they're geofenced — see isTripInProgress in lib/utils.
+    refetchInterval: options.live ? REALTIME_INTERVAL : false,
   });
 }
 

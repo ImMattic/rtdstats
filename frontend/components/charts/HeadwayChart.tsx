@@ -46,6 +46,7 @@ function HeadwayChart({ headways }: Props) {
         />
         <Tooltip
           formatter={(value: number) => [`${value.toFixed(0)} min`, "Headway"]}
+          cursor={{ fill: theme.cursorFill, stroke: "transparent" }}
           contentStyle={{
             fontSize: 12,
             borderRadius: 8,
@@ -53,6 +54,7 @@ function HeadwayChart({ headways }: Props) {
             border: `1px solid ${theme.tooltipBorder}`,
             color: theme.tooltipText,
           }}
+          itemStyle={{ color: theme.tooltipText }}
         />
         <Bar dataKey="headway" radius={[4, 4, 0, 0]}>
           {data.map((d) => (

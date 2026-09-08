@@ -15,7 +15,7 @@ from app.models.vehicle_position import VehiclePosition
 from app.models.stop_arrival import StopArrivalEvent
 from app.models.trip_update import TripUpdate
 from app.services.gtfs_decoder import load_gtfs_static_data, load_trip_endpoint_sequences
-from app.services.gtfs_schedule import load_trip_stop_sequence
+from app.services.gtfs_schedule import load_trip_origin_timepoints, load_trip_stop_sequence
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
@@ -51,17 +51,30 @@ def _validated_range(
 # covers RTD's longest routes.
 _MAX_TRIP_DURATION = timedelta(hours=3)
 
-# {trip_id: (first_stop_id, last_stop_id)} from the static schedule.  Parsing
-# stop_times.txt is expensive, so cache it at module level (same pattern as
-# stats.py) and load lazily on first use.
+# {trip_id: (first_stop_id, last_stop_id)} / {trip_id: (min_seq, max_seq)} from
+# the static schedule.  Parsing stop_times.txt is expensive, so cache both at
+# module level (same pattern as stats.py) and load lazily on first use.
+_TRIP_ENDPOINT_SEQUENCES: dict[str, tuple[int, int]] | None = None
 _TRIP_ENDPOINT_STOPS: dict[str, tuple[str | None, str | None]] | None = None
 
 
-def _trip_endpoint_stops() -> dict[str, tuple[str | None, str | None]]:
-    global _TRIP_ENDPOINT_STOPS
+def _load_trip_endpoints() -> tuple[
+    dict[str, tuple[int, int]], dict[str, tuple[str | None, str | None]]
+]:
+    global _TRIP_ENDPOINT_SEQUENCES, _TRIP_ENDPOINT_STOPS
     if _TRIP_ENDPOINT_STOPS is None:
-        _, _TRIP_ENDPOINT_STOPS = load_trip_endpoint_sequences()
-    return _TRIP_ENDPOINT_STOPS
+        _TRIP_ENDPOINT_SEQUENCES, _TRIP_ENDPOINT_STOPS = load_trip_endpoint_sequences()
+    return _TRIP_ENDPOINT_SEQUENCES or {}, _TRIP_ENDPOINT_STOPS
+
+
+def _trip_endpoint_stops() -> dict[str, tuple[str | None, str | None]]:
+    _, stop_ids = _load_trip_endpoints()
+    return stop_ids
+
+
+def _trip_endpoint_sequences() -> dict[str, tuple[int, int]]:
+    sequences, _ = _load_trip_endpoints()
+    return sequences
 
 
 # One CTE query that:
@@ -202,6 +215,10 @@ async def get_active_vehicles(
 
     routes_static, stops_static = load_gtfs_static_data()
     endpoint_stops = _trip_endpoint_stops()
+    endpoint_sequences = _trip_endpoint_sequences()
+    reached_terminus_map = await _terminus_reached_map(
+        db, scan_start, scan_end, trip_ids, endpoint_sequences
+    )
 
     vehicles = []
     for r in rows:
@@ -222,6 +239,13 @@ async def get_active_vehicles(
                 "end_stop_name": (
                     stops_static.get(last_sid, {}).get("stop_name") if last_sid else None
                 ),
+                # True once a geofenced arrival exists at the trip's *last*
+                # stop_sequence — i.e. the vehicle actually reached the
+                # terminus, not just any stop sharing its stop_id (loop
+                # routes can revisit the same physical stop). Defaults to
+                # True when we don't have a static schedule for the trip at
+                # all, so an unrelated data gap doesn't read as an incident.
+                "reached_terminus": reached_terminus_map.get(r["trip_id"] or "", True),
                 "last_latitude": r["latitude"],
                 "last_longitude": r["longitude"],
                 "last_occupancy_status": r["occupancy_status"],
@@ -338,6 +362,15 @@ async def get_vehicle_trip(
         # The full RTD schedule for this trip: every stop, origin → destination.
         schedule = load_trip_stop_sequence(resolved_trip_id)
 
+        # The origin is timed by departure, not arrival (services/ontime.py), so
+        # label it as such rather than letting the UI imply the bus "arrived" at
+        # the stop it started from.
+        origin = load_trip_origin_timepoints().get(resolved_trip_id)
+        origin_seq = origin[0] if origin else None
+
+        def _event_type(seq: int) -> str:
+            return "departure" if seq == origin_seq else "arrival"
+
         if schedule:
             # Anchor the GTFS service day so stops we never geofenced still get
             # an absolute scheduled time.
@@ -367,6 +400,7 @@ async def get_vehicle_trip(
                         "drop_off_type": s["drop_off_type"],
                         "scheduled_time": scheduled_iso,
                         "observed": ev is not None,
+                        "event_type": _event_type(seq) if ev else None,
                         "actual_time": ev.actual_time.isoformat() if ev else None,
                         "delay_seconds": ev.delay_seconds if ev else None,
                         "occupancy_status": _occupancy_at(ev.actual_time) if ev else None,
@@ -395,6 +429,7 @@ async def get_vehicle_trip(
                         "drop_off_type": "0",
                         "scheduled_time": ev.scheduled_time.isoformat(),
                         "observed": True,
+                        "event_type": _event_type(ev.stop_sequence),
                         "actual_time": ev.actual_time.isoformat(),
                         "delay_seconds": ev.delay_seconds,
                         "occupancy_status": _occupancy_at(ev.actual_time),
@@ -422,6 +457,7 @@ async def get_vehicle_trip(
                         "drop_off_type": "0",
                         "scheduled_time": ev.scheduled_time.isoformat(),
                         "observed": True,
+                        "event_type": _event_type(ev.stop_sequence),
                         "actual_time": ev.actual_time.isoformat(),
                         "delay_seconds": ev.delay_seconds,
                         "occupancy_status": _occupancy_at(ev.actual_time),
@@ -540,3 +576,35 @@ async def _delay_map(
     )
     result = await db.execute(stmt)
     return {tid: delay for tid, delay in result.all() if tid is not None}
+
+
+async def _terminus_reached_map(
+    db: AsyncSession,
+    start: datetime,
+    end: datetime,
+    trip_ids: set[str],
+    endpoint_sequences: dict[str, tuple[int, int]],
+) -> dict[str, bool]:
+    """Which trips have a geofenced arrival at their *terminus* stop_sequence.
+
+    Matching on stop_sequence (not stop_id) matters for loop routes that
+    revisit the same physical stop earlier in the run — an arrival there
+    shouldn't count as reaching the terminus.  Only trips with a known static
+    schedule (an entry in ``endpoint_sequences``) get a real answer here; the
+    caller defaults the rest to True so a trip missing from the bundled GTFS
+    doesn't read as an incident.
+    """
+    schedulable = {tid for tid in trip_ids if tid in endpoint_sequences}
+    if not schedulable:
+        return {}
+    reached = {tid: False for tid in schedulable}
+    stmt = select(StopArrivalEvent.trip_id, StopArrivalEvent.stop_sequence).where(
+        StopArrivalEvent.trip_id.in_(schedulable),
+        StopArrivalEvent.timestamp >= start,
+        StopArrivalEvent.timestamp <= end,
+    )
+    result = await db.execute(stmt)
+    for tid, seq in result.all():
+        if tid in reached and seq == endpoint_sequences[tid][1]:
+            reached[tid] = True
+    return reached
