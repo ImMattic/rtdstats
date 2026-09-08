@@ -56,15 +56,17 @@ class Settings(BaseSettings):
     # of it; the observed arrival time is then compared to the scheduled time.
     # 152m ≈ 500ft.
     arrival_radius_m: int = 152
-    # Rail gets a wider geofence (305m ≈ 1000ft).  Rail positions are reported
+    # Rail gets a wider geofence (402m = 0.25mi).  Rail positions are reported
     # further from the platform than a bus's are from the kerb, and stations
-    # sit kilometres apart rather than blocks, so a radius sized for bus stops
-    # misses arrivals a train plainly made.  The extra width costs little
-    # precision here because the nearest-timepoint search still has to pick a
-    # single station, and the closest pair of adjacent rail timepoints in the
-    # bundled feed is far enough apart that the wider circles can't be
-    # confused for one another.
-    arrival_radius_rail_m: int = 305
+    # sit kilometres apart rather than blocks (median 1775m), so a radius
+    # sized for bus stops misses arrivals a train plainly made.
+    #
+    # 3.3% of adjacent rail timepoint pairs are closer together than this, so
+    # a train can be inside two stations' circles at once.  That is fine and
+    # not the same as ambiguity: the search takes the *nearest* timepoint by
+    # along-route distance, so overlapping circles resolve to whichever
+    # station the train is actually closer to.
+    arrival_radius_rail_m: int = 402
     # An arrival within ±this many seconds of schedule is "on time".
     # RTD defines on-time as within 5 minutes.
     ontime_threshold_seconds: int = 300
