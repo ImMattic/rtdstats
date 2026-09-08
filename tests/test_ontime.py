@@ -107,7 +107,7 @@ def test_early_arrival_negative_delay():
 
 def test_lateral_distance_rejects_off_route_vehicle():
     scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
-    far = _vp(lat=_STOP_LAT + 0.01)  # ~1.1 km north — well outside the 76 m lateral radius
+    far = _vp(lat=_STOP_LAT + 0.01)  # ~1.1 km north — well outside the 152 m lateral radius
     assert classify_arrival(far, _SCHEDULE, scheduled) is None
 
 
@@ -445,11 +445,12 @@ def test_crossing_time_is_proportional_not_just_the_midpoint():
 
 def test_segment_catches_what_the_point_match_misses():
     # Regression for the reported symptom: both fixes are outside the geofence
-    # (150 m either side of a 76 m radius), so per-fix matching sees nothing --
-    # while the replay, which interpolates, plainly shows the bus arriving.
+    # (300 m either side of the 152 m bus radius), so per-fix matching sees
+    # nothing -- while the replay, which interpolates, plainly shows the bus
+    # arriving.
     scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
     t1, t2 = scheduled - timedelta(seconds=20), scheduled + timedelta(seconds=20)
-    before, after = _north_of_b(-150), _north_of_b(150)
+    before, after = _north_of_b(-300), _north_of_b(300)
 
     assert classify_arrival(before, _LINE_SCHEDULE, t1, stop_arrivals={}) is None
     assert classify_arrival(after, _LINE_SCHEDULE, t2, stop_arrivals={}) is None

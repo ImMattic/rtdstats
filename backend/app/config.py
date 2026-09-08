@@ -54,8 +54,17 @@ class Settings(BaseSettings):
     # ── On-time performance (observed position vs. static schedule) ──────────
     # A vehicle counts as "arrived" at a timepoint when within this many metres
     # of it; the observed arrival time is then compared to the scheduled time.
-    # 76m ≈ 250ft.
-    arrival_radius_m: int = 76
+    # 152m ≈ 500ft.
+    arrival_radius_m: int = 152
+    # Rail gets a wider geofence (305m ≈ 1000ft).  Rail positions are reported
+    # further from the platform than a bus's are from the kerb, and stations
+    # sit kilometres apart rather than blocks, so a radius sized for bus stops
+    # misses arrivals a train plainly made.  The extra width costs little
+    # precision here because the nearest-timepoint search still has to pick a
+    # single station, and the closest pair of adjacent rail timepoints in the
+    # bundled feed is far enough apart that the wider circles can't be
+    # confused for one another.
+    arrival_radius_rail_m: int = 305
     # An arrival within ±this many seconds of schedule is "on time".
     # RTD defines on-time as within 5 minutes.
     ontime_threshold_seconds: int = 300

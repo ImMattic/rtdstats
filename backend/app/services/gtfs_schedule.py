@@ -432,11 +432,23 @@ _trip_shape_dist_cache: dict[str, list[tuple[int, str, int, float, float, float]
 # scheduled closer to the observed arrival time, the bus is likely on the wrong trip.
 _stop_arrivals_cache: dict[tuple[str, str], list[int]] | None = None
 
-# Minimum schedule gap (seconds) between adjacent timepoints for a stop to be
-# used in on-time detection.  Pairs closer than this are ambiguous given the
-# ±2 min GTFS-RT position accuracy, so both members of a too-close pair are
-# dropped from the detection schedule.
-_MIN_TIMEPOINT_GAP_S = 120
+# Minimum distance (metres) between adjacent timepoints for a stop to be used
+# in on-time detection.  Both members of a too-close pair are dropped.
+#
+# This used to be a *schedule-time* gap of 120 s, on the reasoning that stops
+# only a minute or two apart couldn't be told apart.  That was calibrated for
+# buses, whose timepoints are sparse; rail stations are 1.5-2.5 min apart, so
+# it silently removed 14.6% of all rail timepoints -- entire runs of stations
+# (Empower Field, Auraria West, Decatur/Federal, Knox on the W line) could
+# never be detected no matter how squarely a train parked on them.
+#
+# Detection matches on distance along the route and picks the nearest
+# timepoint, so what actually creates ambiguity is closeness in *space*, not
+# in time.  Hence a metric threshold, set near the bus geofence radius: two
+# timepoints closer together than the circle used to find them genuinely
+# cannot be distinguished.  Rail is untouched by it -- the closest pair of
+# adjacent rail timepoints in the bundled feed is 649 m.
+_MIN_TIMEPOINT_GAP_M = 150.0
 
 
 def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -457,9 +469,9 @@ def _build_trip_shape_dist_schedule(
 
     Starting from the existing timepoint schedule (timepoint==1 stops only),
     compute the cumulative straight-line distance between consecutive timepoints
-    for each trip.  Also filter out any timepoint whose scheduled gap to either
-    neighbour is less than _MIN_TIMEPOINT_GAP_S — those stops are too close
-    together to assign observations reliably given feed accuracy limits.
+    for each trip.  Also filter out any timepoint within _MIN_TIMEPOINT_GAP_M of
+    either neighbour — those stops sit too close together to tell apart by
+    position, which is how arrivals are matched.
     """
     base = load_trip_stop_schedule(gtfs_static_root)
 
@@ -474,10 +486,10 @@ def _build_trip_shape_dist_schedule(
                 cum += _haversine_m(plat, plon, lat, lon)
             with_dist.append((seq, stop_id, arr_secs, lat, lon, cum))
 
-        # Drop timepoints that are < _MIN_TIMEPOINT_GAP_S from either neighbour.
+        # Drop timepoints within _MIN_TIMEPOINT_GAP_M of either neighbour.
         #
         # The origin and terminus are exempt.  The filter exists to stop two
-        # near-simultaneous timepoints from stealing each other's observations,
+        # near-coincident timepoints from stealing each other's observations,
         # but at the ends of a trip there is no ambiguity about which stop a
         # vehicle sitting at the end of the line is at — and dropping them has
         # a much worse failure mode: the trip page shows the stop with no
@@ -491,10 +503,10 @@ def _build_trip_shape_dist_schedule(
             if i == 0 or i == last_i:
                 filtered.append(tp)
                 continue
-            arr_secs = tp[2]
-            prev_gap = arr_secs - with_dist[i - 1][2]
-            next_gap = with_dist[i + 1][2] - arr_secs
-            if min(prev_gap, next_gap) >= _MIN_TIMEPOINT_GAP_S:
+            dist = tp[5]
+            prev_gap = dist - with_dist[i - 1][5]
+            next_gap = with_dist[i + 1][5] - dist
+            if min(prev_gap, next_gap) >= _MIN_TIMEPOINT_GAP_M:
                 filtered.append(tp)
 
         if filtered:
