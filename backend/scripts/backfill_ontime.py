@@ -19,10 +19,23 @@ refreshes the on-time continuous aggregates.
 Re-run this after changing the origin-departure logic or radius: rows written by
 the previous rules are not rewritten in place.
 
-Run inside the backend container or venv:
+Run inside the backend container:
 
-    python -m scripts.backfill_ontime
-    python -m scripts.backfill_ontime --batch-size 20000
+    docker compose exec backend python scripts/backfill_ontime.py
+    docker compose exec backend python scripts/backfill_ontime.py --batch-size 20000
+
+Or from a local venv. The ``-m`` form requires your shell's cwd to be
+``backend/`` (it's a plain package lookup, so run from anywhere else — e.g.
+the repo root — and you'll get ``ModuleNotFoundError: No module named
+'scripts'``):
+
+    cd backend && python -m scripts.backfill_ontime
+
+Running it as a script instead sidesteps that — it self-adds ``backend/`` to
+sys.path, so this works from the repo root too (and picks up the root
+``.env`` for DATABASE_URL, matching how the app itself resolves settings):
+
+    python backend/scripts/backfill_ontime.py
 
 Long replays can exceed the API's server-side query timeout; disable it for
 this process with STATEMENT_TIMEOUT_MS=0.

@@ -7,14 +7,21 @@ where a bus *actually* is (``vehicle_positions``, polled every ~30s), project it
 onto the inter-timepoint route polyline, and compare the observed arrival time
 to the scheduled time.
 
-The projection approach (vs. the old haversine circle) gives two improvements:
-  1. Route-direction awareness — vehicles on parallel streets that happen to be
-     within 100 m crow-flies of a stop are filtered out by the lateral-distance
-     check before the per-timepoint search even runs.
-  2. Unambiguous nearest-stop assignment — "nearest by route distance" resolves
-     correctly even when two timepoints are on the same block in opposite
-     directions; sequence skipping for IN_TRANSIT_TO status provides a second
-     guard.
+The projection approach (vs. the old haversine circle) gives one improvement
+over a plain radius: route-direction awareness — vehicles on parallel streets
+that happen to be within the geofence crow-flies of a stop are filtered out by
+the lateral-distance check before the per-timepoint search even runs.  Beyond
+that, the rule is deliberately dumb: whichever timepoint the vehicle's
+along-route position is closest to, within ``arrival_radius_m``, is the
+arrival — full stop.  An earlier version also gated on the GTFS-RT
+``current_status``/``current_stop_sequence`` fields (skipping a timepoint
+while the feed still said IN_TRANSIT_TO it), meant to stop a vehicle idling
+short of a stop from locking in an early match.  In practice RTD's feed often
+reports IN_TRANSIT_TO the stop a vehicle is *currently sitting at* — it only
+advances once the vehicle pulls away — so that gate was silently discarding
+the correct in-radius match far more often than it caught a genuine early one,
+leaving stops with a clear geofence hit in the position track (visible in the
+trip replay) unclassified.  Removed; see git history for the old behaviour.
 
 The **origin** timepoint is the one exception, and it is timed differently — see
 ``OriginDepartureTracker`` below.
@@ -234,6 +241,13 @@ def classify_arrival(
     schedule match is implausibly far off (``max_delay_s``), or a better-matching
     trip exists on the same route at this stop.
 
+    Deliberately simple: whichever timepoint the vehicle is geographically
+    closest to (by along-route distance) wins the match, provided that's within
+    ``radius_m``. GTFS-RT's ``current_status``/``current_stop_sequence`` fields
+    are not consulted — RTD's feed often still reports IN_TRANSIT_TO a stop the
+    vehicle is already sitting at, so gating on it silently dropped real
+    arrivals far more often than it caught an early false one.
+
     ``delay_seconds`` is positive when late, negative when early.
     """
     radius_m = _settings.arrival_radius_m if radius_m is None else radius_m
@@ -249,9 +263,6 @@ def classify_arrival(
     if not timepoints:
         return None
 
-    current_status = vp_row.get("current_status")
-    current_stop_seq = vp_row.get("current_stop_sequence")
-
     # Project vehicle onto the inter-timepoint route polyline.
     vehicle_dist_m, lateral_m = _project_onto_route(lat, lon, timepoints)
 
@@ -259,17 +270,12 @@ def classify_arrival(
     if lateral_m > radius_m:
         return None
 
-    # Find the nearest timepoint by route-distance.
-    # When IN_TRANSIT_TO (status=2) the next stop, skip any timepoint at or
-    # beyond current_stop_seq — firing early while the bus approaches at a red
-    # light would record a large negative delay and lock out the true arrival.
+    # Nearest timepoint by route-distance, whichever direction it's in.
     best_gap: float | None = None
     best_tp: tuple[int, str, int, float, float, float] | None = None
     for tp in timepoints:
         seq, _, _, _, _, tp_dist_m = tp
         if skip_sequence is not None and seq == skip_sequence:
-            continue
-        if current_status == 2 and current_stop_seq is not None and seq >= current_stop_seq:
             continue
         gap = abs(vehicle_dist_m - tp_dist_m)
         if best_gap is None or gap < best_gap:

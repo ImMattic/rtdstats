@@ -54,7 +54,8 @@ class Settings(BaseSettings):
     # ── On-time performance (observed position vs. static schedule) ──────────
     # A vehicle counts as "arrived" at a timepoint when within this many metres
     # of it; the observed arrival time is then compared to the scheduled time.
-    arrival_radius_m: int = 100
+    # 76m ≈ 250ft.
+    arrival_radius_m: int = 76
     # An arrival within ±this many seconds of schedule is "on time".
     # RTD defines on-time as within 5 minutes.
     ontime_threshold_seconds: int = 300
