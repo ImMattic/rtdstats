@@ -71,6 +71,13 @@ _live_tracker_instance: OriginDepartureTracker | None = None
 # classify_segment_arrivals.  Pruned alongside _recorded.
 _last_fix: dict[str, tuple[dict[str, Any], datetime]] = {}
 
+# (trip_id, service_date) runs whose terminus arrival has been recorded.  The
+# run is over at that point, so nothing later can add to it: a vehicle that
+# turns around at the end of the line — or loops back past stops it already
+# served — keeps the old trip_id in the feed for a while, and every one of
+# those sightings used to be free to write more rows against the finished trip.
+_finished: set[tuple[str, date]] = set()
+
 
 # GTFS route_type: 0 tram/light rail, 1 subway, 2 rail.  3 is bus.
 _RAIL_ROUTE_TYPES = frozenset({"0", "1", "2"})
@@ -742,6 +749,13 @@ def _prune_recorded(today: date) -> None:
         _recorded.difference_update(stale)
 
 
+def _prune_finished(today: date) -> None:
+    """Drop finished-run keys older than yesterday, alongside _recorded."""
+    cutoff = today - timedelta(days=1)
+    stale = {k for k in _finished if k[1] < cutoff}
+    _finished.difference_update(stale)
+
+
 def _prune_last_fix(now: datetime) -> None:
     """Forget trips that have gone quiet.
 
@@ -833,13 +847,22 @@ def detect_arrivals(
 
     events: list[dict[str, Any]] = []
     for event in candidates:
-        key = (event["trip_id"], event["stop_sequence"], event["service_date"])
+        trip_id = event["trip_id"]
+        run = (trip_id, event["service_date"])
+        if run in _finished:
+            continue
+        key = (trip_id, event["stop_sequence"], event["service_date"])
         if key in _recorded:
             continue
         _recorded.add(key)
         events.append(event)
+        timepoints = schedule.get(trip_id)
+        if timepoints and event["stop_sequence"] == timepoints[-1][0]:
+            _finished.add(run)
 
-    _prune_recorded(default_time.astimezone(_DENVER).date())
+    today = default_time.astimezone(_DENVER).date()
+    _prune_recorded(today)
+    _prune_finished(today)
     _prune_last_fix(default_time)
     return events
 
@@ -848,5 +871,6 @@ def reset_detection_state() -> None:
     """Drop all in-process dedup/pending state (tests; not used in production)."""
     global _live_tracker_instance
     _recorded.clear()
+    _finished.clear()
     _last_fix.clear()
     _live_tracker_instance = None

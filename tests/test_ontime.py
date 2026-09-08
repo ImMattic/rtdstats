@@ -598,3 +598,60 @@ def test_single_timepoint_trip_keeps_old_behaviour():
     t = OriginDepartureTracker(_ORIGINS, schedule={"T1": _ORIGIN_ROUTE["T1"][:1]}, stop_arrivals={})
     t.feed(_vp(), scheduled - timedelta(seconds=60))
     assert t.feed(_vp(lat=_STOP_LAT - 0.0045), scheduled + timedelta(seconds=30)) is not None
+
+
+# ── A run is closed by its terminus ───────────────────────────────────────────
+
+def test_tracking_stops_once_the_terminus_is_reached():
+    # A vehicle keeps its trip_id for a while after finishing, and a train that
+    # turns around retraces stops it already served. Once the terminus arrival
+    # is in, nothing later may add rows to that run.
+    reset_detection_state()
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    schedule = {
+        "T1": [
+            (1, "SA", _ARR_SECS - 600, _A_LAT, _LINE_LON, 0.0),
+            (2, "SB", _ARR_SECS, _B_LAT, _LINE_LON, _SEG_M),
+        ]
+    }
+    with patch("app.services.ontime.load_trip_shape_dist_schedule", return_value=schedule), \
+         patch("app.services.ontime.load_trip_origin_timepoints", return_value={}), \
+         patch("app.services.ontime.load_stop_arrivals_index", return_value={}):
+        # Arrives at the terminus (SB, the last timepoint).
+        at_terminus = _vp(lat=_B_LAT, lon=_LINE_LON)
+        first = detect_arrivals([{**at_terminus, "timestamp": scheduled}], scheduled)
+        assert [e["stop_sequence"] for e in first] == [2]
+
+        # Then it reverses back past SA, still carrying T1.
+        back = _vp(lat=_A_LAT, lon=_LINE_LON)
+        later = detect_arrivals(
+            [{**back, "timestamp": scheduled + timedelta(seconds=120)}],
+            scheduled + timedelta(seconds=120),
+        )
+        assert later == []
+    reset_detection_state()
+
+
+def test_stops_before_the_terminus_still_record():
+    # The closing rule must not fire early: reaching a mid-route stop leaves the
+    # run open.
+    reset_detection_state()
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    schedule = {
+        "T1": [
+            (1, "SA", _ARR_SECS - 600, _A_LAT, _LINE_LON, 0.0),
+            (2, "SB", _ARR_SECS, _B_LAT, _LINE_LON, _SEG_M),
+            (3, "SC", _ARR_SECS + 600, _C_LAT, _LINE_LON, 2 * _SEG_M),
+        ]
+    }
+    with patch("app.services.ontime.load_trip_shape_dist_schedule", return_value=schedule), \
+         patch("app.services.ontime.load_trip_origin_timepoints", return_value={}), \
+         patch("app.services.ontime.load_stop_arrivals_index", return_value={}):
+        mid = detect_arrivals(
+            [{**_vp(lat=_B_LAT, lon=_LINE_LON), "timestamp": scheduled}], scheduled)
+        assert [e["stop_sequence"] for e in mid] == [2]
+        end = detect_arrivals(
+            [{**_vp(lat=_C_LAT, lon=_LINE_LON), "timestamp": scheduled + timedelta(seconds=600)}],
+            scheduled + timedelta(seconds=600))
+        assert [e["stop_sequence"] for e in end] == [3]
+    reset_detection_state()

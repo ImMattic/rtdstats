@@ -165,15 +165,34 @@ async def _swap(*, force: bool) -> int:
     return rebuilt
 
 
-def _dedupe(candidates: list[dict], seen: set[tuple[str, int, date]]) -> list[dict]:
-    """Keep the first event per (trip, stop, service date); ``seen`` is mutated."""
+def _dedupe(
+    candidates: list[dict],
+    seen: set[tuple[str, int, date]],
+    finished: set[tuple[str, date]],
+    schedule: dict[str, list[tuple[int, str, int, float, float, float]]],
+) -> list[dict]:
+    """Keep the first event per (trip, stop, service date).
+
+    Mirrors ``detect_arrivals``, so a replay lands on the same rows the live
+    loop would have: a run is closed as soon as its terminus arrival is
+    recorded, and later sightings under the same trip_id (a vehicle turning
+    around, or looping back past stops it already served) add nothing.
+    ``seen`` and ``finished`` are both mutated.
+    """
     out: list[dict] = []
     for event in candidates:
-        key = (event["trip_id"], event["stop_sequence"], event["service_date"])
+        trip_id = event["trip_id"]
+        run = (trip_id, event["service_date"])
+        if run in finished:
+            continue
+        key = (trip_id, event["stop_sequence"], event["service_date"])
         if key in seen:
             continue
         seen.add(key)
         out.append(event)
+        timepoints = schedule.get(trip_id)
+        if timepoints and event["stop_sequence"] == timepoints[-1][0]:
+            finished.add(run)
     return out
 
 
@@ -186,6 +205,8 @@ async def _backfill(batch_size: int) -> int:
     tracker = OriginDepartureTracker(origins)
 
     seen: set[tuple[str, int, date]] = set()
+    # Runs closed by their terminus arrival — see _dedupe.
+    finished: set[tuple[str, date]] = set()
     # Each trip's previous fix, carried across batches so a stop passed
     # over a batch boundary is still interpolated.
     last_fix: dict[str, tuple[dict, datetime]] = {}
@@ -260,7 +281,7 @@ async def _backfill(batch_size: int) -> int:
             if last_ts is not None:
                 candidates.extend(tracker.flush(last_ts))
 
-            events = _dedupe(candidates, seen)
+            events = _dedupe(candidates, seen, finished, schedule)
             if events:
                 async with AsyncSessionLocal() as writer:
                     async with writer.begin():
@@ -272,7 +293,10 @@ async def _backfill(batch_size: int) -> int:
                 break
 
     # Anything still sitting at an origin when the positions ran out.
-    trailing = _dedupe(tracker.flush(last_ts or datetime.now(timezone.utc), force=True), seen)
+    trailing = _dedupe(
+        tracker.flush(last_ts or datetime.now(timezone.utc), force=True),
+        seen, finished, schedule,
+    )
     if trailing:
         async with AsyncSessionLocal() as writer:
             async with writer.begin():
