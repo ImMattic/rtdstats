@@ -15,6 +15,7 @@ from app.services.ontime import (
     _project_onto_route,
     _scheduled_utc,
     classify_arrival,
+    classify_segment_arrivals,
     detect_arrivals,
     reset_detection_state,
 )
@@ -351,6 +352,20 @@ def test_misassigned_trip_suppressed():
     assert event is None
 
 
+def test_ordinary_late_bus_at_shared_stop_kept():
+    # Regression: a bus 8 min late where the next trip is scheduled 15 min
+    # after ours.  The competing slot is 7 min from the sighting -- "closer"
+    # than our 8 min delay, which is what the old rule keyed on, so it deleted
+    # the arrival.  Termini are the worst case (every trip on the route shares
+    # the stop, so headways there are tightest), which is why whole runs of
+    # stops came back uncoloured and trips got flagged "Incomplete".
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    actual = scheduled + timedelta(seconds=8 * 60)
+    event = classify_arrival(_vp(), _SCHEDULE, actual, stop_arrivals=_TWO_TRIP_INDEX)
+    assert event is not None
+    assert event["delay_seconds"] == 8 * 60
+
+
 def test_no_better_match_keeps_arrival():
     # Bus is genuinely late (12 min) but there's no competing trip scheduled
     # closer to the actual time — keep the arrival.
@@ -371,3 +386,147 @@ def test_within_ontime_threshold_skips_check():
     event = classify_arrival(_vp(), _SCHEDULE, actual, stop_arrivals=_TWO_TRIP_INDEX)
     assert event is not None
     assert event["delay_seconds"] == 200
+
+
+# ── Pass-through arrivals interpolated between two fixes ──────────────────────
+
+# Three timepoints on a straight north-south line ~1.1 km apart, so along-route
+# distance is trivial to reason about.  B (08:00) is the one under test.
+_LINE_LON = -104.9903
+_A_LAT, _B_LAT, _C_LAT = 39.730, 39.740, 39.750
+_SEG_M = _haversine_m(_A_LAT, _LINE_LON, _B_LAT, _LINE_LON)
+_M_PER_DEG_LAT = 111_320.0
+_LINE_SCHEDULE: dict = {
+    "T1": [
+        (1, "SA", _ARR_SECS - 600, _A_LAT, _LINE_LON, 0.0),
+        (2, "SB", _ARR_SECS, _B_LAT, _LINE_LON, _SEG_M),
+        (3, "SC", _ARR_SECS + 600, _C_LAT, _LINE_LON, 2 * _SEG_M),
+    ]
+}
+_FT = 0.3048
+
+
+def _north_of_b(metres):
+    """A fix `metres` north (+) or south (-) of timepoint B, on the line."""
+    return _vp(lat=_B_LAT + metres / _M_PER_DEG_LAT, lon=_LINE_LON)
+
+
+def test_stop_passed_between_fixes_is_interpolated():
+    # The reported case: 125 ft short of the stop, then 125 ft past it 50 s
+    # later.  Neither fix is at the stop, but the bus plainly reached it, and
+    # equal distances either side put the arrival at the midpoint of the gap.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    t1 = scheduled - timedelta(seconds=25)
+    t2 = scheduled + timedelta(seconds=25)
+    events = classify_segment_arrivals(
+        _north_of_b(-125 * _FT), t1,
+        _north_of_b(125 * _FT), t2,
+        _LINE_SCHEDULE, stop_arrivals={},
+    )
+    assert [e["stop_id"] for e in events] == ["SB"]
+    assert abs((events[0]["actual_time"] - (t1 + (t2 - t1) / 2)).total_seconds()) < 1
+    assert abs(events[0]["delay_seconds"]) < 1  # crossed exactly on schedule
+
+
+def test_crossing_time_is_proportional_not_just_the_midpoint():
+    # Three times closer to the stop at the first fix than the second, so the
+    # crossing lands a quarter of the way through the gap, not halfway.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    t1 = scheduled
+    t2 = scheduled + timedelta(seconds=60)
+    events = classify_segment_arrivals(
+        _north_of_b(-50), t1,
+        _north_of_b(150), t2,
+        _LINE_SCHEDULE, stop_arrivals={},
+    )
+    assert len(events) == 1
+    assert abs(events[0]["delay_seconds"] - 15) <= 1  # 50/200 of 60 s
+
+
+def test_segment_catches_what_the_point_match_misses():
+    # Regression for the reported symptom: both fixes are outside the geofence
+    # (150 m either side of a 76 m radius), so per-fix matching sees nothing --
+    # while the replay, which interpolates, plainly shows the bus arriving.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    t1, t2 = scheduled - timedelta(seconds=20), scheduled + timedelta(seconds=20)
+    before, after = _north_of_b(-150), _north_of_b(150)
+
+    assert classify_arrival(before, _LINE_SCHEDULE, t1, stop_arrivals={}) is None
+    assert classify_arrival(after, _LINE_SCHEDULE, t2, stop_arrivals={}) is None
+
+    events = classify_segment_arrivals(before, t1, after, t2, _LINE_SCHEDULE, stop_arrivals={})
+    assert [e["stop_id"] for e in events] == ["SB"]
+
+
+def test_interpolated_position_lands_between_the_fixes():
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    events = classify_segment_arrivals(
+        _north_of_b(-100), scheduled - timedelta(seconds=20),
+        _north_of_b(100), scheduled + timedelta(seconds=20),
+        _LINE_SCHEDULE, stop_arrivals={},
+    )
+    assert len(events) == 1
+    # Interpolated to the stop itself, so the map marker sits where the replay
+    # draws the bus rather than at whichever raw fix happened to match.
+    assert abs(events[0]["actual_lat"] - _B_LAT) < 1e-4
+    assert abs(events[0]["actual_lon"] - _LINE_LON) < 1e-6
+
+
+def test_multiple_stops_passed_in_one_gap():
+    # One gap can step over more than one timepoint (express run, or a short
+    # feed dropout); every one of them should be recovered, in order.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    events = classify_segment_arrivals(
+        _vp(lat=_A_LAT + 0.001, lon=_LINE_LON), scheduled - timedelta(seconds=120),
+        _vp(lat=_C_LAT + 0.001, lon=_LINE_LON), scheduled + timedelta(seconds=120),
+        _LINE_SCHEDULE, stop_arrivals={},
+    )
+    assert [e["stop_id"] for e in events] == ["SB", "SC"]
+
+
+def test_long_gap_is_not_interpolated():
+    # Beyond arrival_segment_max_gap_seconds the two fixes are not one
+    # continuous movement, so a crossing time would be invented, not measured.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    events = classify_segment_arrivals(
+        _north_of_b(-150), scheduled - timedelta(minutes=30),
+        _north_of_b(150), scheduled + timedelta(minutes=30),
+        _LINE_SCHEDULE, stop_arrivals={},
+    )
+    assert events == []
+
+
+def test_backwards_travel_is_not_an_arrival():
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    events = classify_segment_arrivals(
+        _north_of_b(150), scheduled - timedelta(seconds=20),
+        _north_of_b(-150), scheduled + timedelta(seconds=20),
+        _LINE_SCHEDULE, stop_arrivals={},
+    )
+    assert events == []
+
+
+def test_off_corridor_segment_ignored():
+    # Same along-route progress, but ~1 km off the line: a deadhead or a bus on
+    # a parallel street must not be credited with passing the stop.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    off = 0.012  # ~1 km of longitude
+    events = classify_segment_arrivals(
+        _vp(lat=_B_LAT - 0.0015, lon=_LINE_LON + off), scheduled - timedelta(seconds=20),
+        _vp(lat=_B_LAT + 0.0015, lon=_LINE_LON + off), scheduled + timedelta(seconds=20),
+        _LINE_SCHEDULE, stop_arrivals={},
+    )
+    assert events == []
+
+
+def test_skip_sequence_excluded_from_segment_matching():
+    # Callers pass the trip's origin here: it is timed by departure
+    # (OriginDepartureTracker), so matching it as a pass-through arrival too
+    # would record the layover instead. SB stands in for it.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    events = classify_segment_arrivals(
+        _vp(lat=_A_LAT + 0.001, lon=_LINE_LON), scheduled - timedelta(seconds=120),
+        _vp(lat=_C_LAT + 0.001, lon=_LINE_LON), scheduled + timedelta(seconds=120),
+        _LINE_SCHEDULE, stop_arrivals={}, skip_sequence=2,
+    )
+    assert [e["stop_id"] for e in events] == ["SC"]

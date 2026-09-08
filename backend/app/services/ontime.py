@@ -65,6 +65,11 @@ _recorded: set[tuple[str, int, date]] = set()
 # _live_tracker) because it needs the GTFS static caches to be warm.
 _live_tracker_instance: OriginDepartureTracker | None = None
 
+# Each trip's most recent (position row, observation time), so the next poll
+# can interpolate which timepoints were passed in between — see
+# classify_segment_arrivals.  Pruned alongside _recorded.
+_last_fix: dict[str, tuple[dict[str, Any], datetime]] = {}
+
 
 def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Great-circle distance between two WGS84 points, in metres."""
@@ -178,18 +183,38 @@ def _build_event(
     if abs(delay_seconds) > max_delay_s:
         return None
 
-    # If the delay exceeds the on-time threshold, check whether another trip on
-    # the same route is scheduled closer to actual_time at this stop.  A closer
-    # competing trip means the GTFS-RT trip_id is likely a misassignment — common
-    # on high-frequency routes where the headway matches the apparent delay.
-    if abs(delay_seconds) > _settings.ontime_threshold_seconds and route_id:
+    # Guard against GTFS-RT trip_id misassignment: another trip on the same
+    # route may explain this sighting better than the trip_id the feed gave us.
+    #
+    # This has to be applied narrowly.  ``competing`` holds *every* trip's
+    # scheduled arrival at this stop on this route, so on an H-minute headway
+    # there is always one about H minutes either side of ours — which means the
+    # previous rule (drop when any competing arrival is merely *closer* than our
+    # own delay) fired for any bus more than half a headway late.  Measured
+    # against RTD's bundled schedule that silently deleted 68% of terminus
+    # arrivals for a bus 8 minutes late, and 81% for one 15 minutes late;
+    # termini are worst hit because every trip on the route shares that one
+    # stop_id, so headways there are the tightest.  The visible damage was
+    # stops with no arrival colour on the trip page, trips marked "Incomplete"
+    # for want of a terminus arrival, and on-time percentages biased optimistic
+    # because it was specifically the late arrivals being thrown away.
+    #
+    # So: trust the feed's trip_id by default, and only override it on the
+    # actual headway-aliasing signature — the sighting landing almost exactly
+    # on a competing trip's slot (within ..._max_gap_seconds) while ours would
+    # have to be substantially late.  Against the bundled schedule that takes
+    # deletions at terminus stops from 64% to 0% for a bus 8 minutes late,
+    # while still catching a bus "late" by within a minute of a whole headway.
+    if abs(delay_seconds) >= _settings.arrival_misassignment_min_delay_seconds and route_id:
         arrivals = stop_arrivals if stop_arrivals is not None else load_stop_arrivals_index()
         competing = arrivals.get((route_id, stop_id))
         if competing:
             midnight = datetime.combine(service_date, time(0, 0), tzinfo=_DENVER)
             actual_secs = (actual_time.astimezone(_DENVER) - midnight).total_seconds()
+            # Our own scheduled arrival is in this index too, but it sits
+            # exactly |delay| away, so it can never trip the tighter gap test.
             closest_gap = min(abs(s - actual_secs) for s in competing)
-            if closest_gap < abs(delay_seconds):
+            if closest_gap <= _settings.arrival_misassignment_max_gap_seconds:
                 return None
 
     return {
@@ -299,6 +324,117 @@ def classify_arrival(
         max_delay_s=max_delay_s,
         stop_arrivals=stop_arrivals,
     )
+
+
+# ── Pass-through arrivals (between two fixes) ────────────────────────────────
+#
+# ``classify_arrival`` tests one fix at a time, so it can only see a stop the
+# vehicle happened to be *inside the geofence for* at the instant the feed
+# sampled it.  RTD's positions are only ~30 s apart, and a bus at 35 mph covers
+# ~450 m in that time, so a bus that doesn't actually stop (nobody boarding at
+# a timepoint) routinely steps straight over the ~152 m-wide circle: fix at
+# 125 ft before, next fix at 125 ft after, no arrival recorded.  The trip
+# replay interpolates between fixes, which is why the map plainly shows the bus
+# reaching the stop that the table left uncoloured.
+#
+# The fix is to match the *interval* between two consecutive fixes rather than
+# the fixes themselves.  Each fix already projects to a distance along the
+# route, so a timepoint whose own route distance falls between them was passed,
+# and the crossing time interpolates by distance across the gap — 125 ft either
+# side puts the arrival at the midpoint of the two timestamps.  Note this needs
+# no geofence radius at all: the bus need only have gone past the stop, so
+# widening ``arrival_radius_m`` (which costs accuracy) is not the lever.
+
+# How far off the inter-timepoint chord a fix may sit and still count as being
+# on this corridor.  Looser than the arrival radius on purpose: the chord cuts
+# corners the road does not, so a fix mid-way between two timepoints a few km
+# apart is legitimately far from the straight line between them.
+_SEGMENT_CORRIDOR_FACTOR = 3.0
+
+
+def classify_segment_arrivals(
+    prev_row: dict[str, Any],
+    prev_time: datetime,
+    vp_row: dict[str, Any],
+    actual_time: datetime,
+    schedule: dict[str, list[tuple[int, str, int, float, float, float]]],
+    *,
+    radius_m: float | None = None,
+    max_delay_s: int | None = None,
+    stop_arrivals: dict[tuple[str, str], list[int]] | None = None,
+    skip_sequence: int | None = None,
+) -> list[dict[str, Any]]:
+    """Timepoints the vehicle passed *between* two consecutive fixes.
+
+    Both fixes must belong to the same trip, be close enough in time to read as
+    one continuous movement (``arrival_segment_max_gap_seconds``), sit on the
+    route corridor, and show forward progress along it.  Every timepoint whose
+    route distance falls in ``(prev, current]`` yields an event timed by linear
+    interpolation across the gap; position and bearing are interpolated too, so
+    ``actual_lat``/``actual_lon`` land where the replay draws the bus.
+
+    Returns events oldest-first.  Callers de-duplicate against
+    ``classify_arrival``'s own matches — see ``detect_arrivals``.
+    """
+    radius_m = _settings.arrival_radius_m if radius_m is None else radius_m
+    max_delay_s = _settings.arrival_max_delay_seconds if max_delay_s is None else max_delay_s
+
+    trip_id = vp_row.get("trip_id")
+    if not trip_id or prev_row.get("trip_id") != trip_id:
+        return []
+
+    lat, lon = vp_row.get("latitude"), vp_row.get("longitude")
+    plat, plon = prev_row.get("latitude"), prev_row.get("longitude")
+    if lat is None or lon is None or plat is None or plon is None:
+        return []
+
+    span_s = (actual_time - prev_time).total_seconds()
+    if span_s <= 0 or span_s > _settings.arrival_segment_max_gap_seconds:
+        return []
+
+    timepoints = schedule.get(trip_id)
+    if not timepoints:
+        return []
+
+    prev_dist, prev_lateral = _project_onto_route(plat, plon, timepoints)
+    curr_dist, curr_lateral = _project_onto_route(lat, lon, timepoints)
+
+    corridor_m = radius_m * _SEGMENT_CORRIDOR_FACTOR
+    if prev_lateral > corridor_m or curr_lateral > corridor_m:
+        return []
+
+    # Only forward travel: a backwards step is projection noise (or a loop
+    # doubling back), and `classify_arrival` still covers a fix sitting at a
+    # stop.  Equal distances mean a stationary vehicle — nothing was passed.
+    if curr_dist <= prev_dist:
+        return []
+
+    span_m = curr_dist - prev_dist
+    events: list[dict[str, Any]] = []
+    for seq, stop_id, arrival_secs, _, _, tp_dist_m in timepoints:
+        if skip_sequence is not None and seq == skip_sequence:
+            continue
+        if not (prev_dist < tp_dist_m <= curr_dist):
+            continue
+
+        frac = (tp_dist_m - prev_dist) / span_m
+        event = _build_event(
+            trip_id=trip_id,
+            route_id=vp_row.get("route_id") or prev_row.get("route_id"),
+            stop_id=stop_id,
+            stop_sequence=seq,
+            arrival_secs=arrival_secs,
+            actual_time=prev_time + (actual_time - prev_time) * frac,
+            lat=plat + (lat - plat) * frac,
+            lon=plon + (lon - plon) * frac,
+            bearing=vp_row.get("bearing"),
+            max_delay_s=max_delay_s,
+            stop_arrivals=stop_arrivals,
+        )
+        if event is not None:
+            events.append(event)
+
+    return events
 
 
 # ── Origin departures ────────────────────────────────────────────────────────
@@ -525,6 +661,19 @@ def _prune_recorded(today: date) -> None:
         _recorded.difference_update(stale)
 
 
+def _prune_last_fix(now: datetime) -> None:
+    """Forget trips that have gone quiet.
+
+    Anything older than the interpolation window can never pair with a new fix
+    (``classify_segment_arrivals`` rejects the gap), so holding it only grows
+    the dict — one entry per trip seen, for the life of the process.
+    """
+    cutoff = now - timedelta(seconds=_settings.arrival_segment_max_gap_seconds)
+    stale = [tid for tid, (_, seen) in _last_fix.items() if seen < cutoff]
+    for tid in stale:
+        del _last_fix[tid]
+
+
 def _live_tracker(
     origins: dict[str, tuple[int, str, int, float, float]],
     arrivals_index: dict[tuple[str, str], list[int]],
@@ -567,12 +716,34 @@ def detect_arrivals(
         if departure is not None:
             candidates.append(departure)
         origin = origins.get(row.get("trip_id") or "")
+        skip_sequence = origin[0] if origin else None
+
+        # Stops passed since this trip's previous fix, timed by interpolation.
+        # Listed before the point match so that when both see the same stop,
+        # the interpolated crossing time wins the de-dup below.
+        trip_id = row.get("trip_id")
+        previous = _last_fix.get(trip_id) if trip_id else None
+        if previous is not None:
+            candidates.extend(
+                classify_segment_arrivals(
+                    previous[0],
+                    previous[1],
+                    row,
+                    actual,
+                    schedule,
+                    stop_arrivals=arrivals_index,
+                    skip_sequence=skip_sequence,
+                )
+            )
+        if trip_id:
+            _last_fix[trip_id] = (row, actual)
+
         arrival = classify_arrival(
             row,
             schedule,
             actual,
             stop_arrivals=arrivals_index,
-            skip_sequence=origin[0] if origin else None,
+            skip_sequence=skip_sequence,
         )
         if arrival is not None:
             candidates.append(arrival)
@@ -588,6 +759,7 @@ def detect_arrivals(
         events.append(event)
 
     _prune_recorded(default_time.astimezone(_DENVER).date())
+    _prune_last_fix(default_time)
     return events
 
 
@@ -595,4 +767,5 @@ def reset_detection_state() -> None:
     """Drop all in-process dedup/pending state (tests; not used in production)."""
     global _live_tracker_instance
     _recorded.clear()
+    _last_fix.clear()
     _live_tracker_instance = None

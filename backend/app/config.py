@@ -63,6 +63,21 @@ class Settings(BaseSettings):
     # live trip_id probably doesn't match the static schedule for that day —
     # drop the event rather than record a bogus delay.
     arrival_max_delay_seconds: int = 10800
+    # Trip_id-misassignment guard (services/ontime.py).  An arrival is only
+    # discarded as a probable misassignment when BOTH hold: our own delay is at
+    # least ..._min_delay_seconds, and another trip on the route is scheduled
+    # within ..._max_gap_seconds of the observation — i.e. the sighting lands
+    # almost exactly on a competing trip's slot, the headway-aliasing
+    # signature.  Loosening either (especially raising max_gap toward the
+    # headway) starts deleting ordinary late buses instead of recording them,
+    # which blanks stops on the trip page and biases on-time stats optimistic.
+    arrival_misassignment_min_delay_seconds: int = 600
+    arrival_misassignment_max_gap_seconds: int = 60
+    # Two consecutive fixes further apart than this are not read as one
+    # continuous movement, so no arrival is interpolated between them —
+    # inventing a crossing time across a long feed dropout would be a guess,
+    # not a measurement. See classify_segment_arrivals in services/ontime.py.
+    arrival_segment_max_gap_seconds: int = 300
     # The origin terminal is timed by *departure*, not arrival: a vehicle lays
     # over at the gate (already carrying its next trip_id) long before it pulls
     # out, so its first geofenced snapshot there is minutes too early.  It

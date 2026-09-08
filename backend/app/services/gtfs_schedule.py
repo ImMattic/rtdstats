@@ -475,11 +475,25 @@ def _build_trip_shape_dist_schedule(
             with_dist.append((seq, stop_id, arr_secs, lat, lon, cum))
 
         # Drop timepoints that are < _MIN_TIMEPOINT_GAP_S from either neighbour.
+        #
+        # The origin and terminus are exempt.  The filter exists to stop two
+        # near-simultaneous timepoints from stealing each other's observations,
+        # but at the ends of a trip there is no ambiguity about which stop a
+        # vehicle sitting at the end of the line is at — and dropping them has
+        # a much worse failure mode: the trip page shows the stop with no
+        # arrival colour at all, and a missing *terminus* arrival is exactly
+        # what flags a completed trip as "Incomplete".  Measured against RTD's
+        # bundled feed, this filter was removing the terminus on 3.3% of trips.
+        # load_trip_origin_timepoints() already sidesteps it for the same reason.
+        last_i = len(with_dist) - 1
         filtered: list[tuple[int, str, int, float, float, float]] = []
         for i, tp in enumerate(with_dist):
+            if i == 0 or i == last_i:
+                filtered.append(tp)
+                continue
             arr_secs = tp[2]
-            prev_gap = arr_secs - with_dist[i - 1][2] if i > 0 else float("inf")
-            next_gap = with_dist[i + 1][2] - arr_secs if i < len(with_dist) - 1 else float("inf")
+            prev_gap = arr_secs - with_dist[i - 1][2]
+            next_gap = with_dist[i + 1][2] - arr_secs
             if min(prev_gap, next_gap) >= _MIN_TIMEPOINT_GAP_S:
                 filtered.append(tp)
 

@@ -60,7 +60,11 @@ from app.services.gtfs_schedule import (  # noqa: E402
     load_trip_origin_timepoints,
     load_trip_shape_dist_schedule,
 )
-from app.services.ontime import OriginDepartureTracker, classify_arrival  # noqa: E402
+from app.services.ontime import (  # noqa: E402
+    OriginDepartureTracker,
+    classify_arrival,
+    classify_segment_arrivals,
+)
 
 _VP = VehiclePosition
 
@@ -92,6 +96,9 @@ async def _backfill(batch_size: int) -> int:
     tracker = OriginDepartureTracker(origins)
 
     seen: set[tuple[str, int, date]] = set()
+    # Each trip's previous fix, carried across batches so a stop passed
+    # over a batch boundary is still interpolated.
+    last_fix: dict[str, tuple[dict, datetime]] = {}
     total = 0
     # Keyset pagination on (timestamp, id) — cheap over a hypertable and stable.
     last_ts = None
@@ -131,11 +138,29 @@ async def _backfill(batch_size: int) -> int:
                 if departure is not None:
                     candidates.append(departure)
                 origin = origins.get(trip_id or "")
+                skip_sequence = origin[0] if origin else None
+
+                # Stops passed between this fix and the trip's previous one.
+                # The keyset scan is in timestamp order and last_fix spans
+                # batches, so this matches the live loop exactly. Listed first
+                # so an interpolated crossing time beats the point match in
+                # _dedupe.
+                previous = last_fix.get(trip_id) if trip_id else None
+                if previous is not None:
+                    candidates.extend(
+                        classify_segment_arrivals(
+                            previous[0], previous[1], vp_row, ts, schedule,
+                            skip_sequence=skip_sequence,
+                        )
+                    )
+                if trip_id:
+                    last_fix[trip_id] = (vp_row, ts)
+
                 arrival = classify_arrival(
                     vp_row,
                     schedule,
                     ts,
-                    skip_sequence=origin[0] if origin else None,
+                    skip_sequence=skip_sequence,
                 )
                 if arrival is not None:
                     candidates.append(arrival)
