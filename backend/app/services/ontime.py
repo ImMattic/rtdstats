@@ -45,6 +45,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from app.config import get_settings
+from app.services.gtfs_decoder import load_gtfs_static_data
 from app.services.gtfs_schedule import (
     load_stop_arrivals_index,
     load_trip_origin_timepoints,
@@ -69,6 +70,41 @@ _live_tracker_instance: OriginDepartureTracker | None = None
 # can interpolate which timepoints were passed in between — see
 # classify_segment_arrivals.  Pruned alongside _recorded.
 _last_fix: dict[str, tuple[dict[str, Any], datetime]] = {}
+
+
+# GTFS route_type: 0 tram/light rail, 1 subway, 2 rail.  3 is bus.
+_RAIL_ROUTE_TYPES = frozenset({"0", "1", "2"})
+_rail_route_ids: frozenset[str] | None = None
+
+
+def _rail_routes() -> frozenset[str]:
+    """Route ids served by rail, cached on first use."""
+    global _rail_route_ids
+    if _rail_route_ids is None:
+        try:
+            routes, _ = load_gtfs_static_data()
+            _rail_route_ids = frozenset(
+                rid for rid, r in routes.items()
+                if r.get("route_type") in _RAIL_ROUTE_TYPES
+            )
+        except Exception:  # missing/unreadable static feed — fall back to bus radius
+            _rail_route_ids = frozenset()
+    return _rail_route_ids
+
+
+def _radius_for(route_id: str | None) -> float:
+    """Geofence radius for this route: rail gets the wider one.
+
+    Rail reports position further from the platform than a bus does from the
+    kerb, and its stations sit kilometres apart — in the bundled feed the
+    closest pair of adjacent rail timepoints is 649 m, so even a 305 m circle
+    cannot make two stations ambiguous.  Buses stay tighter: adjacent bus
+    timepoints get as close as 51 m, and 1.1% of pairs are under 305 m, so a
+    rail-sized circle there really would blur neighbouring stops.
+    """
+    if route_id and route_id in _rail_routes():
+        return _settings.arrival_radius_rail_m
+    return _settings.arrival_radius_m
 
 
 def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -275,7 +311,8 @@ def classify_arrival(
 
     ``delay_seconds`` is positive when late, negative when early.
     """
-    radius_m = _settings.arrival_radius_m if radius_m is None else radius_m
+    if radius_m is None:
+        radius_m = _radius_for(vp_row.get("route_id"))
     max_delay_s = _settings.arrival_max_delay_seconds if max_delay_s is None else max_delay_s
 
     trip_id = vp_row.get("trip_id")
@@ -376,7 +413,9 @@ def classify_segment_arrivals(
     Returns events oldest-first.  Callers de-duplicate against
     ``classify_arrival``'s own matches — see ``detect_arrivals``.
     """
-    radius_m = _settings.arrival_radius_m if radius_m is None else radius_m
+    route_id = vp_row.get("route_id") or prev_row.get("route_id")
+    if radius_m is None:
+        radius_m = _radius_for(route_id)
     max_delay_s = _settings.arrival_max_delay_seconds if max_delay_s is None else max_delay_s
 
     trip_id = vp_row.get("trip_id")
@@ -420,7 +459,7 @@ def classify_segment_arrivals(
         frac = (tp_dist_m - prev_dist) / span_m
         event = _build_event(
             trip_id=trip_id,
-            route_id=vp_row.get("route_id") or prev_row.get("route_id"),
+            route_id=route_id,
             stop_id=stop_id,
             stop_sequence=seq,
             arrival_secs=arrival_secs,
