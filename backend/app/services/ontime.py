@@ -96,11 +96,10 @@ def _radius_for(route_id: str | None) -> float:
     """Geofence radius for this route: rail gets the wider one.
 
     Rail reports position further from the platform than a bus does from the
-    kerb, and its stations sit kilometres apart — in the bundled feed the
-    closest pair of adjacent rail timepoints is 649 m, so even a 305 m circle
-    cannot make two stations ambiguous.  Buses stay tighter: adjacent bus
-    timepoints get as close as 51 m, and 1.1% of pairs are under 305 m, so a
-    rail-sized circle there really would blur neighbouring stops.
+    kerb, and its stations sit kilometres apart (median 1775 m), so the tight
+    bus circle misses arrivals a train plainly made.  Buses stay tighter:
+    adjacent bus timepoints get as close as 51 m, where a rail-sized circle
+    really would blur neighbouring stops.
     """
     if route_id and route_id in _rail_routes():
         return _settings.arrival_radius_rail_m
@@ -554,12 +553,14 @@ class OriginDepartureTracker:
         self,
         origins: dict[str, tuple[int, str, int, float, float]] | None = None,
         *,
+        schedule: dict[str, list[tuple[int, str, int, float, float, float]]] | None = None,
         radius_m: float | None = None,
         max_delay_s: int | None = None,
         stop_arrivals: dict[tuple[str, str], list[int]] | None = None,
         stale_after: timedelta | None = None,
     ) -> None:
         self._origins = origins
+        self._schedule = schedule
         self._radius_m = (
             _settings.origin_departure_radius_m if radius_m is None else radius_m
         )
@@ -580,6 +581,38 @@ class OriginDepartureTracker:
         if self._origins is None:
             self._origins = load_trip_origin_timepoints()
         return self._origins
+
+    @property
+    def schedule(self) -> dict[str, list[tuple[int, str, int, float, float, float]]]:
+        """Route geometry, used to tell a departure from a move to the yard."""
+        if self._schedule is None:
+            self._schedule = load_trip_shape_dist_schedule()
+        return self._schedule
+
+    def _left_along_the_route(self, trip_id: str, seq: int, lat: float, lon: float) -> bool:
+        """Did this vehicle leave the origin circle *onward down the route*?
+
+        Leaving the circle is not the same as departing.  A rail car heading
+        back to the yard also clears it — backwards, or off the corridor
+        entirely — and used to be recorded as the trip's departure.  Projecting
+        onto the route separates the two: onward travel advances the along-route
+        distance past the origin, while a reverse or sideways move clamps to
+        roughly the origin's own distance (``_project_onto_route`` bounds the
+        projection to the polyline, so there is no negative progress to read).
+
+        Trips with fewer than two timepoints carry no direction to test, so they
+        keep the old leave-the-circle behaviour.
+        """
+        timepoints = self.schedule.get(trip_id)
+        if not timepoints or len(timepoints) < 2:
+            return True
+        vehicle_dist_m, _ = _project_onto_route(lat, lon, timepoints)
+        origin_dist_m = next(
+            (tp[5] for tp in timepoints if tp[0] == seq), timepoints[0][5]
+        )
+        # Half the circle: a vehicle that genuinely pulled out is a full radius
+        # beyond the stop, while jitter or a sideways move barely registers.
+        return (vehicle_dist_m - origin_dist_m) >= self._radius_m * 0.5
 
     def feed(self, vp_row: dict[str, Any], actual_time: datetime) -> dict[str, Any] | None:
         """Absorb one position; return a departure event when one just resolved."""
@@ -638,6 +671,15 @@ class OriginDepartureTracker:
         # Wait for a later fix rather than timing the shuffle as a departure.
         current_stop_seq = vp_row.get("current_stop_sequence")
         if current_stop_seq is not None and current_stop_seq <= seq:
+            return None
+
+        if not self._left_along_the_route(trip_id, seq, lat, lon):
+            # Left the circle, but not down the route — a yard move, not a
+            # departure.  Drop the pending entry rather than holding it: keeping
+            # it would let `flush` record this as a departure once the trip goes
+            # quiet.  Not marked done, so a vehicle that comes back and pulls out
+            # properly still re-arms.
+            del self._pending[key]
             return None
 
         del self._pending[key]

@@ -18,17 +18,20 @@
 # (e.g. commuter rail shows the raw route_id "113B" instead of "B"). This script
 # force-recreates the backend whenever gtfs-static/ changes.
 #
-# Why the on-time backfill matters: stop_arrival_events rows are written once,
+# Why the on-time backfill is OPT-IN: stop_arrival_events rows are written once,
 # at ingest time, by whatever arrival-detection rule (app/services/ontime.py)
 # was live that moment. Changing that rule only affects arrivals detected from
-# then on -- it does not retroactively fix rows already written by the old
-# rule. So whenever ontime.py/config.py/backfill_ontime.py changes, this script
-# replays ALL stored vehicle_positions through the new rule once the new
-# backend image is confirmed live (scripts/backfill_ontime.py wipes and
-# rebuilds stop_arrival_events from scratch). That means the on-time
-# dashboards read empty/partial for however long the replay takes -- fine for
-# a low-traffic staging box, but reconsider this trade-off before pointing the
-# same script at a production deploy path with real users on it.
+# then on -- it does not retroactively fix rows already written by the old rule.
+# Replaying every stored vehicle_position through the new rule fixes that, but
+# it takes hours, so it has to be ASKED FOR: put [backfill] anywhere in a commit
+# message and the replay runs once the new backend image is confirmed live.
+# Ordinary feature pushes -- including ones that touch ontime.py -- deploy with
+# no replay. (This used to fire automatically on any ontime.py/config.py change,
+# which meant every experiment cost a multi-hour replay.)
+#
+# The replay itself is non-destructive: scripts/backfill_ontime.py fills a
+# scratch table and swaps it in atomically, so the dashboards serve the old
+# history throughout and a crashed replay leaves the live table untouched.
 
 set -eu
 
@@ -91,10 +94,10 @@ if [ "$GIT_BEFORE" != "$GIT_AFTER" ]; then
     if [ -n "$(git -C "$REPO" diff --name-only "$GIT_BEFORE" "$GIT_AFTER" -- gtfs-static)" ]; then
         GTFS_CHANGED=1
     fi
-    if [ -n "$(git -C "$REPO" diff --name-only "$GIT_BEFORE" "$GIT_AFTER" -- \
-        backend/app/services/ontime.py backend/app/services/gtfs_schedule.py \
-        backend/app/config.py backend/scripts/backfill_ontime.py)" ]; then
-        log "On-time detection logic changed -- backfill owed once the new backend image is live."
+    # Opt-in only -- see the header. -F so the brackets are literal.
+    if git -C "$REPO" log --format='%B' "$GIT_BEFORE..$GIT_AFTER" 2>/dev/null \
+        | grep -qiF '[backfill]'; then
+        log "[backfill] requested in an incoming commit -- backfill owed once the new backend image is live."
         touch "$BACKFILL_MARKER"
     fi
 fi
@@ -138,12 +141,12 @@ fi
 # The marker is left in place on failure so the next backend image bump (or a
 # manual run) retries it -- see backend/scripts/backfill_ontime.py to run by hand.
 if [ -f "$BACKFILL_MARKER" ] && [ "$BACKEND_IMG_CHANGED" = "1" ]; then
-    log "New backend image live with a pending on-time backfill -> replaying stop_arrival_events..."
+    log "New backend image live with a requested on-time backfill -> replaying stop_arrival_events..."
     if dc exec -T -e STATEMENT_TIMEOUT_MS=0 backend python scripts/backfill_ontime.py; then
         rm -f "$BACKFILL_MARKER"
         log "Backfill complete."
     else
-        log "ERROR: backfill failed -- stop_arrival_events may be left empty/partial. Will retry on the next backend image update, or run manually:"
+        log "ERROR: backfill failed -- stop_arrival_events keeps its previous contents (the swap is all-or-nothing). Will retry on the next backend image update, or run manually:"
         log "  docker compose -f $COMPOSE_FILE --env-file $ENV_FILE exec -e STATEMENT_TIMEOUT_MS=0 backend python scripts/backfill_ontime.py"
     fi
 fi

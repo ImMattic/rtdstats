@@ -531,3 +531,70 @@ def test_skip_sequence_excluded_from_segment_matching():
         _LINE_SCHEDULE, stop_arrivals={}, skip_sequence=2,
     )
     assert [e["stop_id"] for e in events] == ["SC"]
+
+
+# ── Origin departures only count when the vehicle leaves down the route ───────
+
+# The origin (#1) plus two stops north of it, so "forward" has a direction.
+_ORIGIN_ROUTE: dict = {
+    "T1": [
+        (5, "S1", _ARR_SECS, _STOP_LAT, _STOP_LON, 0.0),
+        (6, "S2", _ARR_SECS + 300, _B_LAT, _LINE_LON, _haversine_m(_STOP_LAT, _LINE_LON, _B_LAT, _LINE_LON)),
+        (7, "S3", _ARR_SECS + 600, _C_LAT, _LINE_LON, _haversine_m(_STOP_LAT, _LINE_LON, _C_LAT, _LINE_LON)),
+    ]
+}
+
+
+def _route_tracker() -> OriginDepartureTracker:
+    return OriginDepartureTracker(_ORIGINS, schedule=_ORIGIN_ROUTE, stop_arrivals={})
+
+
+def test_departure_fires_when_leaving_along_the_route():
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    t = _route_tracker()
+    assert t.feed(_vp(), scheduled - timedelta(seconds=60)) is None
+    # 500 m north — onward toward S2/S3.
+    event = t.feed(_vp(lat=_AWAY_LAT), scheduled + timedelta(seconds=30))
+    assert event is not None
+    assert event["stop_sequence"] == 5
+
+
+def test_reversing_to_the_yard_is_not_a_departure():
+    # The reported bug: a rail car pulling back to the yard clears the circle
+    # too, but backwards down the route -- that is not a departure.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    t = _route_tracker()
+    assert t.feed(_vp(), scheduled - timedelta(seconds=60)) is None
+    south = _vp(lat=_STOP_LAT - 0.0045)  # 500 m the wrong way
+    assert t.feed(south, scheduled + timedelta(seconds=30)) is None
+
+
+def test_yard_move_does_not_resurface_via_flush():
+    # And it must not come back as a departure once the trip goes quiet: the
+    # pending entry is dropped, not parked.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    t = _route_tracker()
+    t.feed(_vp(), scheduled - timedelta(seconds=60))
+    t.feed(_vp(lat=_STOP_LAT - 0.0045), scheduled + timedelta(seconds=30))
+    assert t.flush(scheduled + timedelta(hours=1), force=True) == []
+
+
+def test_vehicle_that_returns_after_a_yard_move_still_departs():
+    # Dropping the pending entry must not lock the trip out: a car that backs
+    # up, comes back and then genuinely pulls out is still recorded.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    t = _route_tracker()
+    t.feed(_vp(), scheduled - timedelta(seconds=120))
+    assert t.feed(_vp(lat=_STOP_LAT - 0.0045), scheduled - timedelta(seconds=90)) is None
+    assert t.feed(_vp(), scheduled - timedelta(seconds=30)) is None      # back at the gate
+    event = t.feed(_vp(lat=_AWAY_LAT), scheduled + timedelta(seconds=30))
+    assert event is not None
+
+
+def test_single_timepoint_trip_keeps_old_behaviour():
+    # No second timepoint means no direction to test, so leaving the circle in
+    # any direction still counts (what _ORIGINS-only trackers have always done).
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    t = OriginDepartureTracker(_ORIGINS, schedule={"T1": _ORIGIN_ROUTE["T1"][:1]}, stop_arrivals={})
+    t.feed(_vp(), scheduled - timedelta(seconds=60))
+    assert t.feed(_vp(lat=_STOP_LAT - 0.0045), scheduled + timedelta(seconds=30)) is not None
