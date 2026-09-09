@@ -17,15 +17,15 @@ services:
       - "-c"
       - "max_connections=50"
     environment:
-      POSTGRES_DB: rtdstats
-      POSTGRES_USER: rtdstats
-      POSTGRES_PASSWORD: rtdstats
+      POSTGRES_DB: transitden
+      POSTGRES_USER: transitden
+      POSTGRES_PASSWORD: transitden
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rtdstats -d rtdstats"]
+      test: ["CMD-SHELL", "pg_isready -U transitden -d transitden"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -44,7 +44,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://rtdstats:rtdstats@db:5432/rtdstats
+      DATABASE_URL: postgresql+asyncpg://transitden:transitden@db:5432/transitden
       GTFS_RT_VEHICLE_URL: https://www.rtd-denver.com/files/gtfs-rt/VehiclePosition.pb
       GTFS_RT_TRIP_URL: https://www.rtd-denver.com/files/gtfs-rt/TripUpdate.pb
       POLLING_INTERVAL_SECONDS: "10"

@@ -6,7 +6,7 @@ export type ThemePreference = "dark" | "light" | "system";
 /** What's actually painted — always one of these two, never "system". */
 export type ResolvedTheme = "dark" | "light";
 
-const STORAGE_KEY = "rtdstats-theme";
+const STORAGE_KEY = "transitden-theme";
 
 function systemPrefersLight(): boolean {
   return typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: light)").matches;

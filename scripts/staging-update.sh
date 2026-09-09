@@ -1,9 +1,9 @@
 #!/bin/sh
-# Redeploy the RTD Stats staging stack when either the Docker Hub :staging
+# Redeploy the TransitDen staging stack when either the Docker Hub :staging
 # images OR the git checkout changes.
 #
 # Cron (every minute):
-#   * * * * * /opt/rtdstats/scripts/staging-update.sh >> /var/log/rtdstats-update.log 2>&1
+#   * * * * * /opt/transitden/scripts/staging-update.sh >> /var/log/transitden-update.log 2>&1
 #
 # The checkout at $REPO is treated as a DISPOSABLE MIRROR of origin/$BRANCH:
 # every run does `fetch` + `reset --hard` + `clean`, so any local edits or stray
@@ -36,26 +36,26 @@
 set -eu
 
 # Serialise overlapping cron runs -- a deploy can outlast the 1-minute interval.
-if [ "${RTDSTATS_LOCKED:-}" != "1" ] && command -v flock >/dev/null 2>&1; then
-    RTDSTATS_LOCKED=1
-    export RTDSTATS_LOCKED
-    exec flock -n /tmp/rtdstats-update.lock "$0" "$@"
+if [ "${TRANSITDEN_LOCKED:-}" != "1" ] && command -v flock >/dev/null 2>&1; then
+    TRANSITDEN_LOCKED=1
+    export TRANSITDEN_LOCKED
+    exec flock -n /tmp/transitden-update.lock "$0" "$@"
 fi
 
 # cron runs with a minimal PATH; docker / git may not be on it.
 PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 
-REPO="/opt/rtdstats"
+REPO="/opt/transitden"
 BRANCH="staging"
 COMPOSE_FILE="$REPO/deployment/docker-compose.staging.yml"
 ENV_FILE="$REPO/deployment/.env"
-BACKEND_IMAGE="aggiematt/rtdstats-backend:staging"
-FRONTEND_IMAGE="aggiematt/rtdstats-frontend:staging"
+BACKEND_IMAGE="aggiematt/transitden-backend:staging"
+FRONTEND_IMAGE="aggiematt/transitden-frontend:staging"
 HEALTH_URL="http://127.0.0.1:8000/api/v1/realtime/vehicles"
 # Deliberately outside $REPO -- the git reset/clean below would otherwise wipe
 # it -- so "a backfill is owed" persists across cron ticks if the git checkout
 # advances before the new backend image finishes building on Docker Hub.
-BACKFILL_MARKER="/tmp/rtdstats-backfill-pending"
+BACKFILL_MARKER="/tmp/transitden-backfill-pending"
 
 log()    { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 dc()     { docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"; }

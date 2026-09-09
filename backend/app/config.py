@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     debug: bool = False
 
     # ── Database ──────────────────────────────────────────────────────────────
-    database_url: str = "postgresql+asyncpg://rtdstats:rtdstats@localhost:5432/rtdstats"
+    database_url: str = "postgresql+asyncpg://transitden:transitden@localhost:5432/transitden"
     # Server-side cap on how long any single query may run. Protects the small
     # connection pool from being pinned by runaway scans. 0 disables (useful for
     # manual backfill scripts).

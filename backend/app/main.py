@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="RTD Stats API",
+    title="TransitDen API",
     version="0.1.0",
     lifespan=lifespan,
 )

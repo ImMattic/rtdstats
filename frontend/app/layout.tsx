@@ -15,13 +15,13 @@ const description =
 // Runs before hydration so the theme is painted before first paint (no flash).
 // Mirrors lib/useTheme.ts's resolve logic: an explicit "dark"/"light" wins,
 // "system" (or nothing stored yet) follows the OS setting.
-const THEME_INIT = `(function(){try{var p=localStorage.getItem('rtdstats-theme');var t=(p==='dark'||p==='light')?p:((window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark');document.documentElement.dataset.theme=t;}catch(e){document.documentElement.dataset.theme='dark';}})();`;
+const THEME_INIT = `(function(){try{var p=localStorage.getItem('transitden-theme');var t=(p==='dark'||p==='light')?p:((window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark');document.documentElement.dataset.theme=t;}catch(e){document.documentElement.dataset.theme='dark';}})();`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://rtdstats-staging.configmode.com"
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://staging.transitden.com"
   ),
-  title: "RTDstats – Denver RTD Live Tracker",
+  title: "TransitDen – Denver RTD Live Tracker",
   description,
   icons: {
     icon: [
@@ -31,16 +31,16 @@ export const metadata: Metadata = {
     apple: "/apple-touch-icon.png",
   },
   openGraph: {
-    title: "RTDstats – Denver RTD Live Tracker",
+    title: "TransitDen – Denver RTD Live Tracker",
     description,
     type: "website",
     locale: "en_US",
-    siteName: "RTDstats",
+    siteName: "TransitDen",
     images: [{ url: "/og-image.png", width: 1200, height: 630 }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "RTDstats – Denver RTD Live Tracker",
+    title: "TransitDen – Denver RTD Live Tracker",
     description,
     images: ["/og-image.png"],
   },

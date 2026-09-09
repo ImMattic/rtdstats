@@ -1,7 +1,7 @@
 services:
   db:
     image: timescale/timescaledb:latest-pg16
-    container_name: rtdstats-db
+    container_name: transitden-db
     restart: unless-stopped
     # Tuned for the small staging VM (~4 GB RAM). See docker-compose.yml.
     command:
@@ -17,13 +17,13 @@ services:
       - "-c"
       - "max_connections=50"
     environment:
-      POSTGRES_DB: rtdstats
-      POSTGRES_USER: rtdstats
+      POSTGRES_DB: transitden
+      POSTGRES_USER: transitden
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rtdstats -d rtdstats"]
+      test: ["CMD-SHELL", "pg_isready -U transitden -d transitden"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -35,13 +35,13 @@ services:
           memory: 768M
 
   backend:
-    image: aggiematt/rtdstats-backend:staging
-    container_name: rtdstats-backend
+    image: aggiematt/transitden-backend:staging
+    container_name: transitden-backend
     restart: unless-stopped
     ports:
       - "127.0.0.1:8000:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://rtdstats:${DB_PASSWORD}@db:5432/rtdstats
+      DATABASE_URL: postgresql+asyncpg://transitden:${DB_PASSWORD}@db:5432/transitden
       GTFS_RT_VEHICLE_URL: https://www.rtd-denver.com/files/gtfs-rt/VehiclePosition.pb
       GTFS_RT_TRIP_URL: https://www.rtd-denver.com/files/gtfs-rt/TripUpdate.pb
       POLLING_INTERVAL_SECONDS: "10"
@@ -58,8 +58,8 @@ services:
           memory: 1024M
 
   frontend:
-    image: aggiematt/rtdstats-frontend:staging
-    container_name: rtdstats-frontend
+    image: aggiematt/transitden-frontend:staging
+    container_name: transitden-frontend
     restart: unless-stopped
     ports:
       # Set FRONTEND_BIND_IP to this VM's LAN IP in .env so only the Caddy VM

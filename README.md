@@ -1,8 +1,8 @@
-# RTD Stats
+# TransitDen
 
 **Real-time and historical transit tracking for Denver's RTD network.**
 
-RTD Stats pulls live vehicle positions from the RTD GTFS-RT feed every 30 seconds and stores them in a time-series database. A live map shows every rail car and Flatiron Flyer bus moving in real time, and a dashboard surfaces on-time performance, frequency stats, and delay incidents — data that RTD's own tools don't make easy to explore.
+TransitDen pulls live vehicle positions from the RTD GTFS-RT feed every 30 seconds and stores them in a time-series database. A live map shows every rail car and Flatiron Flyer bus moving in real time, and a dashboard surfaces on-time performance, frequency stats, and delay incidents — data that RTD's own tools don't make easy to explore.
 
 ---
 
@@ -30,7 +30,7 @@ RTD Stats pulls live vehicle positions from the RTD GTFS-RT feed every 30 second
 ## Project Structure
 
 ```
-rtdstats/
+transitden/
 ├── backend/
 │   ├── app/
 │   │   ├── api/          # FastAPI route handlers
@@ -67,8 +67,8 @@ rtdstats/
 This is the fastest way to get a fully working local environment.
 
 ```bash
-git clone https://github.com/ImMattic/rtdstats.git
-cd rtdstats
+git clone https://github.com/ImMattic/transitden.git
+cd transitden
 
 # Start all services (database, backend, frontend)
 docker compose up --build
@@ -102,7 +102,7 @@ cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r ../requirements.txt
 
-export DATABASE_URL=postgresql+asyncpg://rtdstats:rtdstats@localhost:5432/rtdstats
+export DATABASE_URL=postgresql+asyncpg://transitden:transitden@localhost:5432/transitden
 
 alembic upgrade head
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
@@ -124,7 +124,7 @@ The `docker-compose.yml` file contains all default environment variables for loc
 
 | Variable | Default | Description |
 |---|---|---|
-| `DATABASE_URL` | `postgresql+asyncpg://rtdstats:rtdstats@db:5432/rtdstats` | TimescaleDB connection string |
+| `DATABASE_URL` | `postgresql+asyncpg://transitden:transitden@db:5432/transitden` | TimescaleDB connection string |
 | `GTFS_RT_VEHICLE_URL` | RTD vehicle positions feed | GTFS-RT protobuf endpoint |
 | `GTFS_RT_TRIP_URL` | RTD trip updates feed | GTFS-RT protobuf endpoint |
 | `POLLING_INTERVAL_SECONDS` | `10` | How often to fetch live positions |
@@ -149,8 +149,8 @@ Contributions are welcome. Here's how to get involved:
 ### 1. Fork and clone
 
 ```bash
-git clone https://github.com/ImMattic/rtdstats.git
-cd rtdstats
+git clone https://github.com/ImMattic/transitden.git
+cd transitden
 ```
 
 ### 2. Create a branch
