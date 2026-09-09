@@ -32,9 +32,9 @@ jobs:
           USER=${{ secrets.DOCKERHUB_USERNAME }}
           SHA=${{ github.sha }}
           if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "tags=${USER}/rtdstats-backend:latest,${USER}/rtdstats-backend:${SHA}" >> "$GITHUB_OUTPUT"
+            echo "tags=${USER}/transitden-backend:latest,${USER}/transitden-backend:${SHA}" >> "$GITHUB_OUTPUT"
           else
-            echo "tags=${USER}/rtdstats-backend:staging,${USER}/rtdstats-backend:staging-${SHA}" >> "$GITHUB_OUTPUT"
+            echo "tags=${USER}/transitden-backend:staging,${USER}/transitden-backend:staging-${SHA}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build and push backend image
@@ -69,9 +69,9 @@ jobs:
           USER=${{ secrets.DOCKERHUB_USERNAME }}
           SHA=${{ github.sha }}
           if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "tags=${USER}/rtdstats-frontend:latest,${USER}/rtdstats-frontend:${SHA}" >> "$GITHUB_OUTPUT"
+            echo "tags=${USER}/transitden-frontend:latest,${USER}/transitden-frontend:${SHA}" >> "$GITHUB_OUTPUT"
           else
-            echo "tags=${USER}/rtdstats-frontend:staging,${USER}/rtdstats-frontend:staging-${SHA}" >> "$GITHUB_OUTPUT"
+            echo "tags=${USER}/transitden-frontend:staging,${USER}/transitden-frontend:staging-${SHA}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build and push frontend image

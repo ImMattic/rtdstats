@@ -49,7 +49,7 @@ const ICONS: Record<ThemePreference, (p: { className?: string }) => React.ReactE
   dark: MoonIcon,
 };
 
-const GITHUB_URL = "https://github.com/ImMattic/rtdstats";
+const GITHUB_URL = "https://github.com/ImMattic/transitden";
 
 /**
  * Navbar theme control. Collapsed, it's a single icon button on a soft chip

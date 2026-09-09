@@ -60,9 +60,9 @@ export default function NavBar() {
           <Link
             href="/"
             className="text-lg font-extrabold tracking-tight transition-opacity hover:opacity-80 sm:text-xl"
-            aria-label="RTDstats — Live Map"
+            aria-label="TransitDen — Live Map"
           >
-            RTD<span className="text-rtd-gold">stats</span>
+            Transit<span className="text-rtd-gold">Den</span>
           </Link>
           <nav
             className="relative hidden sm:flex gap-1"

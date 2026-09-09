@@ -1,6 +1,6 @@
 # Design tokens & the Signal palette
 
-Single source of truth for RTDstats' colour system. The runtime values live in
+Single source of truth for TransitDen's colour system. The runtime values live in
 [`app/globals.css`](app/globals.css) (CSS custom properties) and are exposed as
 Tailwind utilities in [`tailwind.config.ts`](tailwind.config.ts). This file
 explains _what the colours are_ and _why the light and dark themes differ_.

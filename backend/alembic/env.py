@@ -15,7 +15,7 @@ import app.models  # noqa: F401  # registers all ORM classes
 config = context.config
 
 # Use DATABASE_URL env var when running migrations outside Docker
-db_url = os.environ.get("DATABASE_URL", "postgresql+asyncpg://rtdstats:rtdstats@localhost:5432/rtdstats")
+db_url = os.environ.get("DATABASE_URL", "postgresql+asyncpg://transitden:transitden@localhost:5432/transitden")
 # Alembic sync adapter: swap asyncpg → psycopg2 for the synchronous migration runner
 sync_url = db_url.replace("postgresql+asyncpg", "postgresql+psycopg2")
 config.set_main_option("sqlalchemy.url", sync_url)

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RTD Stats — Contributing Guide</title>
+  <title>TransitDen — Contributing Guide</title>
   <style>
     :root {
       --bg:         #0d1117;
@@ -285,12 +285,12 @@
 
   <!-- ── Sidebar ─────────────────────────────────────────────────── -->
   <aside>
-    <div class="sidebar-logo">RTD Stats</div>
+    <div class="sidebar-logo">TransitDen</div>
     <div class="sidebar-subtitle">Contributing Guide</div>
 
     <div class="nav-section">Overview</div>
     <ul>
-      <li><a href="#about">What is RTD Stats?</a></li>
+      <li><a href="#about">What is TransitDen?</a></li>
       <li><a href="#stack">Tech Stack</a></li>
     </ul>
 
@@ -312,8 +312,8 @@
 
     <div class="nav-section">Links</div>
     <ul>
-      <li><a href="https://github.com/ImMattic/rtdstats/issues" target="_blank" rel="noopener">Issues &amp; Bug Reports</a></li>
-      <li><a href="https://github.com/ImMattic/rtdstats" target="_blank" rel="noopener">GitHub Repository</a></li>
+      <li><a href="https://github.com/ImMattic/transitden/issues" target="_blank" rel="noopener">Issues &amp; Bug Reports</a></li>
+      <li><a href="https://github.com/ImMattic/transitden" target="_blank" rel="noopener">GitHub Repository</a></li>
     </ul>
   </aside>
 
@@ -321,9 +321,9 @@
   <main>
 
     <div class="hero">
-      <h1>Contributing to RTD Stats</h1>
+      <h1>Contributing to TransitDen</h1>
       <p>
-        RTD Stats is an open-source real-time and historical transit tracker for Denver's
+        TransitDen is an open-source real-time and historical transit tracker for Denver's
         RTD network. Contributions of all kinds are welcome — bug fixes, new features,
         documentation, and more.
       </p>
@@ -331,9 +331,9 @@
 
     <!-- ABOUT ──────────────────────────────────────────────────────── -->
     <section id="about">
-      <h2>What is RTD Stats?</h2>
+      <h2>What is TransitDen?</h2>
       <p>
-        RTD Stats polls RTD's GTFS-RT protobuf feeds every 30 seconds, stores all vehicle
+        TransitDen polls RTD's GTFS-RT protobuf feeds every 30 seconds, stores all vehicle
         positions and trip updates in <strong>TimescaleDB</strong>, and serves a live map and
         analytics dashboard. The goal is to give Denver riders and transit enthusiasts a
         transparent look at real-time performance data that RTD doesn't surface anywhere else.
@@ -456,8 +456,8 @@ git checkout -b docs/contributing-guide dev</code></pre>
 
       <h3>Full stack (recommended)</h3>
       <p>This is the fastest way to get everything running:</p>
-      <pre><code>git clone https://github.com/ImMattic/rtdstats.git
-cd rtdstats
+      <pre><code>git clone https://github.com/ImMattic/transitden.git
+cd transitden
 git checkout dev
 docker compose up --build</code></pre>
       <p>
@@ -475,7 +475,7 @@ BACKEND_URL=http://localhost:8000 npm run dev</code></pre>
       <pre><code>cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r ../requirements.txt
-export DATABASE_URL=postgresql+asyncpg://rtdstats:rtdstats@localhost:5432/rtdstats
+export DATABASE_URL=postgresql+asyncpg://transitden:transitden@localhost:5432/transitden
 alembic upgrade head
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000</code></pre>
 
@@ -598,14 +598,14 @@ docker compose exec backend alembic upgrade head</code></pre>
     <section id="guidelines">
       <h2>Contributor Guidelines</h2>
       <p>
-        RTD Stats is a community project. To keep things running smoothly, please follow
+        TransitDen is a community project. To keep things running smoothly, please follow
         these guidelines:
       </p>
 
       <h3>Reporting bugs &amp; requesting features</h3>
       <p>
         Before writing any code, please check the
-        <a href="https://github.com/ImMattic/rtdstats/issues" target="_blank" rel="noopener">GitHub Issues tab</a>
+        <a href="https://github.com/ImMattic/transitden/issues" target="_blank" rel="noopener">GitHub Issues tab</a>
         to see if your bug or feature request has already been reported.
       </p>
       <ul>
@@ -652,7 +652,7 @@ docker compose exec backend alembic upgrade head</code></pre>
       <h3>Scope</h3>
       <ul>
         <li>
-          RTD Stats explicitly has <strong>no user accounts or authentication</strong>
+          TransitDen explicitly has <strong>no user accounts or authentication</strong>
           — please don't add any.
         </li>
         <li>
