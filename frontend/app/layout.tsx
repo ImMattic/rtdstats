@@ -18,9 +18,12 @@ const description =
 const THEME_INIT = `(function(){try{var p=localStorage.getItem('transitden-theme');var t=(p==='dark'||p==='light')?p:((window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark');document.documentElement.dataset.theme=t;}catch(e){document.documentElement.dataset.theme='dark';}})();`;
 
 export const metadata: Metadata = {
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://staging.transitden.com"
-  ),
+  // Server-only (no NEXT_PUBLIC_ prefix) on purpose: `metadata` is evaluated in
+  // the Next.js server, and NEXT_PUBLIC_* vars are inlined at *build* time — so a
+  // value set in docker-compose would never reach a prebuilt image. SITE_URL is
+  // read at runtime instead. It resolves the relative og:image/twitter:image
+  // paths below to absolute URLs, which link-preview crawlers require.
+  metadataBase: new URL(process.env.SITE_URL ?? "https://staging.transitden.com"),
   title: "TransitDen – Denver RTD Live Tracker",
   description,
   icons: {
