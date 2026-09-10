@@ -9,7 +9,7 @@ export default function SiteFooter() {
 
   return (
     <footer className="border-t border-line bg-card py-2 text-center text-xs text-fg-subtle">
-      Made with ❤️ in Broomfield, CO
+      Made with ❤️ in Broomfield, CO. Not affiliated with RTD.
     </footer>
   );
 }

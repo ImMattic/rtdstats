@@ -204,6 +204,22 @@ body {
   animation: cycle-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* Map status widget — the "time until the carousel advances" outline. Starts as
+   a full ring and retreats to nothing as the cycle runs out. Duration must match
+   CYCLE_MS in components/map/MapStatusBar.tsx. Runs on a <rect pathLength="1">,
+   so the offset is normalised 0–1 regardless of size. */
+@keyframes status-ring-sweep {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: 1;
+  }
+}
+.animate-status-ring {
+  animation: status-ring-sweep 15s linear;
+}
+
 /* Map status widget — search field taking over the pill */
 @keyframes search-in {
   from {
@@ -217,6 +233,98 @@ body {
 }
 .animate-search-in {
   animation: search-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── Filter surfaces ──────────────────────────────────────────────────────
+   The filter menu is a popover on a pointer device and a bottom sheet on a
+   phone, so it needs both entrances plus the scrim that only the sheet uses. */
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-popover-in {
+  animation: popover-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: top center;
+  will-change: transform, opacity;
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+.animate-sheet-in {
+  animation: sheet-in 300ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-scrim-in {
+  animation: scrim-in 220ms ease-out;
+}
+
+/* Filter sections reveal in sequence as the menu opens — `--stagger` is set
+   per row so one keyframe serves the whole list. */
+@keyframes stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-stagger-in {
+  animation: stagger-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--stagger, 0ms);
+}
+
+/* The active-filter count badge pops when it changes. */
+@keyframes badge-pop {
+  0% {
+    transform: scale(0.6);
+  }
+  60% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.animate-badge-pop {
+  animation: badge-pop 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Collapsible body: grid-template-rows 0fr→1fr animates to the content's own
+   height without measuring it, which a max-height fudge can't do. */
+.collapsible {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.collapsible[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+.collapsible > .collapsible-inner {
+  min-height: 0;
+  overflow: hidden;
 }
 
 @layer components {
@@ -284,9 +392,18 @@ input[type="range"].rtd-range::-moz-range-thumb {
 
 @media (prefers-reduced-motion: reduce) {
   .animate-cycle-in,
+  .animate-status-ring,
   .animate-search-in,
-  .animate-dialog-in {
+  .animate-dialog-in,
+  .animate-popover-in,
+  .animate-sheet-in,
+  .animate-scrim-in,
+  .animate-stagger-in,
+  .animate-badge-pop {
     animation: none;
+  }
+  .collapsible {
+    transition: none;
   }
   body {
     transition: none;

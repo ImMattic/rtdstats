@@ -28,6 +28,7 @@ import {
   type HistoricalParams,
   type ActiveVehiclesParams,
   type VehicleTripParams,
+  type RouteScope,
 } from "./api";
 
 // Analytics rollups change slowly (hourly/daily aggregates) — refresh every 5 min.
@@ -85,20 +86,20 @@ export function useHistorical(params: HistoricalParams) {
   });
 }
 
-export function useOnTime(days = 7, routeId?: string) {
+export function useOnTime(days = 7, scope?: RouteScope) {
   return useQuery({
-    queryKey: ["ontime", days, routeId],
-    queryFn: () => fetchOnTime(days, routeId),
+    queryKey: ["ontime", days, scope],
+    queryFn: () => fetchOnTime(days, scope),
     // Multi-day on-time stats barely move minute to minute.
     refetchInterval: 300_000,
     staleTime: 300_000,
   });
 }
 
-export function useFrequency(routeId?: string) {
+export function useFrequency(scope?: RouteScope) {
   return useQuery({
-    queryKey: ["frequency", routeId],
-    queryFn: () => fetchFrequency(routeId),
+    queryKey: ["frequency", scope],
+    queryFn: () => fetchFrequency(scope),
     refetchInterval: 30_000,
     staleTime: 30_000,
   });
@@ -113,55 +114,55 @@ export function useAlerts() {
   });
 }
 
-export function useOverview(days = 7, routeId?: string) {
+export function useOverview(days = 7, scope?: RouteScope) {
   return useQuery({
-    queryKey: ["overview", days, routeId],
-    queryFn: () => fetchOverview(days, routeId),
+    queryKey: ["overview", days, scope],
+    queryFn: () => fetchOverview(days, scope),
     refetchInterval: ANALYTICS_INTERVAL,
     staleTime: ANALYTICS_INTERVAL,
   });
 }
 
-export function useOnTimeTrend(days = 14, routeId?: string, granularity: "hour" | "day" = "day") {
+export function useOnTimeTrend(days = 14, scope?: RouteScope, granularity: "hour" | "day" = "day") {
   return useQuery({
-    queryKey: ["ontimeTrend", days, routeId, granularity],
-    queryFn: () => fetchOnTimeTrend(days, routeId, granularity),
+    queryKey: ["ontimeTrend", days, scope, granularity],
+    queryFn: () => fetchOnTimeTrend(days, scope, granularity),
     refetchInterval: ANALYTICS_INTERVAL,
     staleTime: ANALYTICS_INTERVAL,
   });
 }
 
-export function useHeatmap(days = 30, routeId?: string) {
+export function useHeatmap(days = 30, scope?: RouteScope) {
   return useQuery({
-    queryKey: ["heatmap", days, routeId],
-    queryFn: () => fetchHeatmap(days, routeId),
+    queryKey: ["heatmap", days, scope],
+    queryFn: () => fetchHeatmap(days, scope),
     refetchInterval: ANALYTICS_INTERVAL,
     staleTime: ANALYTICS_INTERVAL,
   });
 }
 
-export function useDistribution(days = 7, routeId?: string) {
+export function useDistribution(days = 7, scope?: RouteScope) {
   return useQuery({
-    queryKey: ["distribution", days, routeId],
-    queryFn: () => fetchDistribution(days, routeId),
+    queryKey: ["distribution", days, scope],
+    queryFn: () => fetchDistribution(days, scope),
     refetchInterval: ANALYTICS_INTERVAL,
     staleTime: ANALYTICS_INTERVAL,
   });
 }
 
-export function useWorstStops(days = 14, routeId?: string, limit = 15) {
+export function useWorstStops(days = 14, scope?: RouteScope, limit = 15) {
   return useQuery({
-    queryKey: ["worstStops", days, routeId, limit],
-    queryFn: () => fetchWorstStops(days, routeId, limit),
+    queryKey: ["worstStops", days, scope, limit],
+    queryFn: () => fetchWorstStops(days, scope, limit),
     refetchInterval: ANALYTICS_INTERVAL,
     staleTime: ANALYTICS_INTERVAL,
   });
 }
 
-export function useServiceDelivery(days = 7, routeId?: string) {
+export function useServiceDelivery(days = 7, scope?: RouteScope) {
   return useQuery({
-    queryKey: ["serviceDelivery", days, routeId],
-    queryFn: () => fetchServiceDelivery(days, routeId),
+    queryKey: ["serviceDelivery", days, scope],
+    queryFn: () => fetchServiceDelivery(days, scope),
     refetchInterval: ANALYTICS_INTERVAL,
     staleTime: ANALYTICS_INTERVAL,
   });
@@ -197,6 +198,10 @@ export function useActiveVehicles(params: ActiveVehiclesParams) {
     queryKey: ["activeVehicles", params],
     queryFn: () => fetchActiveVehicles(params),
     enabled: Boolean(params.start || params.end),
+    // Hold the last result while a new page or filter set is in flight. The
+    // response carries the filter menu's own option counts, so dropping to
+    // undefined would empty the menu underneath whoever is using it.
+    placeholderData: (previous) => previous,
   });
 }
 

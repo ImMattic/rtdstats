@@ -33,6 +33,38 @@ export function computeTripStatus(inProgress: boolean, reachedTerminus: boolean)
   return reachedTerminus ? "complete" : "incomplete";
 }
 
+// ── Occupancy ───────────────────────────────────────────────────────────────
+// GTFS-realtime OccupancyStatus, least to most crowded, with "UNKNOWN" standing
+// in for a vehicle that reported nothing. Shared by the trips table and both
+// filter menus so one vocabulary covers the site.
+
+export const OCCUPANCY_ORDER = [
+  "EMPTY",
+  "MANY_SEATS_AVAILABLE",
+  "FEW_SEATS_AVAILABLE",
+  "STANDING_ROOM_ONLY",
+  "CRUSHED_STANDING_ROOM_ONLY",
+  "FULL",
+  "NOT_ACCEPTING_PASSENGERS",
+  "UNKNOWN",
+] as const;
+
+const OCCUPANCY_LABELS: Record<string, string> = {
+  EMPTY: "Empty",
+  MANY_SEATS_AVAILABLE: "Many seats",
+  FEW_SEATS_AVAILABLE: "Few seats",
+  STANDING_ROOM_ONLY: "Standing",
+  CRUSHED_STANDING_ROOM_ONLY: "Crushed",
+  FULL: "Full",
+  NOT_ACCEPTING_PASSENGERS: "Not accepting",
+  UNKNOWN: "Not reported",
+};
+
+export function occupancyLabel(key: string | null | undefined): string {
+  if (!key) return OCCUPANCY_LABELS.UNKNOWN;
+  return OCCUPANCY_LABELS[key] ?? formatStatusLabel(key);
+}
+
 /** Convert a hex color string (with or without #) to a CSS color. */
 export function routeColor(hex: string): string {
   const clean = hex.startsWith("#") ? hex : `#${hex}`;
@@ -60,27 +92,26 @@ export function bestTextOn(hex: string): string {
 }
 
 /**
- * Frequency headway → marker/badge color, re-stepped per theme so the ramp
- * clears contrast against both the dark ("Last Train") and light ("First
- * Train") chart surfaces. Pair with `bestTextOn` for any fixed-text badge.
+ * Frequency headway → marker/badge color. A four-step good→bad ramp: Signal
+ * Teal, then gold, then Signal Orange, then Signal Red (see DESIGN_TOKENS.md).
+ * Re-stepped per theme so each clears contrast against both the dark and light
+ * map/chart surfaces. Pair with `bestTextOn` for any fixed-text badge. Keep the
+ * thresholds in lock-step with `headwayBand` in `lib/mapFilters.ts` and the map
+ * legend.
  */
 export function headwayColor(headwayMinutes: number | null, mode: ResolvedTheme = "dark"): string {
   if (mode === "light") {
-    if (headwayMinutes === null || headwayMinutes === 0) return "#6b7280";
-    if (headwayMinutes < 15) return "#1B7A3D";
-    if (headwayMinutes <= 20) return "#7CB342";
-    if (headwayMinutes <= 30) return "#F2C12E";
-    if (headwayMinutes <= 40) return "#EF8C28";
-    if (headwayMinutes <= 50) return "#D9512E";
-    return "#991B1B";
+    if (headwayMinutes === null || headwayMinutes === 0) return "#6b7280"; // unknown – gray
+    if (headwayMinutes < 15) return "#007A6B"; // <15 min – Signal Teal, deep
+    if (headwayMinutes < 30) return "#A16207"; // 15–30 min – gold, deep
+    if (headwayMinutes < 60) return "#B44D08"; // 30–60 min – Signal Orange, deep
+    return "#C50C2B";                          // 60+ min – Signal Red
   }
   if (headwayMinutes === null || headwayMinutes === 0) return "#7C838E"; // unknown – gray
-  if (headwayMinutes < 15) return "#368F51";  // <15 min – green
-  if (headwayMinutes <= 20) return "#7CB342"; // ≤20 min – yellow-green
-  if (headwayMinutes <= 30) return "#F2C12E"; // ≤30 min – yellow
-  if (headwayMinutes <= 40) return "#EF8C28"; // ≤40 min – orange
-  if (headwayMinutes <= 50) return "#DA522F"; // ≤50 min – orange-red
-  return "#CD5B4F";                           // 60+ min – deep red
+  if (headwayMinutes < 15) return "#009483"; // <15 min – RTD Teal
+  if (headwayMinutes < 30) return "#F2C12E"; // 15–30 min – gold
+  if (headwayMinutes < 60) return "#F6871F"; // 30–60 min – RTD Orange
+  return "#F03E48";                          // 60+ min – RTD Red
 }
 
 /** Format seconds as "+Xm Ys" / "" / "-Xm Ys". Returns "" for exactly 0 (badge already says "On time"). */
