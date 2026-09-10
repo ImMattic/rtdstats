@@ -8,6 +8,7 @@ import { useRailShapes, useRouteShape, useRouteStops } from "@/lib/hooks";
 import { headwayColor, formatStatusLabel } from "@/lib/utils";
 import { useTheme } from "@/lib/useTheme";
 import { createVehicleIcon, iconPx } from "./vehicleIcon";
+import MapLegend from "./MapLegend";
 
 const DENVER_CENTER: [number, number] = [39.7392, -104.9903];
 const DEFAULT_ZOOM = 11;
@@ -423,9 +424,12 @@ export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, 
         subdomains="abcd"
         maxZoom={19}
       />
-      {/* Bottom-right corner: Leaflet prepends each bottom control, so mounting
-          attribution first leaves the zoom buttons stacked above it. */}
+      {/* Bottom-right corner: Leaflet prepends each bottom control, so this
+          mount order stacks them attribution → headway legend → zoom from the
+          bottom up. The legend is a control (not a floating overlay) so the map
+          drag/cursor stops at its edge. */}
       <AttributionControl position="bottomright" />
+      <MapLegend className={selectedVehicle || selectedStop ? "hidden sm:block" : undefined} />
       <ZoomControl position="bottomright" />
       <FlyToHandler flyTo={flyTo} />
       <OneFingerZoom />
