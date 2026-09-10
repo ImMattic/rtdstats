@@ -6,7 +6,6 @@ import { useVehicles, useStopInfo, useAlerts } from "@/lib/hooks";
 import type { StopInfo, StuckAlert, VehiclePosition } from "@/lib/types";
 import VehicleDialog from "@/components/map/VehicleDialog";
 import StopDialog from "@/components/map/StopDialog";
-import MapLegend from "@/components/map/MapLegend";
 import MapStatusBar from "@/components/map/MapStatusBar";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import {
@@ -161,12 +160,9 @@ function HomePageInner() {
           />
         )}
 
-        {/* Headway colour key — bottom-left, clear of the zoom/attribution stack.
-            On narrow screens it shares that corner with the popup, so hide it
-            there while a dialog is open; on sm+ there's room for both. */}
-        {!isError && (
-          <MapLegend className={selected || selectedStop ? "hidden sm:block" : undefined} />
-        )}
+        {/* The headway colour key now lives inside the map itself, mounted as a
+            Leaflet control between the attribution bar and the zoom buttons —
+            see VehicleMap. */}
 
         {/* Vehicle dialog — hidden while a stop dialog is open */}
         {selected && !selectedStop && (
