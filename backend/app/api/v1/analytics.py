@@ -46,6 +46,7 @@ from app.schemas.analytics import (
     WorstStop,
     WorstStopsResponse,
 )
+from app.api.v1._route_filter import resolve_route_ids
 from app.services.gtfs_decoder import load_gtfs_static_data
 from app.services.gtfs_schedule import load_route_direction_info, load_schedule_summary
 
@@ -112,25 +113,25 @@ _OVERVIEW_ONTIME_SQL = """
         count(DISTINCT route_id)                        AS routes
     FROM trip_ontime_hourly
     WHERE bucket >= :start AND bucket < :end
-      AND (:route_id IS NULL OR route_id = :route_id)
+      AND (:route_ids IS NULL OR route_id = ANY(:route_ids))
 """
 
 _OBSERVED_TRIPS_SQL = """
     SELECT count(*)::bigint AS trips
     FROM trip_activity_daily
     WHERE bucket >= :start AND bucket < :end
-      AND (:route_id IS NULL OR route_id = :route_id)
+      AND (:route_ids IS NULL OR route_id = ANY(:route_ids))
 """
 
 
 async def _ontime_totals(db: AsyncSession, start: datetime, end: datetime,
-                         route_id: str | None) -> dict[str, float]:
+                         route_ids: list[str] | None) -> dict[str, float]:
     row = (await db.execute(
         text(_OVERVIEW_ONTIME_SQL).bindparams(
             bindparam("start"), bindparam("end"),
-            bindparam("route_id", type_=String),
+            bindparam("route_ids", type_=ARRAY(String)),
         ),
-        {"start": start, "end": end, "route_id": route_id},
+        {"start": start, "end": end, "route_ids": route_ids},
     )).one()
     on_time, late, early, obs, dsum, dsumsq, routes = row
     return {
@@ -162,44 +163,47 @@ def _stddev(t: dict[str, float]) -> float:
 async def overview(
     db: Annotated[AsyncSession, Depends(get_db)],
     route_id: Annotated[str | None, Query()] = None,
+    route_ids: Annotated[str | None, Query()] = None,
+    modes: Annotated[str | None, Query()] = None,
     days: Annotated[int, Query(ge=1, le=90)] = 7,
 ) -> OverviewResponse:
+    rids = resolve_route_ids(route_id, route_ids, modes)
     now = datetime.now(tz=timezone.utc)
     start = now - timedelta(days=days)
     prev_start = start - timedelta(days=days)
 
-    cur = await _ontime_totals(db, start, now, route_id)
-    prev = await _ontime_totals(db, prev_start, start, route_id)
+    cur = await _ontime_totals(db, start, now, rids)
+    prev = await _ontime_totals(db, prev_start, start, rids)
 
     observed = (await db.execute(
         text(_OBSERVED_TRIPS_SQL).bindparams(
             bindparam("start"), bindparam("end"),
-            bindparam("route_id", type_=String),
+            bindparam("route_ids", type_=ARRAY(String)),
         ),
-        {"start": start, "end": now, "route_id": route_id},
+        {"start": start, "end": now, "route_ids": rids},
     )).scalar() or 0
     observed_prev = (await db.execute(
         text(_OBSERVED_TRIPS_SQL).bindparams(
             bindparam("start"), bindparam("end"),
-            bindparam("route_id", type_=String),
+            bindparam("route_ids", type_=ARRAY(String)),
         ),
-        {"start": prev_start, "end": start, "route_id": route_id},
+        {"start": prev_start, "end": start, "route_ids": rids},
     )).scalar() or 0
 
     routes_static, _ = load_gtfs_static_data()
-    route_ids = [route_id] if route_id else list(routes_static.keys())
+    sched_route_ids = rids if rids else list(routes_static.keys())
 
     def _sched(start_dt: datetime, end_dt: datetime) -> int:
         day_counts = _count_daytypes(start_dt, end_dt)
-        return sum(_scheduled_trips(rid, day_counts) for rid in route_ids)
+        return sum(_scheduled_trips(rid, day_counts) for rid in sched_route_ids)
 
     sched = _sched(start, now)
     sched_prev = _sched(prev_start, start)
     delivered = round(min(100.0, 100 * observed / sched), 1) if sched else 0.0
     delivered_prev = round(min(100.0, 100 * observed_prev / sched_prev), 1) if sched_prev else 0.0
 
-    # Latest ridership (system or route).
-    rship = await _latest_ridership(db, route_id)
+    # Latest ridership (system or the selected routes).
+    rship = await _latest_ridership(db, rids)
 
     return OverviewResponse(
         period_days=days,
@@ -223,9 +227,12 @@ async def overview(
 async def ontime_trend(
     db: Annotated[AsyncSession, Depends(get_db)],
     route_id: Annotated[str | None, Query()] = None,
+    route_ids: Annotated[str | None, Query()] = None,
+    modes: Annotated[str | None, Query()] = None,
     days: Annotated[int, Query(ge=1, le=90)] = 14,
     granularity: Annotated[str, Query(pattern="^(hour|day)$")] = "day",
 ) -> TrendResponse:
+    rids = resolve_route_ids(route_id, route_ids, modes)
     if granularity == "hour":
         t_expr = "bucket"
     else:
@@ -241,13 +248,13 @@ async def ontime_trend(
             sum(delay_sum)::bigint                         AS delay_sum
         FROM trip_ontime_hourly
         WHERE bucket >= :cutoff
-          AND (:route_id IS NULL OR route_id = :route_id)
+          AND (:route_ids IS NULL OR route_id = ANY(:route_ids))
         GROUP BY t
         ORDER BY t
     """
     rows = (await db.execute(
-        text(sql).bindparams(bindparam("cutoff"), bindparam("route_id", type_=String)),
-        {"cutoff": _cutoff(days), "route_id": route_id},
+        text(sql).bindparams(bindparam("cutoff"), bindparam("route_ids", type_=ARRAY(String))),
+        {"cutoff": _cutoff(days), "route_ids": rids},
     )).all()
 
     points: list[TrendPoint] = []
@@ -268,8 +275,11 @@ async def ontime_trend(
 async def ontime_heatmap(
     db: Annotated[AsyncSession, Depends(get_db)],
     route_id: Annotated[str | None, Query()] = None,
+    route_ids: Annotated[str | None, Query()] = None,
+    modes: Annotated[str | None, Query()] = None,
     days: Annotated[int, Query(ge=1, le=90)] = 30,
 ) -> HeatmapResponse:
+    rids = resolve_route_ids(route_id, route_ids, modes)
     sql = f"""
         SELECT
             EXTRACT(dow  FROM bucket AT TIME ZONE '{_TZ}')::int AS dow,
@@ -281,12 +291,12 @@ async def ontime_heatmap(
             sum(delay_sum)::bigint                         AS delay_sum
         FROM trip_ontime_hourly
         WHERE bucket >= :cutoff
-          AND (:route_id IS NULL OR route_id = :route_id)
+          AND (:route_ids IS NULL OR route_id = ANY(:route_ids))
         GROUP BY dow, hour
     """
     rows = (await db.execute(
-        text(sql).bindparams(bindparam("cutoff"), bindparam("route_id", type_=String)),
-        {"cutoff": _cutoff(days), "route_id": route_id},
+        text(sql).bindparams(bindparam("cutoff"), bindparam("route_ids", type_=ARRAY(String))),
+        {"cutoff": _cutoff(days), "route_ids": rids},
     )).all()
 
     cells = []
@@ -307,8 +317,11 @@ async def ontime_heatmap(
 async def delay_distribution(
     db: Annotated[AsyncSession, Depends(get_db)],
     route_id: Annotated[str | None, Query()] = None,
+    route_ids: Annotated[str | None, Query()] = None,
+    modes: Annotated[str | None, Query()] = None,
     days: Annotated[int, Query(ge=1, le=90)] = 7,
 ) -> DistributionResponse:
+    rids = resolve_route_ids(route_id, route_ids, modes)
     sql = """
         SELECT
             sum(very_early)::bigint    AS very_early,
@@ -322,11 +335,11 @@ async def delay_distribution(
             sum(delay_sumsq)::numeric  AS delay_sumsq
         FROM trip_ontime_hourly
         WHERE bucket >= :cutoff
-          AND (:route_id IS NULL OR route_id = :route_id)
+          AND (:route_ids IS NULL OR route_id = ANY(:route_ids))
     """
     row = (await db.execute(
-        text(sql).bindparams(bindparam("cutoff"), bindparam("route_id", type_=String)),
-        {"cutoff": _cutoff(days), "route_id": route_id},
+        text(sql).bindparams(bindparam("cutoff"), bindparam("route_ids", type_=ARRAY(String))),
+        {"cutoff": _cutoff(days), "route_ids": rids},
     )).one()
     counts = {k: (row[i] or 0) for i, (k, _) in enumerate(_DELAY_BINS)}
     obs = row[6] or 0
@@ -356,10 +369,13 @@ async def delay_distribution(
 async def worst_stops(
     db: Annotated[AsyncSession, Depends(get_db)],
     route_id: Annotated[str | None, Query()] = None,
+    route_ids: Annotated[str | None, Query()] = None,
+    modes: Annotated[str | None, Query()] = None,
     days: Annotated[int, Query(ge=1, le=90)] = 14,
     limit: Annotated[int, Query(ge=1, le=100)] = 15,
     min_observations: Annotated[int, Query(ge=1)] = 20,
 ) -> WorstStopsResponse:
+    rids = resolve_route_ids(route_id, route_ids, modes)
     sql = """
         SELECT
             stop_id,
@@ -369,7 +385,7 @@ async def worst_stops(
             sum(delay_sum)::bigint    AS delay_sum
         FROM stop_delay_daily
         WHERE bucket >= :cutoff
-          AND (:route_id IS NULL OR route_id = :route_id)
+          AND (:route_ids IS NULL OR route_id = ANY(:route_ids))
         GROUP BY stop_id
         HAVING sum(observations) >= :min_obs
         ORDER BY (sum(delay_sum)::float / NULLIF(sum(observations), 0)) DESC
@@ -377,10 +393,10 @@ async def worst_stops(
     """
     rows = (await db.execute(
         text(sql).bindparams(
-            bindparam("cutoff"), bindparam("route_id", type_=String),
+            bindparam("cutoff"), bindparam("route_ids", type_=ARRAY(String)),
             bindparam("min_obs"), bindparam("limit"),
         ),
-        {"cutoff": _cutoff(days), "route_id": route_id,
+        {"cutoff": _cutoff(days), "route_ids": rids,
          "min_obs": min_observations, "limit": limit},
     )).all()
 
@@ -405,8 +421,11 @@ async def worst_stops(
 async def service_delivery(
     db: Annotated[AsyncSession, Depends(get_db)],
     route_id: Annotated[str | None, Query()] = None,
+    route_ids: Annotated[str | None, Query()] = None,
+    modes: Annotated[str | None, Query()] = None,
     days: Annotated[int, Query(ge=1, le=90)] = 7,
 ) -> ServiceDeliveryResponse:
+    rids = resolve_route_ids(route_id, route_ids, modes)
     now = datetime.now(tz=timezone.utc)
     start = now - timedelta(days=days)
 
@@ -414,12 +433,12 @@ async def service_delivery(
         SELECT route_id, count(*)::bigint AS trips
         FROM trip_activity_daily
         WHERE bucket >= :cutoff
-          AND (:route_id IS NULL OR route_id = :route_id)
+          AND (:route_ids IS NULL OR route_id = ANY(:route_ids))
         GROUP BY route_id
     """
     rows = (await db.execute(
-        text(sql).bindparams(bindparam("cutoff"), bindparam("route_id", type_=String)),
-        {"cutoff": start, "route_id": route_id},
+        text(sql).bindparams(bindparam("cutoff"), bindparam("route_ids", type_=ARRAY(String))),
+        {"cutoff": start, "route_ids": rids},
     )).all()
 
     routes_static, _ = load_gtfs_static_data()
@@ -670,11 +689,12 @@ async def _build_occupancy(
 
 # ── Ridership ───────────────────────────────────────────────────────────────
 
-async def _latest_ridership(db: AsyncSession, route_id: str | None) -> tuple[str | None, int | None, int | None]:
-    """Return (latest_month_iso, latest_total, prev_total) for system or route."""
+async def _latest_ridership(db: AsyncSession, route_ids: list[str] | None) -> tuple[str | None, int | None, int | None]:
+    """Return (latest_month_iso, latest_total, prev_total) for the system or the
+    given routes (summed)."""
     stmt = select(RidershipMonthly.month, RidershipMonthly.boardings)
-    if route_id:
-        stmt = stmt.where(RidershipMonthly.route_id == route_id)
+    if route_ids:
+        stmt = stmt.where(RidershipMonthly.route_id.in_(route_ids))
     rows = (await db.execute(stmt)).all()
     if not rows:
         return None, None, None
@@ -723,7 +743,7 @@ async def ridership(
         ))
     by_route_latest.sort(key=lambda r: r.boardings, reverse=True)
 
-    latest, latest_total, prev_total = await _latest_ridership(db, route_id)
+    latest, latest_total, prev_total = await _latest_ridership(db, [route_id] if route_id else None)
     return RidershipResponse(
         route_id=route_id, available=True,
         latest_month=latest, latest_total=latest_total, prev_total=prev_total,

@@ -82,9 +82,12 @@ function TripsContent() {
   const [endLocal, setEndLocal] = useState(() =>
     urlEnd ? isoToLocalInput(urlEnd) : toLocalInput(new Date()),
   );
-  // Edits sit in a draft until Load / Apply, so the table doesn't refetch on
-  // every tick of a checkbox.
+  // Three tiers, narrowing toward the table:
+  //   draft   — live edits inside the menu
+  //   staged  — what "Apply filters" locked in; drives the chip row, nothing else
+  //   URL     — what "Load trips" committed; the only thing the query reads
   const [draft, setDraft] = useState<TripFilters>(appliedFilters);
+  const [staged, setStaged] = useState<TripFilters>(appliedFilters);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const PAGE_SIZE_OPTIONS = [15, 30, 50, 100] as const;
@@ -96,6 +99,7 @@ function TripsContent() {
     if (urlStart) setStartLocal(isoToLocalInput(urlStart));
     if (urlEnd) setEndLocal(isoToLocalInput(urlEnd));
     setDraft(appliedFilters);
+    setStaged(appliedFilters);
     setPage(1);
   }, [urlStart, urlEnd, appliedFilters]);
 
@@ -192,18 +196,26 @@ function TripsContent() {
     [router],
   );
 
+  /** "Load trips" — the only path that moves the table. Commits the staged set
+   *  (chips), not the raw draft, and tucks the menu away. */
   const handleLoad = useCallback(() => {
     const startIso = localInputToIso(startLocal);
     const endIso = localInputToIso(endLocal);
     if (!startIso || !endIso) return;
     setPage(1);
-    pushQuery(draft, startIso, endIso);
-  }, [draft, startLocal, endLocal, pushQuery]);
+    setMenuOpen(false);
+    pushQuery(staged, startIso, endIso);
+  }, [staged, startLocal, endLocal, pushQuery]);
 
-  /** Removing a chip is an unambiguous instruction, so it applies straight away. */
+  /** "Apply filters" inside the menu — stage the draft as chips only. */
+  const stageFilters = useCallback(() => setStaged(draft), [draft]);
+
+  /** Removing a chip / Reset / Clear is an unambiguous instruction, so it drops
+   *  the condition from every tier and reloads straight away. */
   const applyImmediately = useCallback(
     (filters: TripFilters) => {
       setDraft(filters);
+      setStaged(filters);
       setPage(1);
       pushQuery(filters, fetchStart, fetchEnd);
     },
@@ -250,14 +262,15 @@ function TripsContent() {
     [sortedRoutes, facets],
   );
 
+  // Chips mirror the staged set, which "Apply filters" fills and "Load trips"
+  // then commits — so a chip can be showing before the table has caught up.
   const chips = useMemo(
-    () => tripFilterChips(appliedFilters, routeNameOf),
-    [appliedFilters, routeNameOf],
+    () => tripFilterChips(staged, routeNameOf),
+    [staged, routeNameOf],
   );
 
   const appliedCount = countActiveTripFilters(appliedFilters);
-  const draftCount = countActiveTripFilters(draft);
-  const draftDiffers = !tripFiltersEqual(draft, appliedFilters);
+  const stagedCount = countActiveTripFilters(staged);
 
   const matched = data?.vehicle_count ?? 0;
   const windowTotal = data?.window_count ?? 0;
@@ -311,29 +324,23 @@ function TripsContent() {
             type="button"
             onClick={() => setMenuOpen((o) => !o)}
             aria-expanded={menuOpen}
+            aria-label="Filter trips"
             className={cn(
-              "press flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm font-medium transition-[transform,background-color,border-color,color] duration-150",
-              draftCount > 0 || menuOpen
+              "press flex items-center gap-1.5 rounded border px-2.5 py-1.5 text-sm font-medium transition-[transform,background-color,border-color,color] duration-150",
+              stagedCount > 0 || menuOpen
                 ? "border-accent bg-accent/10 text-accent"
                 : "border-line bg-card text-fg-muted hover:border-line-strong hover:text-fg",
             )}
           >
             <FilterIcon className="h-4 w-4" />
-            More filters
-            {draftCount > 0 && (
+            {stagedCount > 0 && (
               <span
-                key={draftCount}
+                key={stagedCount}
                 className="animate-badge-pop rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold leading-none text-accent-ink"
               >
-                {draftCount}
+                {stagedCount}
               </span>
             )}
-            <ChevronIcon
-              className={cn(
-                "h-3.5 w-3.5 transition-transform duration-300 ease-out motion-reduce:transition-none",
-                menuOpen && "rotate-180",
-              )}
-            />
           </button>
 
           <button
@@ -348,12 +355,6 @@ function TripsContent() {
           >
             Load trips
           </button>
-
-          {draftDiffers && (
-            <span className="animate-cycle-in self-center text-xs text-warn">
-              Filters changed — load to apply
-            </span>
-          )}
         </div>
 
         <p className="mt-3 text-xs text-fg-subtle">{describeLimits(limits)}</p>
@@ -365,8 +366,8 @@ function TripsContent() {
           facets={facets}
           routes={sortedRoutes}
           onReset={() => applyImmediately(EMPTY_TRIP_FILTERS)}
-          onApply={handleLoad}
-          applyDisabled={!isValidRange}
+          onApply={stageFilters}
+          applyDisabled={tripFiltersEqual(draft, staged)}
         />
 
         {chips.length > 0 && (
@@ -560,18 +561,6 @@ function TripsContent() {
         )}
       </Card>
     </div>
-  );
-}
-
-function ChevronIcon({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-      <path
-        fillRule="evenodd"
-        d="M5.22 7.22a.75.75 0 0 1 1.06 0L10 10.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 8.28a.75.75 0 0 1 0-1.06Z"
-        clipRule="evenodd"
-      />
-    </svg>
   );
 }
 

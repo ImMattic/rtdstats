@@ -124,6 +124,25 @@ export function mapFiltersActive(f: MapFilters): boolean {
   return countActiveMapFilters(f) > 0;
 }
 
+/** Order-insensitive equality, so the Apply button can tell a real edit from a no-op. */
+export function mapFiltersEqual(a: MapFilters, b: MapFilters): boolean {
+  const sameList = (x: string[], y: string[]) => {
+    if (x.length !== y.length) return false;
+    const s = new Set(x);
+    return y.every((v) => s.has(v));
+  };
+  return (
+    sameList(a.modes, b.modes) &&
+    sameList(a.routeIds, b.routeIds) &&
+    sameList(a.vehicleKeys, b.vehicleKeys) &&
+    sameList(a.headway, b.headway) &&
+    sameList(a.occupancy, b.occupancy) &&
+    sameList(a.punctuality, b.punctuality) &&
+    sameList(a.movement, b.movement) &&
+    a.stuckOnly === b.stuckOnly
+  );
+}
+
 /**
  * Apply the filter set. Groups are ANDed with each other and ORed within
  * themselves — an empty group means "don't narrow on this", which is what makes

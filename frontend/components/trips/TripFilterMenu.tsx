@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/FilterControls";
 import type { TripFilters } from "@/lib/tripFilters";
 import { countActiveTripFilters } from "@/lib/tripFilters";
+import { modeOf } from "@/lib/mapFilters";
 import type { RouteInfo, TripFacets } from "@/lib/types";
 import { occupancyLabel, OCCUPANCY_ORDER, routeColor } from "@/lib/utils";
 
@@ -24,8 +25,9 @@ interface Props {
   /** Every RTD route, from the static GTFS bundle. */
   routes: RouteInfo[];
   onReset: () => void;
+  /** Stages the current edits as chips — the table doesn't move until "Load trips". */
   onApply: () => void;
-  /** Disabled while the date range on screen is one the API would reject. */
+  /** Greyed out until the draft differs from what's already staged as chips. */
   applyDisabled?: boolean;
 }
 
@@ -57,12 +59,14 @@ type TripFilterListKey = Exclude<
 >;
 
 /**
- * The Trip Explorer's "More filters" drawer.
+ * The Trip Explorer's filter drawer.
  *
  * It drops out of the filter bar rather than floating over it, because the date
  * range above stays part of the same decision — you pick a window and then say
- * what you want out of it. Edits stay in the page's draft until Apply, which is
- * the same action as Load: both push the whole set into the URL and refetch.
+ * what you want out of it. "Apply filters" only stages the edits as removable
+ * chips; nothing is queried until "Load trips" up in the bar, which also closes
+ * this menu. As groups are narrowed, options that can no longer match drop out
+ * of the other lists — pick "Rail" and the buses leave the route list.
  */
 export default function TripFilterMenu({
   open,
@@ -110,6 +114,17 @@ export default function TripFilterMenu({
     count: facets?.occupancy[key] ?? 0,
   }));
 
+  // Cross-filtering: a mode pick hides routes/vehicles of the other modes, and a
+  // route pick hides vehicles that never served it. Rows already ticked survive
+  // (withSelectedOptions) so a selection made before the narrowing can still be
+  // undone.
+  const modeFilter = new Set<string>(value.modes);
+  const selectedRouteShortNames = new Set(
+    routes.filter((r) => value.routeIds.includes(r.route_id)).map((r) => r.short_name),
+  );
+  const routeMatchesMode = (r: RouteInfo) =>
+    modeFilter.size === 0 || modeFilter.has(modeOf(r.route_type));
+
   // Routes come from the static bundle, not the facets: the API applies a route
   // filter in SQL, so once one is set the facets only know about the routes
   // already chosen — and a list that shrinks to your own selection can't be
@@ -120,7 +135,7 @@ export default function TripFilterMenu({
       : [],
   );
   const routeOptions: ListOption[] = withSelectedOptions(
-    routes.map((r) => ({
+    routes.filter(routeMatchesMode).map((r) => ({
       value: r.route_id,
       label: r.short_name || r.route_id,
       sublabel: r.long_name,
@@ -133,7 +148,14 @@ export default function TripFilterMenu({
   );
 
   const vehicleOptions: ListOption[] = withSelectedOptions(
-    (facets?.vehicles ?? []).map((v) => ({
+    (facets?.vehicles ?? [])
+      .filter((v) => modeFilter.size === 0 || modeFilter.has(v.mode))
+      .filter(
+        (v) =>
+          selectedRouteShortNames.size === 0 ||
+          v.route_short_names.some((s) => selectedRouteShortNames.has(s)),
+      )
+      .map((v) => ({
       value: v.vehicle_label,
       label: `#${v.vehicle_label}`,
       sublabel:
@@ -283,11 +305,6 @@ export default function TripFilterMenu({
             >
               Apply filters
             </button>
-            <p className="ml-auto text-xs text-fg-subtle">
-              {activeCount === 0
-                ? "No filters set"
-                : `${activeCount} filter${activeCount === 1 ? "" : "s"} pending`}
-            </p>
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   useOverview,
@@ -14,6 +14,15 @@ import {
   useAlerts,
   useRoutes,
 } from "@/lib/hooks";
+import type { RouteScope } from "@/lib/api";
+import {
+  EMPTY_DASHBOARD_FILTERS,
+  dashboardFilterChips,
+  resolveDashboardRouteIds,
+  type DashboardFilters,
+} from "@/lib/dashboardFilters";
+import DashboardFilterMenu from "@/components/dashboard/DashboardFilterMenu";
+import { ActiveFilterChip } from "@/components/ui/FilterControls";
 import { Card, SectionHeading } from "@/components/ui/Card";
 import KpiCard from "@/components/dashboard/KpiCard";
 import FrequencyTable from "@/components/dashboard/FrequencyTable";
@@ -30,7 +39,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { formatDelayMin, onTimeColor } from "@/lib/utils";
 import { useTheme } from "@/lib/useTheme";
 
-const DAY_OPTIONS = [1, 7];
+const DAY_OPTIONS = [1, 7, 30];
 
 function fmtSpan(hhmm: string | null | undefined): string {
   if (!hhmm) return "—";
@@ -51,25 +60,11 @@ export default function DashboardPage() {
   const router = useRouter();
   const { resolvedTheme } = useTheme();
   const [days, setDays] = useState(7);
-  const [routeId, setRouteId] = useState<string>("");
+  const [filters, setFilters] = useState<DashboardFilters>(EMPTY_DASHBOARD_FILTERS);
   const [occDirection, setOccDirection] = useState<number | undefined>(undefined);
-  const [routeSearch, setRouteSearch] = useState("");
-  const [routeDropdownOpen, setRouteDropdownOpen] = useState(false);
-  const routeComboRef = useRef<HTMLDivElement>(null);
-  const rid = routeId || undefined;
   const granularity = days <= 2 ? "hour" : "day";
 
   const routes = useRoutes();
-  const overview = useOverview(days, rid);
-  const alerts = useAlerts();
-  const trend = useOnTimeTrend(days, rid, granularity);
-  const heatmap = useHeatmap(Math.max(days, 14), rid);
-  const distribution = useDistribution(days, rid);
-  const scorecard = useOnTime(days, rid);
-  const worstStops = useWorstStops(days, rid, 10);
-  const frequency = useFrequency(rid);
-  const scheduleFreq = useScheduleFrequency(rid);
-  const occupancy = useOccupancy(days, rid, occDirection);
 
   const sortedRoutes = useMemo(() => {
     const list = routes.data?.routes ?? [];
@@ -78,31 +73,45 @@ export default function DashboardPage() {
     );
   }, [routes.data]);
 
-  const groupedRoutes = useMemo(() => {
-    const q = routeSearch.toLowerCase().trim();
-    const filtered = q
-      ? sortedRoutes.filter(
-          (r) =>
-            r.short_name.toLowerCase().includes(q) ||
-            r.long_name.toLowerCase().includes(q)
-        )
-      : sortedRoutes;
-    const rail = filtered.filter((r) => r.type_name !== "bus" && r.type_name !== "other");
-    const bus = filtered.filter((r) => r.type_name === "bus");
-    const other = filtered.filter((r) => r.type_name === "other");
-    return { rail, bus, other };
-  }, [sortedRoutes, routeSearch]);
+  // Modes resolve to route_ids on the server; the API takes both, so the scope
+  // it sends is just the raw picks. The client-side expansion is only for
+  // deciding which single-route cards can render.
+  const scope: RouteScope = useMemo(
+    () => ({ routeIds: filters.routeIds, modes: filters.modes }),
+    [filters],
+  );
+  const effectiveRouteIds = useMemo(
+    () => resolveDashboardRouteIds(filters, sortedRoutes),
+    [filters, sortedRoutes],
+  );
+  const singleRouteId = effectiveRouteIds.length === 1 ? effectiveRouteIds[0] : undefined;
 
-  useEffect(() => {
-    function handleOutsideClick(e: MouseEvent) {
-      if (routeComboRef.current && !routeComboRef.current.contains(e.target as Node)) {
-        setRouteDropdownOpen(false);
-        setRouteSearch("");
-      }
-    }
-    document.addEventListener("mousedown", handleOutsideClick);
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
-  }, []);
+  const overview = useOverview(days, scope);
+  const alerts = useAlerts();
+  const trend = useOnTimeTrend(days, scope, granularity);
+  const heatmap = useHeatmap(Math.max(days, 14), scope);
+  const distribution = useDistribution(days, scope);
+  const scorecard = useOnTime(days, scope);
+  const worstStops = useWorstStops(days, scope, 10);
+  const frequency = useFrequency(scope);
+  const scheduleFreq = useScheduleFrequency(singleRouteId);
+  const occupancy = useOccupancy(days, singleRouteId, occDirection);
+
+  const routeName = (rid: string) =>
+    sortedRoutes.find((r) => r.route_id === rid)?.short_name;
+
+  const chips = dashboardFilterChips(filters, routeName);
+
+  /** Add a route to the applied set — used by the scorecard row click. Immediate,
+   *  the way removing a chip is. */
+  const addRoute = (rid: string) =>
+    setFilters((f) => (f.routeIds.includes(rid) ? f : { ...f, routeIds: [...f.routeIds, rid] }));
+
+  /** The route slice of a `/trips` link, so a drill-down keeps the filter. Modes
+   *  are expanded to their route_ids here — the Trip Explorer's own `modes`
+   *  vocabulary is coarser (rail/bus/other). */
+  const tripScopeParams = (): Record<string, string> =>
+    effectiveRouteIds.length ? { routes: effectiveRouteIds.join(",") } : {};
 
   function handleTrendPointClick(point: { t: string }) {
     const start = new Date(point.t);
@@ -112,8 +121,7 @@ export default function DashboardPage() {
     } else {
       end.setDate(end.getDate() + 1);
     }
-    const qs = new URLSearchParams({ start: start.toISOString(), end: end.toISOString() });
-    if (routeId) qs.set("route_id", routeId);
+    const qs = new URLSearchParams({ start: start.toISOString(), end: end.toISOString(), ...tripScopeParams() });
     router.push(`/trips?${qs}`);
   }
 
@@ -136,8 +144,7 @@ export default function DashboardPage() {
       const dow = dowMap[weekday] ?? -1;
       if (dow === cell.dow && hour === cell.hour) {
         const end = new Date(candidate.getTime() + 3600 * 1000);
-        const qs = new URLSearchParams({ start: candidate.toISOString(), end: end.toISOString() });
-        if (routeId) qs.set("route_id", routeId);
+        const qs = new URLSearchParams({ start: candidate.toISOString(), end: end.toISOString(), ...tripScopeParams() });
         router.push(`/trips?${qs}`);
         return;
       }
@@ -157,8 +164,12 @@ export default function DashboardPage() {
 
   const ov = overview.data;
   const alertCount = alerts.data?.alerts.length ?? 0;
-  const selectedRouteName =
-    routes.data?.routes.find((r) => r.route_id === routeId)?.short_name;
+  const scopeLabel =
+    chips.length === 0
+      ? "all routes"
+      : singleRouteId
+        ? `Route ${routeName(singleRouteId) ?? singleRouteId}`
+        : `${effectiveRouteIds.length} routes`;
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 pb-6 pt-24 text-fg">
@@ -167,104 +178,11 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold text-fg">Transit Performance Dashboard</h1>
           <p className="text-sm text-fg-subtle">
-            Reliability, frequency, service delivery &amp; demand across RTD
-            {selectedRouteName ? ` · Route ${selectedRouteName}` : " · all routes"}
+            Reliability, frequency, service delivery &amp; demand across RTD · {scopeLabel}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <div ref={routeComboRef} className="relative">
-            <div className="flex items-center gap-1 rounded border border-line px-2 py-1.5 text-sm focus-within:ring-2 focus-within:ring-accent bg-card">
-              <svg className="h-3.5 w-3.5 shrink-0 text-fg-subtle" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clipRule="evenodd" />
-              </svg>
-              <input
-                type="text"
-                value={routeDropdownOpen ? routeSearch : ""}
-                placeholder={selectedRouteName ? `Route ${selectedRouteName}` : "All routes"}
-                onChange={(e) => setRouteSearch(e.target.value)}
-                onFocus={() => setRouteDropdownOpen(true)}
-                className="w-44 bg-transparent outline-none text-fg placeholder-fg-subtle"
-              />
-              {routeId && (
-                <button
-                  onClick={() => { setRouteId(""); setRouteSearch(""); setRouteDropdownOpen(false); }}
-                  aria-label="Clear route filter"
-                  className="shrink-0 text-fg-subtle hover:text-fg-muted"
-                >
-                  <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                    <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
-                  </svg>
-                </button>
-              )}
-            </div>
-            {routeDropdownOpen && (
-              <ul className="absolute left-0 top-full z-50 mt-1 max-h-64 w-64 overflow-y-auto rounded border border-line bg-card shadow-card">
-                <li>
-                  <button
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => { setRouteId(""); setRouteSearch(""); setRouteDropdownOpen(false); }}
-                    className="w-full px-3 py-2 text-left text-sm text-fg-subtle hover:bg-raised"
-                  >
-                    All routes
-                  </button>
-                </li>
-                {groupedRoutes.rail.length > 0 && (
-                  <>
-                    <li className="border-t border-line px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">Rail</li>
-                    {groupedRoutes.rail.map((r) => (
-                      <li key={r.route_id}>
-                        <button
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => { setRouteId(r.route_id); setRouteSearch(""); setRouteDropdownOpen(false); }}
-                          className={`w-full px-3 py-2 text-left text-sm hover:bg-raised ${r.route_id === routeId ? "bg-accent/10 font-medium text-accent" : "text-fg-muted"}`}
-                        >
-                          <span className="font-medium">{r.short_name}</span>
-                          <span className="ml-1.5 text-fg-subtle">— {r.long_name}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </>
-                )}
-                {groupedRoutes.bus.length > 0 && (
-                  <>
-                    <li className="border-t border-line px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">Bus</li>
-                    {groupedRoutes.bus.map((r) => (
-                      <li key={r.route_id}>
-                        <button
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => { setRouteId(r.route_id); setRouteSearch(""); setRouteDropdownOpen(false); }}
-                          className={`w-full px-3 py-2 text-left text-sm hover:bg-raised ${r.route_id === routeId ? "bg-accent/10 font-medium text-accent" : "text-fg-muted"}`}
-                        >
-                          <span className="font-medium">{r.short_name}</span>
-                          <span className="ml-1.5 text-fg-subtle">— {r.long_name}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </>
-                )}
-                {groupedRoutes.other.length > 0 && (
-                  <>
-                    <li className="border-t border-line px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">Other</li>
-                    {groupedRoutes.other.map((r) => (
-                      <li key={r.route_id}>
-                        <button
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => { setRouteId(r.route_id); setRouteSearch(""); setRouteDropdownOpen(false); }}
-                          className={`w-full px-3 py-2 text-left text-sm hover:bg-raised ${r.route_id === routeId ? "bg-accent/10 font-medium text-accent" : "text-fg-muted"}`}
-                        >
-                          <span className="font-medium">{r.short_name}</span>
-                          <span className="ml-1.5 text-fg-subtle">— {r.long_name}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </>
-                )}
-                {groupedRoutes.rail.length === 0 && groupedRoutes.bus.length === 0 && groupedRoutes.other.length === 0 && (
-                  <li className="px-3 py-2 text-sm text-fg-subtle">No routes found</li>
-                )}
-              </ul>
-            )}
-          </div>
+          <DashboardFilterMenu routes={sortedRoutes} filters={filters} onChange={setFilters} />
           <div className="flex items-center gap-1 text-sm">
             {DAY_OPTIONS.map((d) => (
               <button
@@ -282,6 +200,26 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {chips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-xs font-medium text-fg-subtle">Filtering by</span>
+          {chips.map((chip) => (
+            <ActiveFilterChip
+              key={chip.id}
+              label={chip.label}
+              onRemove={() => setFilters(chip.next)}
+            />
+          ))}
+          <button
+            type="button"
+            onClick={() => setFilters(EMPTY_DASHBOARD_FILTERS)}
+            className="ml-1 text-xs font-medium text-fg-subtle underline-offset-2 transition-colors hover:text-fg hover:underline"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -339,7 +277,7 @@ export default function DashboardPage() {
           {scorecard.isLoading ? (
             <LoadingSpinner />
           ) : (
-            <ScorecardTable routes={scorecard.data?.routes ?? []} onSelectRoute={setRouteId} />
+            <ScorecardTable routes={scorecard.data?.routes ?? []} onSelectRoute={addRoute} />
           )}
         </Card>
         <Card>
@@ -356,14 +294,14 @@ export default function DashboardPage() {
           <SectionHeading
             title="Scheduled Frequency by Hour"
             subtitle={
-              routeId && scheduleFreq.data?.routes[0]
+              singleRouteId && scheduleFreq.data?.routes[0]
                 ? `Minutes between vehicles (weekday) · Service ${fmtSpan(scheduleFreq.data.routes[0].span_start)} – ${fmtSpan(scheduleFreq.data.routes[0].span_end)}`
-                : "Select a route to view"
+                : "Select a single route to view"
             }
           />
-          {!routeId ? (
+          {!singleRouteId ? (
             <p className="py-8 text-center text-sm text-fg-subtle">
-              Pick a route above to see its scheduled headways through the day.
+              Filter to exactly one route to see its scheduled headways through the day.
             </p>
           ) : scheduleFreq.isLoading ? (
             <LoadingSpinner />
@@ -384,7 +322,7 @@ export default function DashboardPage() {
         <SectionHeading
           title="Live Crowding"
           subtitle={
-            routeId && scheduleFreq.data?.routes[0]
+            singleRouteId && scheduleFreq.data?.routes[0]
               ? `GTFS-RT occupancy · Service ${fmtSpan(scheduleFreq.data.routes[0].span_start)} – ${fmtSpan(scheduleFreq.data.routes[0].span_end)}`
               : "GTFS-RT occupancy status codes · % of samples by hour"
           }

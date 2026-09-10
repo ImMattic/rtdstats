@@ -9,10 +9,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import String, bindparam, select, text
+from sqlalchemy import ARRAY, String, bindparam, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only
 
+from app.api.v1._route_filter import resolve_route_ids
 from app.database import get_db
 from app.models.vehicle_position import VehiclePosition
 from app.schemas.stats import (
@@ -49,7 +50,7 @@ _ONTIME_SQL = """
         sum(delay_sum)::bigint                               AS delay_sum
     FROM trip_ontime_hourly
     WHERE bucket >= :cutoff
-      AND (:route_id IS NULL OR route_id = :route_id)
+      AND (:route_ids IS NULL OR route_id = ANY(:route_ids))
     GROUP BY route_id
 """
 
@@ -58,16 +59,19 @@ _ONTIME_SQL = """
 async def ontime_performance(
     db: Annotated[AsyncSession, Depends(get_db)],
     route_id: Annotated[str | None, Query()] = None,
+    route_ids: Annotated[str | None, Query()] = None,
+    modes: Annotated[str | None, Query()] = None,
     days: Annotated[int, Query(ge=1, le=90)] = 7,
 ) -> OnTimeResponse:
+    rids = resolve_route_ids(route_id, route_ids, modes)
     cutoff = datetime.now(tz=timezone.utc) - timedelta(days=days)
 
     result = await db.execute(
         text(_ONTIME_SQL).bindparams(
             bindparam("cutoff"),
-            bindparam("route_id", type_=String),
+            bindparam("route_ids", type_=ARRAY(String)),
         ),
-        {"cutoff": cutoff, "route_id": route_id},
+        {"cutoff": cutoff, "route_ids": rids},
     )
     rows = result.all()
 
@@ -123,7 +127,10 @@ _ROUTE_CYCLE_MINUTES: dict[str, float] = {
 async def frequency_stats(
     db: Annotated[AsyncSession, Depends(get_db)],
     route_id: Annotated[str | None, Query()] = None,
+    route_ids: Annotated[str | None, Query()] = None,
+    modes: Annotated[str | None, Query()] = None,
 ) -> FrequencyResponse:
+    rids = resolve_route_ids(route_id, route_ids, modes)
     """Estimate current headway per route from live vehicle position counts.
 
     Groups the last 30 minutes of positions into 5-minute buckets and counts
@@ -141,7 +148,7 @@ async def frequency_stats(
             COUNT(DISTINCT COALESCE(vehicle_id, trip_id)) AS cnt
         FROM vehicle_positions
         WHERE timestamp >= :cutoff
-          AND (:route_id IS NULL OR route_id = :route_id)
+          AND (:route_ids IS NULL OR route_id = ANY(:route_ids))
         GROUP BY
             route_id,
             date_trunc('hour', timestamp)
@@ -150,9 +157,9 @@ async def frequency_stats(
     result = await db.execute(
         text(_BUCKET_SQL).bindparams(
             bindparam("cutoff"),
-            bindparam("route_id", type_=String),
+            bindparam("route_ids", type_=ARRAY(String)),
         ),
-        {"cutoff": cutoff, "route_id": route_id},
+        {"cutoff": cutoff, "route_ids": rids},
     )
     bucket_rows = result.all()
 

@@ -17,6 +17,7 @@ import {
   applyMapFilters,
   buildMapFacets,
   countActiveMapFilters,
+  mapFiltersEqual,
   type HeadwayBand,
   type MapFilters,
   type MovementBand,
@@ -130,28 +131,44 @@ export default function MapFilterControl({ vehicles, filters, onChange, stuckKey
     count: facets.modes[m],
   }));
 
+  // As other groups get narrowed, options that can no longer match drop out of
+  // the route and vehicle lists — pick "Rail" and the buses disappear. Rows the
+  // user already ticked stay (via withSelectedOptions) so a selection made
+  // before the narrowing can still be undone.
+  const modeFilter = new Set(draft.modes);
+  const routeShortNamesSelected = new Set(
+    facets.routes.filter((r) => draft.routeIds.includes(r.routeId)).map((r) => r.shortName),
+  );
+
   // A route or vehicle can leave the feed at the end of its service while it is
   // still selected; keep those rows so the selection can be undone here.
   const routeOptions: ListOption[] = withSelectedOptions(
-    facets.routes.map((r) => ({
-      value: r.routeId,
-      label: r.shortName,
-      sublabel: r.longName,
-      dotColor: routeColor(r.color),
-      count: r.count,
-      group: MODE_LABELS[r.mode],
-    })),
+    facets.routes
+      .filter((r) => modeFilter.size === 0 || modeFilter.has(r.mode))
+      .map((r) => ({
+        value: r.routeId,
+        label: r.shortName,
+        sublabel: r.longName,
+        dotColor: routeColor(r.color),
+        count: r.count,
+        group: MODE_LABELS[r.mode],
+      })),
     draft.routeIds,
     (routeId) => ({ value: routeId, label: routeId, sublabel: "Not currently running" }),
   );
 
   const vehicleOptions: ListOption[] = withSelectedOptions(
-    facets.vehicles.map((v) => ({
-      value: v.key,
-      label: `#${v.label}`,
-      badge: { text: v.routeShortName, color: routeColor(v.routeColor) },
-      group: MODE_LABELS[v.mode],
-    })),
+    facets.vehicles
+      .filter((v) => modeFilter.size === 0 || modeFilter.has(v.mode))
+      .filter(
+        (v) => routeShortNamesSelected.size === 0 || routeShortNamesSelected.has(v.routeShortName),
+      )
+      .map((v) => ({
+        value: v.key,
+        label: `#${v.label}`,
+        badge: { text: v.routeShortName, color: routeColor(v.routeColor) },
+        group: MODE_LABELS[v.mode],
+      })),
     draft.vehicleKeys,
     (key) => ({ value: key, label: `#${key}`, sublabel: "Not currently reporting" }),
   );
@@ -231,6 +248,7 @@ export default function MapFilterControl({ vehicles, filters, onChange, stuckKey
           setOpen(false);
         }}
         applyLabel="Show"
+        applyDisabled={mapFiltersEqual(draft, filters)}
         applyHint={`${previewCount} vehicle${previewCount === 1 ? "" : "s"}`}
       >
         <FilterSection stagger={0} title="Mode" activeCount={draft.modes.length} defaultOpen>

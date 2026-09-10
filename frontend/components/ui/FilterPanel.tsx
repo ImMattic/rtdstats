@@ -16,6 +16,8 @@ interface Props {
   onReset: () => void;
   onApply: () => void;
   applyLabel?: string;
+  /** Greys out Apply until the draft actually differs from what's applied. */
+  applyDisabled?: boolean;
   /** Result count for the pending draft, previewed on the Apply button. */
   applyHint?: string;
   /** Which edge of the anchor the desktop popover hangs from. */
@@ -41,6 +43,7 @@ export default function FilterPanel({
   onReset,
   onApply,
   applyLabel = "Apply filters",
+  applyDisabled = false,
   applyHint,
   align = "right",
   children,
@@ -128,7 +131,8 @@ export default function FilterPanel({
       <button
         type="button"
         onClick={onApply}
-        className="press flex-1 rounded-md bg-accent px-3 py-2 text-sm font-bold text-accent-ink transition-opacity hover:opacity-90"
+        disabled={applyDisabled}
+        className="press flex-1 rounded-md bg-accent px-3 py-2 text-sm font-bold text-accent-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:opacity-40"
       >
         {applyLabel}
         {applyHint && <span className="ml-1.5 font-medium opacity-80">{applyHint}</span>}

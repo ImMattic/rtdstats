@@ -1,4 +1,5 @@
-import { cn, formatDelay, formatTime, formatDateTime, routeColor } from "@/lib/utils";
+import { cn, formatDelay, formatTime, formatDateTime, routeColor, headwayColor } from "@/lib/utils";
+import { useTheme } from "@/lib/useTheme";
 import type { VehiclePosition } from "@/lib/types";
 
 interface Props {
@@ -14,6 +15,7 @@ const STATUS_LABELS: Record<number, string> = {
 };
 
 export default function VehicleDialog({ vehicle: v, onClose, isStuck = false }: Props) {
+  const { resolvedTheme } = useTheme();
   const delay = v.delay_seconds ?? 0;
   const isLate = delay > 300;
   const isEarly = delay < -300;
@@ -47,14 +49,11 @@ export default function VehicleDialog({ vehicle: v, onClose, isStuck = false }: 
       {/* Body */}
       <div className="px-4 py-3 space-y-2 text-sm text-fg">
         {/* Current stop */}
-        <div className="flex items-start gap-2">
-          <span className="mt-0.5 h-2 w-2 rounded-full bg-accent flex-shrink-0" />
-          <div>
-            <p className="text-fg-subtle text-xs">
-              {STATUS_LABELS[v.current_status ?? -1] ?? "At"}
-            </p>
-            <p className="font-medium text-fg">{v.stop_name ?? v.stop_id ?? "Unknown stop"}</p>
-          </div>
+        <div>
+          <p className="text-fg-subtle text-xs">
+            {STATUS_LABELS[v.current_status ?? -1] ?? "At"}
+          </p>
+          <p className="font-medium text-fg">{v.stop_name ?? v.stop_id ?? "Unknown stop"}</p>
         </div>
 
         {/* On-time status, with the trip-page link sitting inline alongside it */}
@@ -69,14 +68,15 @@ export default function VehicleDialog({ vehicle: v, onClose, isStuck = false }: 
           </span>
           {delayText && <span className="font-mono text-fg-muted">{delayText}</span>}
 
-          {/* View trip — same translucent pill treatment as the status tag, in
-              the In Progress orange. Jumps to this vehicle's trip page. */}
+          {/* View trip — same translucent pill treatment as the status tag, but
+              in a neutral theme wash so it doesn't read as a warning. Jumps to
+              this vehicle's trip page. */}
           {v.vehicle_label && (
             <a
               href={`/trips/trip/${encodeURIComponent(v.vehicle_label)}${
                 v.trip_id ? `?trip_id=${encodeURIComponent(v.trip_id)}` : ""
               }`}
-              className="status-warn inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold transition-opacity hover:opacity-80"
+              className="inline-flex items-center gap-1 rounded-full border border-fg/20 bg-fg/[0.08] px-2 py-0.5 text-xs font-semibold text-fg transition-opacity hover:opacity-80"
             >
               <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-current" />
               View Trip
@@ -91,13 +91,23 @@ export default function VehicleDialog({ vehicle: v, onClose, isStuck = false }: 
           )}
         </div>
 
-        {/* Headway */}
+        {/* Headway — the value carries the same translucent tag treatment as the
+            on-time pill, tinted to whichever frequency bucket it lands in (the
+            colours the legend and vehicle outlines use). */}
         {v.headway_minutes !== null && (
           <p className="text-fg-subtle text-xs">
             Real-time headway:{" "}
-            <span className="font-medium text-fg-muted">
-              {v.headway_minutes} min
-            </span>
+            {(() => {
+              const c = headwayColor(v.headway_minutes, resolvedTheme);
+              return (
+                <span
+                  className="rounded-full border px-2 py-0.5 text-xs font-semibold"
+                  style={{ color: c, backgroundColor: `${c}29`, borderColor: `${c}4D` }}
+                >
+                  {v.headway_minutes} min
+                </span>
+              );
+            })()}
           </p>
         )}
 

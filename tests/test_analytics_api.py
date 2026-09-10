@@ -178,6 +178,34 @@ async def test_overview(client, db_session):
     assert data["latest_ridership_total"] is None
 
 
+async def test_overview_accepts_multi_route_and_mode_params(client, db_session):
+    """The dashboard filter menu sends route_ids + modes; the endpoint must bind
+    them without error (SQL is mocked, so this covers the param plumbing)."""
+    cur = (800, 150, 50, 1000, 60000, 9_000_000, 3)
+    prev = (700, 250, 50, 1000, 90000, 12_000_000, 3)
+    with patch.object(db_session, "execute", _execute(
+        _result(one=cur),
+        _result(one=prev),
+        _result(scalar=500),
+        _result(scalar=480),
+        _result(all_=[]),
+    )):
+        resp = await client.get(
+            "/api/v1/stats/overview?days=7&route_ids=r15,rE&modes=commuter_rail"
+        )
+    assert resp.status_code == 200
+    assert resp.json()["routes_tracked"] == 3
+
+
+async def test_trend_accepts_route_ids(client, db_session):
+    t = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    with patch.object(db_session, "execute",
+                      AsyncMock(return_value=_result(all_=[(t, 80, 15, 5, 100, 4500)]))):
+        resp = await client.get("/api/v1/stats/ontime/trend?days=14&route_ids=A,B,C")
+    assert resp.status_code == 200
+    assert len(resp.json()["points"]) == 1
+
+
 # ── /stats/ridership (real ORM on SQLite) ───────────────────────────────────
 
 async def test_ridership_empty(client):

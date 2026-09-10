@@ -5,6 +5,7 @@ import {
   buildMapFacets,
   countActiveMapFilters,
   headwayBand,
+  mapFiltersEqual,
   modeOf,
   movementBand,
   punctualityBand,
@@ -197,5 +198,20 @@ describe("buildMapFacets", () => {
       vehicle({ route_id: "15", route_short_name: "15", vehicle_label: "1002" }),
     ];
     expect(buildMapFacets(feed).routes.map((r) => r.shortName)).toEqual(["15", "120"]);
+  });
+});
+
+describe("mapFiltersEqual", () => {
+  it("ignores order within a group", () => {
+    const a: MapFilters = { ...EMPTY_MAP_FILTERS, routeIds: ["15", "20"], modes: ["bus"] };
+    const b: MapFilters = { ...EMPTY_MAP_FILTERS, routeIds: ["20", "15"], modes: ["bus"] };
+    expect(mapFiltersEqual(a, b)).toBe(true);
+  });
+
+  it("catches a real edit and a toggled flag", () => {
+    const base: MapFilters = { ...EMPTY_MAP_FILTERS, routeIds: ["15"] };
+    expect(mapFiltersEqual(base, { ...base, routeIds: ["15", "20"] })).toBe(false);
+    expect(mapFiltersEqual(base, { ...base, stuckOnly: true })).toBe(false);
+    expect(mapFiltersEqual(EMPTY_MAP_FILTERS, EMPTY_MAP_FILTERS)).toBe(true);
   });
 });
