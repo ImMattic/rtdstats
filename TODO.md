@@ -8,10 +8,7 @@
     - [X] Update icon outlines dynamically as frequencies change by time/day.
     - [X] On icon click, show dialog with:
         - [X] Next stop
-        - [ ] Expected time to next stop
         - [X] On-time/late status (+/- x mins)
-        - [ ] Table of the train car’s next stops (with times)
-        - [ ] History icon for historical data
 
 ## Real-Time & Historical Data
 - [ ] Store and serve historical vehicle position and timing data.
@@ -20,12 +17,34 @@
 - [ ] Calculate and display on-time performance and other stats.
 
 ## Traffic Integration (FF Bus)
+Still wanted, but this is a big one. Budget a dedicated block of work rather than
+squeezing it in alongside smaller changes.
 - [ ] Integrate Google Maps traffic API for FF buses.
     - [ ] Estimate arrival times at stops using current bus position and traffic data.
 
 ## Unofficial Alerts
 - [ ] Detect and display alerts for vehicles stuck >5 minutes.
     - [ ] Integrate with Transit App API to confirm stuck status when GTFS-RT is unreliable.
+
+## Event & Game Awareness
+Surface local sporting events so riders can anticipate delays and crowds. Not
+being built yet. Captured here so the design isn't lost.
+- [ ] Pull home-game schedules and live game state from a free sports API.
+    - [ ] **Home games only.** Away games don't move Denver ridership.
+    - [ ] Show nothing at all on days with no home game.
+    - [ ] Before the game: show start time (e.g. "7pm MT"). Inside one hour, switch
+      to a countdown ("COL game in 45 min").
+    - [ ] During the game: show where play is at, e.g. "top 7th" or "2nd period".
+    - [ ] After the game: show the result and how long ago it ended ("COL won 20 min
+      ago"), then clear the slide once it's two hours old.
+- [ ] Present it inside the existing "x vehicles" widget as a rotating carousel, so
+  several same-day games each get a turn.
+    - [ ] Colour each slide in that team's colours (Broncos orange, Rockies purple,
+      and so on).
+    - [ ] Lead each slide with an emoji identifying the sport.
+- [ ] Later: extend the same widget to non-sports events (concerts, conventions,
+  festivals). There's no good free feed for these, so it likely depends on
+  community-submitted entries.
 
 ## Dashboard & Analytics
 - [ ] Build dashboard for:
@@ -52,12 +71,12 @@
 - [ ] Monitor GTFS-RT feed reliability; add fallback/alerting for outages.
 
 ## User Accounts
-- [ ] No user accounts or authentication (explicitly out of scope).
+- [X] No user accounts or authentication (explicitly out of scope).
 
 ## Known Fixes
 - [X] Outline the selected vehicle in white to improve visibility against the map background.
 - [X] Remove vehicles with no average headway from Current Frequency list on the Dashboard
-- [ ] Vehicle stuck logic still needs fixing so that it isn't included on the Stuck Vehicle Alerts if it is near one of its endpoints (e.g., Union Station for the A Line).
+- [ ] Vehicle stuck logic still needs fixing so that it isn't included on the Stuck Vehicle Alerts if it is near one of its endpoints (e.g., Union Station for the A Line). Separately, the alert count runs higher than seems believable, and the suspicion is that the GTFS-RT feed itself is the cause rather than genuinely stuck vehicles. Decide first whether stuck alerts are worth keeping at all; if the feed can't support them honestly, dropping the feature is on the table.
 - [X] Remove duplicate "On time" tag from the Vehicle Dialog box
 - [X] Rework On-time logic to be more accurate
 - [X] Include link to schedule on RTD website in Vehicle Dialog box
@@ -70,7 +89,7 @@
 - [X] Add padding to the Stuck Vehicle Alert time tag on the row so that the See on Map icon doesn't move when the time changes
 - [X] Change the bus and train icons to look a bit more modern and visually appealing. The current icons are pretty basic and could be improved to make the map look nicer.
 - [X] Max zoom out to the entire Denver metro area, so that users can't zoom out to the point where the map is just a tiny dot in the middle of the screen.
-- [ ] Fix: The on-time tag in the Vehicle Dialog box isn't corresponding to the status in the Dashboard. Namely the stuck status, but also if it's running early or behind schedule. The tag should indicate whether a vehicle is on time, stuck, early, or late, and should say how early or late the vehicle is (only if its early or late by +- 5 minutes)
+- [X] Fix: The on-time tag in the Vehicle Dialog box isn't corresponding to the status in the Dashboard. Namely the stuck status, but also if it's running early or behind schedule. The tag should indicate whether a vehicle is on time, stuck, early, or late, and should say how early or late the vehicle is (only if its early or late by +- 5 minutes)
 - [X] Fix: The search functionality needs some tweaking as it isn't able to pull up the trains by typing in "Route [x]".
 - [X] Feat: Add station dialog boxes with more information about a station. The stations will still not appear on the map like they do now, but you can search for a station and click on it to see more information about it. The dialog box should include the station name, the lines that stop at the station, the next arrival times for each line, and any other relevant information. The dialog box should also include a link to the RTD website for more information about the station (RTD formats the link as so: https://app.rtd-denver.com/nextride/stop/{stop ID}).
 - [X] Feat: from the dashboard, I want to be able to drill down into individual vehicles (ex FF #1505) by clicking on the timeslot and seeing all the vehicles that were active for that timeslot. Then, when you click on the vehicle from that page, you'll be presented with a line showing the vehicle's route and all the stops it made, along with the times it arrived at each stop and other stats like occupancy, delay status, etc. This will allow users to see the performance of individual vehicles in more detail and identify any patterns or issues with specific vehicles.

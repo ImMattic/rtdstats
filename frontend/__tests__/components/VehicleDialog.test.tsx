@@ -78,6 +78,17 @@ describe("VehicleDialog", () => {
     expect(screen.getByText("S99")).toBeInTheDocument();
   });
 
+  it("links View Trip to the vehicle's in-progress trip page", () => {
+    render(<VehicleDialog vehicle={makeVehicle({ vehicle_label: "101", trip_id: "T1" })} onClose={() => {}} />);
+    const link = screen.getByRole("link", { name: /view trip/i });
+    expect(link).toHaveAttribute("href", "/trips/trip/101?trip_id=T1");
+  });
+
+  it("omits View Trip when vehicle_label is null", () => {
+    render(<VehicleDialog vehicle={makeVehicle({ vehicle_label: null })} onClose={() => {}} />);
+    expect(screen.queryByRole("link", { name: /view trip/i })).not.toBeInTheDocument();
+  });
+
   it("shows headway when present", () => {
     render(<VehicleDialog vehicle={makeVehicle({ headway_minutes: 12 })} onClose={() => {}} />);
     expect(screen.getByText(/12 min/)).toBeInTheDocument();

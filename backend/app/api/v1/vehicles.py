@@ -6,7 +6,7 @@ from typing import Annotated
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, text
+from sqlalchemy import bindparam, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -45,6 +45,7 @@ def _validated_range(
         )
     return start, end
 
+
 # A trip can begin before / end after the requested window.  We scan this much
 # extra on each side so each trip's *true* first→last position is captured and
 # we can decide whether its start or end lands in the window.  3h comfortably
@@ -81,15 +82,21 @@ def _trip_endpoint_sequences() -> dict[str, tuple[int, int]]:
 #   1. Aggregates vehicle_positions in the scan window into one row per
 #      (vehicle_label, trip_id) using TimescaleDB LAST() — replaces the old
 #      DISTINCT ON + separate GROUP BY double-scan.
-#   2. Joins stop_arrival_events (scoped to qualified trips) for arrival counts.
+#   2. Joins stop_arrival_events (scoped to qualified trips) for arrival counts
+#      and the furthest stop_sequence each trip was seen at.
 #   3. Applies the time-window and quality filters entirely in SQL.
-#   4. Returns a total_count via window function alongside the paginated rows.
 #
-# The {route_clause} placeholder is either empty or "AND route_id = :route_id".
+# The {route_clause} placeholder is either empty or a route_id restriction.
 # The {window_clause} placeholder bounds a trip to the requested window: by
 # default a trip qualifies if its start OR end lands inside [start, end];  in
 # strict mode both its start AND end must land inside it (trips that begin
 # before or run past the window are dropped entirely).
+#
+# Paging happens in Python rather than here.  Trip status and mode depend on the
+# static schedule, which SQL has no view of, and filtering *after* a SQL page
+# would drop matches sitting on later pages.  Materialising the window's trips —
+# one aggregated row each, not one per position — is cheap next to the scan that
+# produced them, and it is also what lets the response carry honest facet counts.
 _ACTIVE_VEHICLES_SQL = """
 WITH agg AS (
     SELECT
@@ -111,7 +118,10 @@ WITH agg AS (
     HAVING COUNT(*) >= 10
 ),
 arrivals AS (
-    SELECT sae.trip_id, COUNT(*) AS arrival_count
+    SELECT
+        sae.trip_id,
+        COUNT(*)                 AS arrival_count,
+        MAX(sae.stop_sequence)   AS max_stop_sequence
     FROM stop_arrival_events sae
     WHERE sae.timestamp >= :scan_start
       AND sae.timestamp <= :scan_end
@@ -121,24 +131,18 @@ arrivals AS (
 filtered AS (
     SELECT
         a.*,
-        COALESCE(ar.arrival_count, 0) AS stop_arrival_count
+        COALESCE(ar.arrival_count, 0) AS stop_arrival_count,
+        ar.max_stop_sequence          AS max_stop_sequence
     FROM agg a
     LEFT JOIN arrivals ar ON ar.trip_id = a.trip_id
     WHERE (
         {window_clause}
     )
       AND COALESCE(ar.arrival_count, 0) > 1
-),
-paged AS (
-    SELECT
-        *,
-        COUNT(*) OVER () AS total_count
-    FROM filtered
-    ORDER BY start_time ASC, route_id ASC NULLS LAST
-    LIMIT  :limit
-    OFFSET :offset
 )
-SELECT * FROM paged
+SELECT * FROM filtered
+ORDER BY start_time ASC, route_id ASC NULLS LAST
+LIMIT :scan_cap
 """
 
 # Time-window clauses substituted into {window_clause} above.
@@ -148,6 +152,47 @@ _WINDOW_CLAUSE_OVERLAP = (
 )
 _WINDOW_CLAUSE_STRICT = "a.start_time >= :start AND a.end_time <= :end"
 
+# Ceiling on trips materialised for one request.  A full day of RTD service is
+# roughly 10k trips, so this leaves generous headroom while still bounding what
+# a single request can pull into memory.
+_SCAN_ROW_CAP = 40_000
+
+# A trip counts as still running while its newest position is this recent.  The
+# realtime feed is built from a 60s window (api/v1/realtime), so anything inside
+# that window is on the live map too; the extra margin absorbs the lag between
+# this query and the browser's own poll of the feed.
+_LIVE_TRIP_WINDOW = timedelta(seconds=90)
+
+_RAIL_ROUTE_TYPES = {"0", "1", "2"}
+
+_TRIP_STATUSES = {"in_progress", "complete", "incomplete"}
+_MODES = {"rail", "bus", "other"}
+
+
+def _mode_of(route_type: str | None) -> str:
+    """GTFS route_type → the rail / bus / other split the filter menus offer."""
+    if route_type in _RAIL_ROUTE_TYPES:
+        return "rail"
+    return "bus" if route_type == "3" else "other"
+
+
+def _split_csv(raw: str | None) -> list[str]:
+    """Comma-separated query value → list, dropping blanks."""
+    if not raw:
+        return []
+    return [part.strip() for part in raw.split(",") if part.strip()]
+
+
+def _validated_choice(raw: str | None, allowed: set[str], name: str) -> set[str]:
+    values = set(_split_csv(raw))
+    unknown = values - allowed
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=f"unknown {name}: {', '.join(sorted(unknown))}",
+        )
+    return values
+
 
 @router.get("/active")
 async def get_active_vehicles(
@@ -155,6 +200,13 @@ async def get_active_vehicles(
     start: Annotated[datetime | None, Query()] = None,
     end: Annotated[datetime | None, Query()] = None,
     route_id: Annotated[str | None, Query()] = None,
+    route_ids: Annotated[str | None, Query()] = None,
+    modes: Annotated[str | None, Query()] = None,
+    vehicle_labels: Annotated[str | None, Query()] = None,
+    status: Annotated[str | None, Query()] = None,
+    occupancy: Annotated[str | None, Query()] = None,
+    min_duration_minutes: Annotated[float | None, Query(ge=0)] = None,
+    max_duration_minutes: Annotated[float | None, Query(ge=0)] = None,
     strict: Annotated[bool, Query()] = False,
     limit: Annotated[int, Query(ge=1, le=100)] = 15,
     offset: Annotated[int, Query(ge=0, le=5_000)] = 0,
@@ -173,13 +225,48 @@ async def get_active_vehicles(
 
     Quality filter (same criteria as before) is applied in SQL:
     observation_count >= 10 AND stop_arrival_count > 1.
+
+    Everything after that is a *filter*, and every one of them is applied before
+    paging, so page 2 means the second page of matches rather than the second
+    page of the window with the filter re-run on it.  The comma-separated
+    parameters (``route_ids``, ``modes``, ``vehicle_labels``, ``status``,
+    ``occupancy``) each OR within themselves and AND with the others; an omitted
+    one doesn't narrow anything.  ``facets`` in the response counts the window
+    *before* those filters, so the menu's per-option numbers hold still while
+    someone is choosing — with one exception it flags as ``route_scoped``, since
+    the route restriction is the only filter that runs in SQL.
     """
     start, end = _validated_range(start, end, default_span=timedelta(hours=1))
+
+    wanted_routes = set(_split_csv(route_ids))
+    if route_id:
+        wanted_routes.add(route_id)
+    wanted_modes = _validated_choice(modes, _MODES, "modes")
+    wanted_labels = set(_split_csv(vehicle_labels))
+    wanted_statuses = _validated_choice(status, _TRIP_STATUSES, "status")
+    wanted_occupancy = set(_split_csv(occupancy))
 
     scan_start = start - _MAX_TRIP_DURATION
     scan_end = end + _MAX_TRIP_DURATION
 
-    route_clause = "AND route_id = :route_id" if route_id else ""
+    # Route is the one filter worth pushing into SQL: it is by far the most
+    # selective, and it shrinks the aggregate before it crosses the wire.
+    params: dict = {
+        "scan_start": scan_start,
+        "scan_end": scan_end,
+        "start": start,
+        "end": end,
+        "scan_cap": _SCAN_ROW_CAP,
+    }
+    if len(wanted_routes) == 1:
+        route_clause = "AND route_id = :route_id"
+        params["route_id"] = next(iter(wanted_routes))
+    elif wanted_routes:
+        route_clause = "AND route_id IN :route_id_list"
+        params["route_id_list"] = tuple(sorted(wanted_routes))
+    else:
+        route_clause = ""
+
     window_clause = _WINDOW_CLAUSE_STRICT if strict else _WINDOW_CLAUSE_OVERLAP
     sql = text(
         _ACTIVE_VEHICLES_SQL.format(
@@ -187,79 +274,236 @@ async def get_active_vehicles(
             window_clause=window_clause,
         )
     )
-
-    params: dict = {
-        "scan_start": scan_start,
-        "scan_end": scan_end,
-        "start": start,
-        "end": end,
-        "limit": limit,
-        "offset": offset,
-    }
-    if route_id:
-        params["route_id"] = route_id
+    if "route_id_list" in params:
+        sql = sql.bindparams(bindparam("route_id_list", expanding=True))
 
     rows = (await db.execute(sql, params)).mappings().all()
-
-    if not rows:
-        return {
-            "start": start.isoformat(),
-            "end": end.isoformat(),
-            "vehicle_count": 0,
-            "vehicles": [],
-        }
-
-    total_count: int = rows[0]["total_count"]
-    trip_ids = {r["trip_id"] for r in rows if r["trip_id"]}
-    delay_map = await _delay_map(db, scan_start, scan_end, trip_ids)
 
     routes_static, stops_static = load_gtfs_static_data()
     endpoint_stops = _trip_endpoint_stops()
     endpoint_sequences = _trip_endpoint_sequences()
-    reached_terminus_map = await _terminus_reached_map(
-        db, scan_start, scan_end, trip_ids, endpoint_sequences
-    )
+    live_cutoff = datetime.now(tz=timezone.utc) - _LIVE_TRIP_WINDOW
 
-    vehicles = []
-    for r in rows:
-        first_sid, last_sid = endpoint_stops.get(r["trip_id"] or "", (None, None))
-        vehicles.append(
-            {
-                "vehicle_label": r["vehicle_label"],
-                "vehicle_id": r["vehicle_id"],
-                "trip_id": r["trip_id"],
-                "route_id": r["route_id"],
-                "route_short_name": routes_static.get(r["route_id"], {}).get("route_short_name"),
-                "route_color": routes_static.get(r["route_id"], {}).get("route_color"),
-                "start_time": r["start_time"].isoformat(),
-                "end_time": r["end_time"].isoformat(),
-                "start_stop_name": (
-                    stops_static.get(first_sid, {}).get("stop_name") if first_sid else None
-                ),
-                "end_stop_name": (
-                    stops_static.get(last_sid, {}).get("stop_name") if last_sid else None
-                ),
-                # True once a geofenced arrival exists at the trip's *last*
-                # stop_sequence — i.e. the vehicle actually reached the
-                # terminus, not just any stop sharing its stop_id (loop
-                # routes can revisit the same physical stop). Defaults to
-                # True when we don't have a static schedule for the trip at
-                # all, so an unrelated data gap doesn't read as an incident.
-                "reached_terminus": reached_terminus_map.get(r["trip_id"] or "", True),
-                "last_latitude": r["latitude"],
-                "last_longitude": r["longitude"],
-                "last_occupancy_status": r["occupancy_status"],
-                "last_delay_seconds": delay_map.get(r["trip_id"] or ""),
-                "observation_count": r["observation_count"],
-                "stop_arrival_count": r["stop_arrival_count"],
-            }
+    trips = [
+        _describe_trip(
+            r,
+            routes_static,
+            stops_static,
+            endpoint_stops,
+            endpoint_sequences,
+            live_cutoff,
         )
+        for r in rows
+    ]
+
+    # Route is the one filter the SQL already applied, so the facets it feeds
+    # describe only the selected routes.  Say so, rather than letting a menu
+    # read those counts as if they covered the window.
+    facets = _build_facets(trips, route_scoped=bool(route_clause))
+
+    matches = [
+        t
+        for t in trips
+        if _matches_filters(
+            t,
+            routes=wanted_routes,
+            modes=wanted_modes,
+            labels=wanted_labels,
+            statuses=wanted_statuses,
+            occupancy=wanted_occupancy,
+            min_duration_minutes=min_duration_minutes,
+            max_duration_minutes=max_duration_minutes,
+        )
+    ]
+
+    page = matches[offset:offset + limit]
+
+    # Delay comes from a second table, so look it up only for the rows actually
+    # being returned rather than for every trip in the window.
+    page_trip_ids = {t["trip_id"] for t in page if t["trip_id"]}
+    delay_map = await _delay_map(db, scan_start, scan_end, page_trip_ids)
+    for t in page:
+        t["last_delay_seconds"] = delay_map.get(t["trip_id"] or "")
 
     return {
         "start": start.isoformat(),
         "end": end.isoformat(),
-        "vehicle_count": total_count,
-        "vehicles": vehicles,
+        "vehicle_count": len(matches),
+        "window_count": len(trips),
+        "vehicles": page,
+        "facets": facets,
+    }
+
+
+def _describe_trip(
+    row,
+    routes_static: dict,
+    stops_static: dict,
+    endpoint_stops: dict[str, tuple[str | None, str | None]],
+    endpoint_sequences: dict[str, tuple[int, int]],
+    live_cutoff: datetime,
+) -> dict:
+    """One aggregated SQL row → the trip object the API returns."""
+    trip_id = row["trip_id"] or ""
+    first_sid, last_sid = endpoint_stops.get(trip_id, (None, None))
+    route = routes_static.get(row["route_id"], {})
+
+    # True once a geofenced arrival exists at the trip's *last* stop_sequence —
+    # i.e. the vehicle actually reached the terminus, not just any stop sharing
+    # its stop_id (loop routes can revisit the same physical stop).  Since the
+    # terminus is by definition the highest sequence, the furthest arrival
+    # reaching it is the same test.  Defaults to True when we have no static
+    # schedule for the trip at all, so an unrelated data gap doesn't read as an
+    # incident.
+    terminus_seq = endpoint_sequences.get(trip_id)
+    if terminus_seq is None:
+        reached_terminus = True
+    else:
+        max_seq = row["max_stop_sequence"]
+        reached_terminus = max_seq is not None and max_seq >= terminus_seq[1]
+
+    start_time: datetime = row["start_time"]
+    end_time: datetime = row["end_time"]
+    if end_time.tzinfo is None:
+        end_time_utc = end_time.replace(tzinfo=timezone.utc)
+    else:
+        end_time_utc = end_time
+    in_progress = end_time_utc >= live_cutoff
+
+    return {
+        "vehicle_label": row["vehicle_label"],
+        "vehicle_id": row["vehicle_id"],
+        "trip_id": row["trip_id"],
+        "route_id": row["route_id"],
+        "route_short_name": route.get("route_short_name"),
+        "route_color": route.get("route_color"),
+        "route_type": route.get("route_type"),
+        "mode": _mode_of(route.get("route_type")),
+        "start_time": start_time.isoformat(),
+        "end_time": end_time.isoformat(),
+        "duration_minutes": round((end_time - start_time).total_seconds() / 60, 1),
+        "start_stop_name": (
+            stops_static.get(first_sid, {}).get("stop_name") if first_sid else None
+        ),
+        "end_stop_name": (
+            stops_static.get(last_sid, {}).get("stop_name") if last_sid else None
+        ),
+        "reached_terminus": reached_terminus,
+        "in_progress": in_progress,
+        "trip_status": (
+            "in_progress" if in_progress else ("complete" if reached_terminus else "incomplete")
+        ),
+        "last_latitude": row["latitude"],
+        "last_longitude": row["longitude"],
+        "last_occupancy_status": row["occupancy_status"],
+        "last_delay_seconds": None,
+        "observation_count": row["observation_count"],
+        "stop_arrival_count": row["stop_arrival_count"],
+    }
+
+
+def _matches_filters(
+    trip: dict,
+    *,
+    routes: set[str],
+    modes: set[str],
+    labels: set[str],
+    statuses: set[str],
+    occupancy: set[str],
+    min_duration_minutes: float | None,
+    max_duration_minutes: float | None,
+) -> bool:
+    """AND across groups, OR inside each — an empty group never narrows."""
+    if routes and trip["route_id"] not in routes:
+        return False
+    if modes and trip["mode"] not in modes:
+        return False
+    if labels and (trip["vehicle_label"] or "") not in labels:
+        return False
+    if statuses and trip["trip_status"] not in statuses:
+        return False
+    if occupancy and (trip["last_occupancy_status"] or "UNKNOWN") not in occupancy:
+        return False
+    duration = trip["duration_minutes"]
+    if min_duration_minutes is not None and duration < min_duration_minutes:
+        return False
+    if max_duration_minutes is not None and duration > max_duration_minutes:
+        return False
+    return True
+
+
+def _build_facets(trips: list[dict], *, route_scoped: bool = False) -> dict:
+    """Per-option counts for the filter menu, taken before any filter is applied.
+
+    The routes and fleet numbers that actually ran in this window are the only
+    ones worth offering, and a count beside each says whether ticking it is
+    worth the trip.
+
+    ``route_scoped`` marks the one case where these numbers do *not* describe
+    the whole window: the route restriction runs in SQL (it has an index behind
+    it, and skipping it would turn every single-route request into a full scan),
+    so when one is set the counts cover the chosen routes only.
+    """
+    routes: dict[str, dict] = {}
+    vehicles: dict[str, dict] = {}
+    statuses = {"in_progress": 0, "complete": 0, "incomplete": 0}
+    modes = {"rail": 0, "bus": 0, "other": 0}
+    occupancy: dict[str, int] = {}
+    longest = 0.0
+
+    for t in trips:
+        statuses[t["trip_status"]] += 1
+        modes[t["mode"]] += 1
+        occ = t["last_occupancy_status"] or "UNKNOWN"
+        occupancy[occ] = occupancy.get(occ, 0) + 1
+        longest = max(longest, t["duration_minutes"])
+
+        rid = t["route_id"]
+        route = routes.get(rid)
+        if route is None:
+            routes[rid] = {
+                "route_id": rid,
+                "route_short_name": t["route_short_name"],
+                "route_color": t["route_color"],
+                "mode": t["mode"],
+                "trip_count": 1,
+            }
+        else:
+            route["trip_count"] += 1
+
+        label = t["vehicle_label"]
+        if not label:
+            continue
+        vehicle = vehicles.get(label)
+        if vehicle is None:
+            vehicles[label] = {
+                "vehicle_label": label,
+                "route_short_names": [t["route_short_name"]] if t["route_short_name"] else [],
+                "route_color": t["route_color"],
+                "mode": t["mode"],
+                "trip_count": 1,
+            }
+        else:
+            vehicle["trip_count"] += 1
+            short = t["route_short_name"]
+            if short and short not in vehicle["route_short_names"]:
+                vehicle["route_short_names"].append(short)
+
+    def _sort_key(name: str | None) -> tuple[int, int, str]:
+        # Numeric route names sort as numbers ("15" before "120"), lettered rail
+        # lines after them, so the list reads the way the system is signed.
+        text_name = name or ""
+        return (0, int(text_name), "") if text_name.isdigit() else (1, 0, text_name)
+
+    return {
+        "trip_count": len(trips),
+        "route_scoped": route_scoped,
+        "routes": sorted(routes.values(), key=lambda r: _sort_key(r["route_short_name"])),
+        "vehicles": sorted(vehicles.values(), key=lambda v: _sort_key(v["vehicle_label"])),
+        "statuses": statuses,
+        "modes": modes,
+        "occupancy": occupancy,
+        "max_duration_minutes": round(longest, 1),
     }
 
 
@@ -576,35 +820,3 @@ async def _delay_map(
     )
     result = await db.execute(stmt)
     return {tid: delay for tid, delay in result.all() if tid is not None}
-
-
-async def _terminus_reached_map(
-    db: AsyncSession,
-    start: datetime,
-    end: datetime,
-    trip_ids: set[str],
-    endpoint_sequences: dict[str, tuple[int, int]],
-) -> dict[str, bool]:
-    """Which trips have a geofenced arrival at their *terminus* stop_sequence.
-
-    Matching on stop_sequence (not stop_id) matters for loop routes that
-    revisit the same physical stop earlier in the run — an arrival there
-    shouldn't count as reaching the terminus.  Only trips with a known static
-    schedule (an entry in ``endpoint_sequences``) get a real answer here; the
-    caller defaults the rest to True so a trip missing from the bundled GTFS
-    doesn't read as an incident.
-    """
-    schedulable = {tid for tid in trip_ids if tid in endpoint_sequences}
-    if not schedulable:
-        return {}
-    reached = {tid: False for tid in schedulable}
-    stmt = select(StopArrivalEvent.trip_id, StopArrivalEvent.stop_sequence).where(
-        StopArrivalEvent.trip_id.in_(schedulable),
-        StopArrivalEvent.timestamp >= start,
-        StopArrivalEvent.timestamp <= end,
-    )
-    result = await db.execute(stmt)
-    for tid, seq in result.all():
-        if tid in reached and seq == endpoint_sequences[tid][1]:
-            reached[tid] = True
-    return reached

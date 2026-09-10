@@ -6,8 +6,16 @@ import { useVehicles, useStopInfo, useAlerts } from "@/lib/hooks";
 import type { StopInfo, StuckAlert, VehiclePosition } from "@/lib/types";
 import VehicleDialog from "@/components/map/VehicleDialog";
 import StopDialog from "@/components/map/StopDialog";
+import MapLegend from "@/components/map/MapLegend";
 import MapStatusBar from "@/components/map/MapStatusBar";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import {
+  EMPTY_MAP_FILTERS,
+  applyMapFilters,
+  stuckVehicleKeys,
+  vehicleKey,
+  type MapFilters,
+} from "@/lib/mapFilters";
 
 // Leaflet must be loaded client-side only
 const VehicleMap = dynamic(() => import("@/components/map/VehicleMap"), {
@@ -21,6 +29,7 @@ function HomePageInner() {
   const [selected, setSelected] = useState<VehiclePosition | null>(null);
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
   const [searchFlyTo, setSearchFlyTo] = useState<{ lat: number; lng: number; zoom?: number } | null>(null);
+  const [filters, setFilters] = useState<MapFilters>(EMPTY_MAP_FILTERS);
   const searchParams = useSearchParams();
 
   const { data: selectedStop } = useStopInfo(selectedStopId ?? undefined);
@@ -90,19 +99,44 @@ function HomePageInner() {
     });
   }, []);
 
-  const vehicles = data?.vehicles ?? [];
-  const totalRoutes = new Set(vehicles.map((v) => v.route_id)).size;
+  const vehicles = useMemo(() => data?.vehicles ?? [], [data?.vehicles]);
+
+  const stuckKeys = useMemo(
+    () => stuckVehicleKeys(alertsData?.alerts),
+    [alertsData?.alerts],
+  );
+
+  // The map draws the filtered set; the status pill and the filter menu still
+  // see the whole feed, so "12 of 987" and the per-option counts stay truthful.
+  const visibleVehicles = useMemo(
+    () => applyMapFilters(vehicles, filters, stuckKeys),
+    [vehicles, filters, stuckKeys],
+  );
+
+  // Picking a vehicle out of search or a deep link is an explicit request for
+  // that one, so it keeps its marker even when the filters would hide it —
+  // otherwise the map flies to an empty patch of Denver. Matched by identity,
+  // not object reference: every poll hands back fresh objects, and appending a
+  // stale twin of a vehicle already on the map would draw it twice.
+  const mapVehicles = useMemo(() => {
+    if (!selected) return visibleVehicles;
+    const key = vehicleKey(selected);
+    if (visibleVehicles.some((v) => vehicleKey(v) === key)) return visibleVehicles;
+    return [...visibleVehicles, selected];
+  }, [visibleVehicles, selected]);
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
-      {/* Status + search widget — tucked beneath the nav island; tap to cycle info */}
+      {/* Status + search + filter widget — tucked beneath the nav island */}
       <MapStatusBar
         vehicles={vehicles}
-        vehicleCount={vehicles.length}
-        routeCount={totalRoutes}
+        filteredVehicles={visibleVehicles}
         isLoading={isLoading}
         isError={isError}
         dataUpdatedAt={dataUpdatedAt}
+        filters={filters}
+        onFiltersChange={setFilters}
+        stuckKeys={stuckKeys}
         onSelect={handleSearchSelect}
         onSelectStop={handleSearchStopSelect}
       />
@@ -118,13 +152,20 @@ function HomePageInner() {
           </div>
         ) : (
           <VehicleMap
-            vehicles={vehicles}
+            vehicles={mapVehicles}
             onVehicleClick={handleVehicleClick}
             selectedVehicle={selected}
             flyTo={searchFlyTo ?? flyTo}
             selectedStop={selectedStop}
             onStopClick={handleMapStopClick}
           />
+        )}
+
+        {/* Headway colour key — bottom-left, clear of the zoom/attribution stack.
+            On narrow screens it shares that corner with the popup, so hide it
+            there while a dialog is open; on sm+ there's room for both. */}
+        {!isError && (
+          <MapLegend className={selected || selectedStop ? "hidden sm:block" : undefined} />
         )}
 
         {/* Vehicle dialog — hidden while a stop dialog is open */}
@@ -141,7 +182,7 @@ function HomePageInner() {
         {selectedStop && (
           <StopDialog
             stop={selectedStop}
-            vehicles={vehicles}
+            vehicles={visibleVehicles}
             onClose={() => setSelectedStopId(null)}
           />
         )}

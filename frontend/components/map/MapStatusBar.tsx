@@ -10,50 +10,53 @@ import {
 } from "react";
 import { useRoutes, useStopsSearch } from "@/lib/hooks";
 import type { StopInfo, VehiclePosition } from "@/lib/types";
-import { cn, headwayColor } from "@/lib/utils";
-import { useTheme } from "@/lib/useTheme";
+import { cn } from "@/lib/utils";
+import MapFilterControl from "./MapFilterControl";
+import { countActiveMapFilters, type MapFilters } from "@/lib/mapFilters";
 
 interface Props {
+  /** The whole live feed — what search looks through and what the menu counts. */
   vehicles: VehiclePosition[];
-  vehicleCount: number;
-  routeCount: number;
+  /** What survives the current filters, i.e. what the map is drawing. */
+  filteredVehicles: VehiclePosition[];
   isLoading: boolean;
   isError: boolean;
   dataUpdatedAt: number;
+  filters: MapFilters;
+  onFiltersChange: (filters: MapFilters) => void;
+  stuckKeys: Set<string>;
   onSelect: (vehicle: VehiclePosition) => void;
   onSelectStop: (stop: StopInfo) => void;
 }
 
-const CYCLE_COUNT = 3;
+const CYCLE_COUNT = 2;
+/** Auto-advance interval for the status carousel. Keep in step with the
+ *  `status-ring-sweep` keyframe duration in globals.css. */
+const CYCLE_MS = 15000;
 const SEARCH_WIDTH = "min(90vw, 23rem)";
 
 export default function MapStatusBar({
   vehicles,
-  vehicleCount,
-  routeCount,
+  filteredVehicles,
   isLoading,
   isError,
   dataUpdatedAt,
+  filters,
+  onFiltersChange,
+  stuckKeys,
   onSelect,
   onSelectStop,
 }: Props) {
-  const { resolvedTheme } = useTheme();
   const [mode, setMode] = useState<"status" | "search">("status");
   const [cycle, setCycle] = useState(0);
 
-  /** Headway colour key — same buckets used by the map markers. */
-  const legend = useMemo(
-    () =>
-      [
-        { label: "<15", color: headwayColor(10, resolvedTheme) },
-        { label: "20", color: headwayColor(18, resolvedTheme) },
-        { label: "30", color: headwayColor(25, resolvedTheme) },
-        { label: "40", color: headwayColor(35, resolvedTheme) },
-        { label: "50", color: headwayColor(45, resolvedTheme) },
-        { label: "60+", color: headwayColor(99, resolvedTheme) },
-      ] as const,
-    [resolvedTheme],
+  const filtersActive = countActiveMapFilters(filters) > 0;
+  const vehicleCount = filteredVehicles.length;
+  const routeCount = useMemo(
+    () => new Set(filteredVehicles.map((v) => v.route_id)).size,
+    [filteredVehicles],
   );
+
   const [query, setQuery] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
@@ -76,7 +79,17 @@ export default function MapStatusBar({
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
-  }, [mode, cycle, vehicleCount, routeCount, dataUpdatedAt, isLoading, isError]);
+  }, [
+    mode,
+    cycle,
+    vehicleCount,
+    routeCount,
+    vehicles.length,
+    filtersActive,
+    dataUpdatedAt,
+    isLoading,
+    isError,
+  ]);
 
   const openSearch = useCallback(() => {
     setMode("search");
@@ -91,6 +104,17 @@ export default function MapStatusBar({
   }, []);
 
   const advance = useCallback(() => setCycle((c) => (c + 1) % CYCLE_COUNT), []);
+
+  // Auto-advance the carousel. Re-armed whenever `cycle` changes, so a manual
+  // tap resets the countdown (and the sweep ring, which is keyed on `cycle`).
+  // Paused while the search field has taken over the pill, and off entirely for
+  // visitors who asked for reduced motion — they can still tap to cycle.
+  useEffect(() => {
+    if (mode !== "status") return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const id = setTimeout(advance, CYCLE_MS);
+    return () => clearTimeout(id);
+  }, [cycle, mode, advance]);
 
   useEffect(() => {
     if (mode !== "search") return;
@@ -147,7 +171,11 @@ export default function MapStatusBar({
     stops.length;
 
   function handleSelectRoute(routeId: string) {
-    const vehicle = vehicles.find((v) => v.route_id === routeId);
+    // Prefer one the filters are already showing, so the map jumps to a marker
+    // that's on screen rather than to a vehicle the current filters hide.
+    const vehicle =
+      filteredVehicles.find((v) => v.route_id === routeId) ??
+      vehicles.find((v) => v.route_id === routeId);
     if (vehicle) onSelect(vehicle);
     closeSearch();
   }
@@ -176,31 +204,17 @@ export default function MapStatusBar({
             ? "Connecting…"
             : isError
               ? "Feed unavailable"
-              : `${vehicleCount} vehicles · ${routeCount} routes`}
-        </span>
-      );
-    }
-    if (cycle === 1) {
-      return (
-        <span className="text-xs text-fg-muted">
-          {dataUpdatedAt
-            ? `Updated ${new Date(dataUpdatedAt).toLocaleTimeString()}`
-            : "Awaiting data…"}
+              : filtersActive
+                ? `${vehicleCount} of ${vehicles.length} vehicles · ${routeCount} routes`
+                : `${vehicleCount} vehicles · ${routeCount} routes`}
         </span>
       );
     }
     return (
-      <span className="flex items-center gap-1.5 text-[11px] text-fg-subtle">
-        <span className="text-fg-subtle">Headway</span>
-        {legend.map(({ label, color }) => (
-          <span key={label} className="flex items-center gap-1">
-            <span
-              className="inline-block h-2.5 w-2.5 rounded-full border-2"
-              style={{ borderColor: color }}
-            />
-            {label}
-          </span>
-        ))}
+      <span className="text-xs text-fg-muted">
+        {dataUpdatedAt
+          ? `Updated ${new Date(dataUpdatedAt).toLocaleTimeString()}`
+          : "Awaiting data…"}
       </span>
     );
   };
@@ -214,7 +228,9 @@ export default function MapStatusBar({
           style={{
             width: mode === "search" ? SEARCH_WIDTH : "2.25rem",
             marginRight: mode === "search" ? 0 : "0.5rem",
-            maxWidth: "calc(100vw - 1.5rem)",
+            // Leaves room for the filter button, which stays put while search
+            // is open rather than collapsing with the info pill.
+            maxWidth: "calc(100vw - 6rem)",
           }}
         >
           {mode === "status" ? (
@@ -254,43 +270,89 @@ export default function MapStatusBar({
         </div>
 
         {/* Info box — tap to cycle; collapses when search takes over */}
-        <div
-          className={cn(
-            "group flex h-9 shrink-0 items-center overflow-hidden rounded-full border border-line bg-card/90 text-sm text-fg-muted shadow-lg shadow-black/30 backdrop-blur-md transition-[width,opacity,background-color,border-color,box-shadow] duration-300 ease-out",
-            mode === "search"
-              ? "pointer-events-none"
-              : "cursor-pointer hover:border-line-strong hover:bg-card hover:shadow-black/40",
-          )}
-          style={{
-            width:
+        <div className="relative shrink-0">
+          <div
+            className={cn(
+              "group flex h-9 items-center overflow-hidden rounded-full border bg-card/90 text-sm text-fg-muted shadow-lg shadow-black/30 backdrop-blur-md transition-[width,opacity,background-color,border-color,box-shadow] duration-300 ease-out",
+              filtersActive ? "border-accent/60" : "border-line",
               mode === "search"
-                ? 0
-                : statusWidth
-                  ? statusWidth + 2
-                  : undefined,
-            opacity: mode === "search" ? 0 : 1,
-            maxWidth: "calc(100vw - 1.5rem)",
-          }}
-          aria-hidden={mode === "search"}
-        >
-          <button
-            ref={statusRowRef}
-            type="button"
-            onClick={advance}
-            aria-label="Cycle map info"
-            tabIndex={mode === "search" ? -1 : 0}
-            className="flex items-center whitespace-nowrap px-3 transition-transform duration-150 ease-out active:scale-[0.97]"
+                ? "pointer-events-none"
+                : "cursor-pointer hover:border-line-strong hover:bg-card hover:shadow-black/40",
+            )}
+            style={{
+              width:
+                mode === "search"
+                  ? 0
+                  : statusWidth
+                    ? statusWidth + 2
+                    : undefined,
+              opacity: mode === "search" ? 0 : 1,
+              maxWidth: "calc(100vw - 8rem)",
+            }}
+            aria-hidden={mode === "search"}
           >
-            <span key={cycle} className="animate-cycle-in inline-flex items-center">
-              {cycleBody()}
-            </span>
-          </button>
+            <button
+              ref={statusRowRef}
+              type="button"
+              onClick={advance}
+              aria-label="Cycle map info"
+              tabIndex={mode === "search" ? -1 : 0}
+              className="flex items-center whitespace-nowrap px-3 transition-transform duration-150 ease-out active:scale-[0.97]"
+            >
+              <span key={cycle} className="animate-cycle-in inline-flex items-center">
+                {cycleBody()}
+              </span>
+            </button>
+          </div>
+
+          {/* Time-to-advance outline — starts as a full thin ring and retreats
+              to nothing as the cycle runs out, then restarts (keyed on `cycle`,
+              so a manual tap resets it too). Purely decorative. */}
+          {mode === "status" && (
+            <svg
+              className={cn(
+                "pointer-events-none absolute inset-0 h-full w-full overflow-visible",
+                filtersActive ? "text-accent/70" : "text-fg-subtle/60",
+              )}
+              aria-hidden="true"
+            >
+              <rect
+                key={cycle}
+                x="0"
+                y="0"
+                width="100%"
+                height="100%"
+                rx="18"
+                ry="18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                pathLength={1}
+                strokeDasharray="1"
+                style={{ strokeDashoffset: 1 }}
+                className="animate-status-ring"
+              />
+            </svg>
+          )}
         </div>
 
+        {/* Filter menu — stays reachable while search is open, so the pill is the
+            only thing that gives up its space. */}
+        <div className="ml-2 shrink-0">
+          <MapFilterControl
+            vehicles={vehicles}
+            filters={filters}
+            onChange={onFiltersChange}
+            stuckKeys={stuckKeys}
+          />
+        </div>
+
+        {/* Search results hang off the search field's own left edge — the row is
+            no longer symmetric now that the filter button sits at its right end. */}
         {mode === "search" && dropdownOpen && (
           <ul
-            className="absolute left-1/2 top-full z-[1001] mt-2 max-h-80 -translate-x-1/2 overflow-y-auto rounded-lg border border-line-strong bg-overlay/95 shadow-lg backdrop-blur-sm"
-            style={{ width: SEARCH_WIDTH }}
+            className="absolute left-0 top-full z-[1001] mt-2 max-h-80 overflow-y-auto rounded-lg border border-line-strong bg-overlay/95 shadow-lg backdrop-blur-sm"
+            style={{ width: SEARCH_WIDTH, maxWidth: "calc(100vw - 6rem)" }}
           >
             {(
               [

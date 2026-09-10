@@ -197,6 +197,10 @@ export function useActiveVehicles(params: ActiveVehiclesParams) {
     queryKey: ["activeVehicles", params],
     queryFn: () => fetchActiveVehicles(params),
     enabled: Boolean(params.start || params.end),
+    // Hold the last result while a new page or filter set is in flight. The
+    // response carries the filter menu's own option counts, so dropping to
+    // undefined would empty the menu underneath whoever is using it.
+    placeholderData: (previous) => previous,
   });
 }
 

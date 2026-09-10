@@ -188,7 +188,14 @@ export function fetchRidership(routeId?: string, months = 24): Promise<Ridership
 export interface ActiveVehiclesParams {
   start?: string;
   end?: string;
-  route_id?: string;
+  /** Comma-separated; each of these ORs within itself and ANDs with the rest. */
+  route_ids?: string;
+  modes?: string;
+  vehicle_labels?: string;
+  status?: string;
+  occupancy?: string;
+  min_duration_minutes?: number;
+  max_duration_minutes?: number;
   strict?: boolean;
   limit?: number;
   offset?: number;
@@ -198,7 +205,13 @@ export function fetchActiveVehicles(params: ActiveVehiclesParams = {}): Promise<
   return apiFetch(withParams("/api/v1/vehicles/active", {
     start: params.start,
     end: params.end,
-    route_id: params.route_id,
+    route_ids: params.route_ids,
+    modes: params.modes,
+    vehicle_labels: params.vehicle_labels,
+    status: params.status,
+    occupancy: params.occupancy,
+    min_duration_minutes: params.min_duration_minutes,
+    max_duration_minutes: params.max_duration_minutes,
     strict: params.strict ? "true" : undefined,
     limit: params.limit,
     offset: params.offset,

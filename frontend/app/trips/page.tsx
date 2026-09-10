@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useActiveVehicles, useLimits, useRoutes, useVehicles } from "@/lib/hooks";
 import { Card, SectionHeading } from "@/components/ui/Card";
@@ -7,7 +7,26 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ExportButton from "@/components/ui/ExportButton";
 import TripStatusBadge from "@/components/ui/TripStatusBadge";
 import DateTimePicker from "@/components/ui/DateTimePicker";
-import { computeTripStatus, formatDateTime, isTripInProgress, routeColor } from "@/lib/utils";
+import TripFilterMenu from "@/components/trips/TripFilterMenu";
+import { ActiveFilterChip, FilterIcon } from "@/components/ui/FilterControls";
+import {
+  cn,
+  computeTripStatus,
+  formatDateTime,
+  isTripInProgress,
+  occupancyLabel,
+  routeColor,
+} from "@/lib/utils";
+import {
+  EMPTY_TRIP_FILTERS,
+  countActiveTripFilters,
+  tripFilterChips,
+  tripFiltersEqual,
+  tripFiltersFromParams,
+  tripFiltersToParams,
+  tripFiltersToQuery,
+  type TripFilters,
+} from "@/lib/tripFilters";
 import {
   DEFAULT_RANGE_LIMITS,
   clampLocal,
@@ -21,19 +40,8 @@ import {
 } from "@/lib/dateRange";
 import type { ActiveVehicle } from "@/lib/types";
 
-const OCCUPANCY_SHORT: Record<string, string> = {
-  EMPTY: "Empty",
-  MANY_SEATS_AVAILABLE: "Many seats",
-  FEW_SEATS_AVAILABLE: "Few seats",
-  STANDING_ROOM_ONLY: "Standing",
-  CRUSHED_STANDING_ROOM_ONLY: "Crushed",
-  FULL: "Full",
-  NOT_ACCEPTING_PASSENGERS: "Not accepting",
-  UNKNOWN: "—",
-};
-
-function formatDuration(startIso: string, endIso: string): string {
-  const mins = Math.round((new Date(endIso).getTime() - new Date(startIso).getTime()) / 60_000);
+function formatDuration(minutes: number): string {
+  const mins = Math.round(minutes);
   if (mins < 60) return `${mins}m`;
   const h = Math.floor(mins / 60);
   const m = mins % 60;
@@ -58,8 +66,15 @@ function TripsContent() {
 
   const urlStart = searchParams.get("start");
   const urlEnd = searchParams.get("end");
-  const urlRouteId = searchParams.get("route_id");
-  const urlStrict = searchParams.get("strict") === "true";
+  // The whole applied set lives in the URL, so a filtered view is shareable and
+  // the browser's back button walks it the way it walks the date range. Keyed on
+  // the query string rather than the params object, so the memo (and the effect
+  // that follows it) only re-runs when the URL genuinely changed.
+  const paramsKey = searchParams.toString();
+  const appliedFilters = useMemo(
+    () => tripFiltersFromParams(new URLSearchParams(paramsKey)),
+    [paramsKey],
+  );
 
   const [startLocal, setStartLocal] = useState(() =>
     urlStart ? isoToLocalInput(urlStart) : toLocalInput(new Date(Date.now() - 3_600_000)),
@@ -67,11 +82,10 @@ function TripsContent() {
   const [endLocal, setEndLocal] = useState(() =>
     urlEnd ? isoToLocalInput(urlEnd) : toLocalInput(new Date()),
   );
-  const [routeId, setRouteId] = useState(urlRouteId ?? "");
-  const [strict, setStrict] = useState(urlStrict);
-  const [routeSearch, setRouteSearch] = useState("");
-  const [routeDropdownOpen, setRouteDropdownOpen] = useState(false);
-  const routeComboRef = useRef<HTMLDivElement>(null);
+  // Edits sit in a draft until Load / Apply, so the table doesn't refetch on
+  // every tick of a checkbox.
+  const [draft, setDraft] = useState<TripFilters>(appliedFilters);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const PAGE_SIZE_OPTIONS = [15, 30, 50, 100] as const;
   const [pageSize, setPageSize] = useState<number>(15);
@@ -81,10 +95,9 @@ function TripsContent() {
   useEffect(() => {
     if (urlStart) setStartLocal(isoToLocalInput(urlStart));
     if (urlEnd) setEndLocal(isoToLocalInput(urlEnd));
-    setRouteId(urlRouteId ?? "");
-    setStrict(urlStrict);
+    setDraft(appliedFilters);
     setPage(1);
-  }, [urlStart, urlEnd, urlRouteId, urlStrict]);
+  }, [urlStart, urlEnd, appliedFilters]);
 
   // ── Selectable date window ────────────────────────────────────────────────
   // The API rejects a range that is inverted, wider than vehicles_max_span_hours,
@@ -137,20 +150,22 @@ function TripsContent() {
 
   const fetchStart = urlStart ?? defaultStart;
   const fetchEnd = urlEnd ?? defaultEnd;
-  const fetchRouteId = urlRouteId ?? undefined;
 
-  const routes = useRoutes();
-  const { data, isLoading, isError } = useActiveVehicles({
+  const { data, isLoading, isError, isFetching } = useActiveVehicles({
     start: fetchStart,
     end: fetchEnd,
-    route_id: fetchRouteId,
-    strict: urlStrict,
+    ...tripFiltersToQuery(appliedFilters),
     limit: pageSize,
     offset: (page - 1) * pageSize,
   });
   // Cross-reference the live realtime feed so each row can show whether its
   // trip is still in progress or already complete.
   const live = useVehicles();
+  // Static route list — the menu offers every route, not just the ones the
+  // current query happened to count.
+  const routes = useRoutes();
+
+  const facets = data?.facets;
 
   const sortedRoutes = useMemo(() => {
     const list = routes.data?.routes ?? [];
@@ -158,32 +173,6 @@ function TripsContent() {
       a.short_name.localeCompare(b.short_name, undefined, { numeric: true }),
     );
   }, [routes.data]);
-
-  const groupedRoutes = useMemo(() => {
-    const q = routeSearch.toLowerCase().trim();
-    const filtered = q
-      ? sortedRoutes.filter(
-          (r) =>
-            r.short_name.toLowerCase().includes(q) || r.long_name.toLowerCase().includes(q),
-        )
-      : sortedRoutes;
-    return {
-      rail: filtered.filter((r) => r.type_name !== "bus" && r.type_name !== "other"),
-      bus: filtered.filter((r) => r.type_name === "bus"),
-      other: filtered.filter((r) => r.type_name === "other"),
-    };
-  }, [sortedRoutes, routeSearch]);
-
-  useEffect(() => {
-    function handleOutsideClick(e: MouseEvent) {
-      if (routeComboRef.current && !routeComboRef.current.contains(e.target as Node)) {
-        setRouteDropdownOpen(false);
-        setRouteSearch("");
-      }
-    }
-    document.addEventListener("mousedown", handleOutsideClick);
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
-  }, []);
 
   // The pickers can no longer produce an invalid range, but a stale URL or a
   // hand-typed value on the native mobile control still can — so keep the guard.
@@ -194,16 +183,32 @@ function TripsContent() {
     return e.getTime() - s.getTime() <= limits.maxSpanHours * 3_600_000;
   }, [startLocal, endLocal, limits.maxSpanHours]);
 
-  function handleLoad() {
+  const pushQuery = useCallback(
+    (filters: TripFilters, startIso: string, endIso: string) => {
+      const qs = new URLSearchParams({ start: startIso, end: endIso });
+      for (const [k, v] of Object.entries(tripFiltersToParams(filters))) qs.set(k, v);
+      router.push(`/trips?${qs}`);
+    },
+    [router],
+  );
+
+  const handleLoad = useCallback(() => {
     const startIso = localInputToIso(startLocal);
     const endIso = localInputToIso(endLocal);
     if (!startIso || !endIso) return;
     setPage(1);
-    const qs = new URLSearchParams({ start: startIso, end: endIso });
-    if (routeId) qs.set("route_id", routeId);
-    if (strict) qs.set("strict", "true");
-    router.push(`/trips?${qs}`);
-  }
+    pushQuery(draft, startIso, endIso);
+  }, [draft, startLocal, endLocal, pushQuery]);
+
+  /** Removing a chip is an unambiguous instruction, so it applies straight away. */
+  const applyImmediately = useCallback(
+    (filters: TripFilters) => {
+      setDraft(filters);
+      setPage(1);
+      pushQuery(filters, fetchStart, fetchEnd);
+    },
+    [fetchStart, fetchEnd, pushQuery],
+  );
 
   function handleVehicleClick(v: ActiveVehicle) {
     if (!v.vehicle_label) return;
@@ -215,10 +220,11 @@ function TripsContent() {
     const pad = 2 * 60_000;
     qs.set("start", new Date(new Date(v.start_time).getTime() - pad).toISOString());
     qs.set("end", new Date(new Date(v.end_time).getTime() + pad).toISOString());
-    // Preserve the list's window so the breadcrumb returns to the same view.
-    qs.set("ret_start", fetchStart);
-    qs.set("ret_end", fetchEnd);
-    if (fetchRouteId) qs.set("ret_route_id", fetchRouteId);
+    // Preserve the list's whole query — window and filters — so the breadcrumb
+    // returns to the view the row was clicked from, not just its date range.
+    const ret = new URLSearchParams({ start: fetchStart, end: fetchEnd });
+    for (const [k, val] of Object.entries(tripFiltersToParams(appliedFilters))) ret.set(k, val);
+    qs.set("ret", ret.toString());
     router.push(`/trips/trip/${encodeURIComponent(v.vehicle_label)}?${qs}`);
   }
 
@@ -236,11 +242,29 @@ function TripsContent() {
     }
   }, [fetchStart, fetchEnd]);
 
-  const fetchSelectedRouteName = routes.data?.routes.find(
-    (r) => r.route_id === fetchRouteId,
-  )?.short_name;
+  const routeNameOf = useCallback(
+    (routeId: string) =>
+      sortedRoutes.find((r) => r.route_id === routeId)?.short_name ??
+      facets?.routes.find((r) => r.route_id === routeId)?.route_short_name ??
+      undefined,
+    [sortedRoutes, facets],
+  );
 
-  const selectedRouteName = routes.data?.routes.find((r) => r.route_id === routeId)?.short_name;
+  const chips = useMemo(
+    () => tripFilterChips(appliedFilters, routeNameOf),
+    [appliedFilters, routeNameOf],
+  );
+
+  const appliedCount = countActiveTripFilters(appliedFilters);
+  const draftCount = countActiveTripFilters(draft);
+  const draftDiffers = !tripFiltersEqual(draft, appliedFilters);
+
+  const matched = data?.vehicle_count ?? 0;
+  const windowTotal = data?.window_count ?? 0;
+  // Export still speaks one route at a time, so only offer to scope it when the
+  // filter set narrows to exactly that.
+  const exportRouteId =
+    appliedFilters.routeIds.length === 1 ? appliedFilters.routeIds[0] : undefined;
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 pb-6 pt-24 text-fg">
@@ -249,22 +273,25 @@ function TripsContent() {
           <h1 className="text-2xl font-bold text-fg">Trip Explorer</h1>
           <p className="text-sm text-fg-subtle">
             {timeLabel ? `${timeLabel} · ` : ""}
-            {isLoading ? "Loading…" : `${data?.vehicle_count ?? 0} vehicles`}
-            {fetchRouteId
-              ? ` · Route ${fetchSelectedRouteName ?? fetchRouteId}`
-              : " · all routes"}
+            {/* "N of M" only when something was actually filtered out — a route
+                filter runs in SQL, so it narrows both numbers equally. */}
+            {isLoading
+              ? "Loading…"
+              : windowTotal > matched
+                ? `${matched} of ${windowTotal} trips`
+                : `${matched} trips`}
           </p>
         </div>
-        <ExportButton routeId={fetchRouteId} start={fetchStart} end={fetchEnd} />
+        <ExportButton routeId={exportRouteId} start={fetchStart} end={fetchEnd} />
       </div>
 
       {/* Filter bar */}
       <Card>
         <SectionHeading
           title="Filters"
-          subtitle="Select a date/time range and optionally filter by route, then click Load"
+          subtitle="Pick a date and time range, add any filters you want, then load the trips"
         />
-        <div className="flex flex-wrap items-end gap-4">
+        <div className="flex flex-wrap items-end gap-3">
           <DateTimePicker
             id="trips-start"
             label="Start"
@@ -280,170 +307,87 @@ function TripsContent() {
             bounds={bounds.end}
           />
 
-          {/* Route combobox */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-fg-subtle">Route</label>
-            <div ref={routeComboRef} className="relative">
-              <div className="flex items-center gap-1 rounded border border-line bg-card px-2 py-1.5 text-sm focus-within:ring-2 focus-within:ring-accent">
-                <svg
-                  className="h-3.5 w-3.5 shrink-0 text-fg-subtle"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                  aria-hidden="true"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <input
-                  type="text"
-                  value={routeDropdownOpen ? routeSearch : ""}
-                  placeholder={selectedRouteName ? `Route ${selectedRouteName}` : "All routes"}
-                  onChange={(e) => setRouteSearch(e.target.value)}
-                  onFocus={() => setRouteDropdownOpen(true)}
-                  className="w-44 bg-transparent outline-none text-fg placeholder-fg-subtle"
-                />
-                {routeId && (
-                  <button
-                    onClick={() => {
-                      setRouteId("");
-                      setRouteSearch("");
-                      setRouteDropdownOpen(false);
-                    }}
-                    aria-label="Clear route filter"
-                    className="shrink-0 text-fg-subtle hover:text-fg-muted"
-                  >
-                    <svg
-                      className="h-3.5 w-3.5"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                      aria-hidden="true"
-                    >
-                      <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-              {routeDropdownOpen && (
-                <ul className="absolute left-0 top-full z-50 mt-1 max-h-64 w-64 overflow-y-auto rounded border border-line bg-card shadow-card">
-                  <li>
-                    <button
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => {
-                        setRouteId("");
-                        setRouteSearch("");
-                        setRouteDropdownOpen(false);
-                      }}
-                      className="w-full px-3 py-2 text-left text-sm text-fg-subtle hover:bg-raised"
-                    >
-                      All routes
-                    </button>
-                  </li>
-                  {groupedRoutes.rail.length > 0 && (
-                    <>
-                      <li className="border-t border-line px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
-                        Rail
-                      </li>
-                      {groupedRoutes.rail.map((r) => (
-                        <li key={r.route_id}>
-                          <button
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => {
-                              setRouteId(r.route_id);
-                              setRouteSearch("");
-                              setRouteDropdownOpen(false);
-                            }}
-                            className={`w-full px-3 py-2 text-left text-sm hover:bg-raised ${r.route_id === routeId ? "bg-accent/10 font-medium text-accent" : "text-fg-muted"}`}
-                          >
-                            <span className="font-medium">{r.short_name}</span>
-                            <span className="ml-1.5 text-fg-subtle">— {r.long_name}</span>
-                          </button>
-                        </li>
-                      ))}
-                    </>
-                  )}
-                  {groupedRoutes.bus.length > 0 && (
-                    <>
-                      <li className="border-t border-line px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
-                        Bus
-                      </li>
-                      {groupedRoutes.bus.map((r) => (
-                        <li key={r.route_id}>
-                          <button
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => {
-                              setRouteId(r.route_id);
-                              setRouteSearch("");
-                              setRouteDropdownOpen(false);
-                            }}
-                            className={`w-full px-3 py-2 text-left text-sm hover:bg-raised ${r.route_id === routeId ? "bg-accent/10 font-medium text-accent" : "text-fg-muted"}`}
-                          >
-                            <span className="font-medium">{r.short_name}</span>
-                            <span className="ml-1.5 text-fg-subtle">— {r.long_name}</span>
-                          </button>
-                        </li>
-                      ))}
-                    </>
-                  )}
-                  {groupedRoutes.other.length > 0 && (
-                    <>
-                      <li className="border-t border-line px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
-                        Other
-                      </li>
-                      {groupedRoutes.other.map((r) => (
-                        <li key={r.route_id}>
-                          <button
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => {
-                              setRouteId(r.route_id);
-                              setRouteSearch("");
-                              setRouteDropdownOpen(false);
-                            }}
-                            className={`w-full px-3 py-2 text-left text-sm hover:bg-raised ${r.route_id === routeId ? "bg-accent/10 font-medium text-accent" : "text-fg-muted"}`}
-                          >
-                            <span className="font-medium">{r.short_name}</span>
-                            <span className="ml-1.5 text-fg-subtle">— {r.long_name}</span>
-                          </button>
-                        </li>
-                      ))}
-                    </>
-                  )}
-                  {groupedRoutes.rail.length === 0 &&
-                    groupedRoutes.bus.length === 0 &&
-                    groupedRoutes.other.length === 0 && (
-                      <li className="px-3 py-2 text-sm text-fg-subtle">No routes found</li>
-                    )}
-                </ul>
+          <button
+            type="button"
+            onClick={() => setMenuOpen((o) => !o)}
+            aria-expanded={menuOpen}
+            className={cn(
+              "press flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm font-medium transition-[transform,background-color,border-color,color] duration-150",
+              draftCount > 0 || menuOpen
+                ? "border-accent bg-accent/10 text-accent"
+                : "border-line bg-card text-fg-muted hover:border-line-strong hover:text-fg",
+            )}
+          >
+            <FilterIcon className="h-4 w-4" />
+            More filters
+            {draftCount > 0 && (
+              <span
+                key={draftCount}
+                className="animate-badge-pop rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold leading-none text-accent-ink"
+              >
+                {draftCount}
+              </span>
+            )}
+            <ChevronIcon
+              className={cn(
+                "h-3.5 w-3.5 transition-transform duration-300 ease-out motion-reduce:transition-none",
+                menuOpen && "rotate-180",
               )}
-            </div>
-          </div>
+            />
+          </button>
 
           <button
             onClick={handleLoad}
             disabled={!isValidRange}
-            className={`rounded px-4 py-1.5 text-sm font-medium transition-colors ${
+            className={cn(
+              "press rounded px-4 py-1.5 text-sm font-medium transition-[transform,opacity,background-color,color] duration-150",
               isValidRange
                 ? "bg-accent text-accent-ink hover:opacity-90"
-                : "cursor-not-allowed bg-raised text-fg-subtle"
-            }`}
+                : "cursor-not-allowed bg-raised text-fg-subtle",
+            )}
           >
             Load trips
           </button>
+
+          {draftDiffers && (
+            <span className="animate-cycle-in self-center text-xs text-warn">
+              Filters changed — load to apply
+            </span>
+          )}
         </div>
 
         <p className="mt-3 text-xs text-fg-subtle">{describeLimits(limits)}</p>
 
-        <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-fg-muted">
-          <input
-            type="checkbox"
-            checked={strict}
-            onChange={(e) => setStrict(e.target.checked)}
-            className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
-          />
-          Only include trips strictly within this timeframe
-        </label>
+        <TripFilterMenu
+          open={menuOpen}
+          value={draft}
+          onChange={setDraft}
+          facets={facets}
+          routes={sortedRoutes}
+          onReset={() => applyImmediately(EMPTY_TRIP_FILTERS)}
+          onApply={handleLoad}
+          applyDisabled={!isValidRange}
+        />
+
+        {chips.length > 0 && (
+          <div className="mt-4 flex flex-wrap items-center gap-1.5 border-t border-line pt-3">
+            <span className="mr-1 text-xs font-medium text-fg-subtle">Filtering by</span>
+            {chips.map((chip) => (
+              <ActiveFilterChip
+                key={chip.id}
+                label={chip.label}
+                onRemove={() => applyImmediately(chip.next)}
+              />
+            ))}
+            <button
+              type="button"
+              onClick={() => applyImmediately(EMPTY_TRIP_FILTERS)}
+              className="ml-1 text-xs font-medium text-fg-subtle underline-offset-2 transition-colors hover:text-fg hover:underline"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
       </Card>
 
       {/* Vehicles table */}
@@ -462,14 +406,34 @@ function TripsContent() {
         )}
 
         {!isLoading && !isError && data?.vehicles.length === 0 && (
-          <p className="py-8 text-center text-sm text-fg-subtle">
-            No vehicle data found for this time window.
-          </p>
+          <div className="py-8 text-center">
+            <p className="text-sm text-fg-subtle">
+              {appliedCount > 0 && windowTotal > 0
+                ? `None of the ${windowTotal} trips in this window match these filters.`
+                : "No vehicle data found for this time window."}
+            </p>
+            {appliedCount > 0 && (
+              <button
+                type="button"
+                onClick={() => applyImmediately(EMPTY_TRIP_FILTERS)}
+                className="mt-2 text-sm font-medium text-accent underline-offset-2 hover:underline"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
         )}
 
         {!isLoading && !isError && (data?.vehicles.length ?? 0) > 0 && (
           <>
-            <div className="overflow-x-auto rounded border border-line">
+            {/* Dimmed, not replaced, while the next page or filter set loads —
+                the rows underneath are still the ones that were asked for. */}
+            <div
+              className={cn(
+                "overflow-x-auto rounded border border-line transition-opacity duration-200",
+                isFetching && "opacity-60",
+              )}
+            >
               <table className="min-w-full text-sm text-fg-muted">
                 <thead className="bg-raised text-xs uppercase text-fg-subtle">
                   <tr>
@@ -491,10 +455,14 @@ function TripsContent() {
                       onClick={() => handleVehicleClick(v)}
                     >
                       <td className="px-3 py-2">
+                        {/* The API decided the status the filter matched on; the
+                            live feed is fresher, so a trip that is still running
+                            keeps its blinking dot between refetches. */}
                         <TripStatusBadge
                           variant="dot"
                           status={computeTripStatus(
-                            isTripInProgress(live.data?.vehicles, v.vehicle_label, v.trip_id),
+                            v.in_progress ||
+                              isTripInProgress(live.data?.vehicles, v.vehicle_label, v.trip_id),
                             v.reached_terminus,
                           )}
                         />
@@ -525,10 +493,12 @@ function TripsContent() {
                         })}
                       </td>
                       <td className="px-3 py-2 text-right font-mono text-fg-muted">
-                        {formatDuration(v.start_time, v.end_time)}
+                        {formatDuration(v.duration_minutes)}
                       </td>
                       <td className="px-3 py-2 text-fg-muted">
-                        {OCCUPANCY_SHORT[v.last_occupancy_status ?? "UNKNOWN"] ?? "—"}
+                        {v.last_occupancy_status
+                          ? occupancyLabel(v.last_occupancy_status)
+                          : "—"}
                       </td>
                     </tr>
                   ))}
@@ -538,8 +508,8 @@ function TripsContent() {
 
             {/* Pagination controls */}
             {(() => {
-              const totalCount = data!.vehicle_count;
-              const totalPages = Math.ceil(totalCount / pageSize);
+              const totalCount = matched;
+              const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
               const start = (page - 1) * pageSize + 1;
               const end = Math.min(page * pageSize, totalCount);
               return (
@@ -590,6 +560,18 @@ function TripsContent() {
         )}
       </Card>
     </div>
+  );
+}
+
+function ChevronIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path
+        fillRule="evenodd"
+        d="M5.22 7.22a.75.75 0 0 1 1.06 0L10 10.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 8.28a.75.75 0 0 1 0-1.06Z"
+        clipRule="evenodd"
+      />
+    </svg>
   );
 }
 

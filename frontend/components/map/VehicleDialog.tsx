@@ -57,8 +57,8 @@ export default function VehicleDialog({ vehicle: v, onClose, isStuck = false }: 
           </div>
         </div>
 
-        {/* On-time status */}
-        <div className="flex items-center gap-2">
+        {/* On-time status, with the trip-page link sitting inline alongside it */}
+        <div className="flex flex-wrap items-center gap-2">
           <span
             className={cn(
               "rounded-full px-2 py-0.5 text-xs font-semibold",
@@ -68,6 +68,27 @@ export default function VehicleDialog({ vehicle: v, onClose, isStuck = false }: 
             {isStuck ? "Stuck" : isLate ? "Late" : isEarly ? "Early" : "On time"}
           </span>
           {delayText && <span className="font-mono text-fg-muted">{delayText}</span>}
+
+          {/* View trip — same translucent pill treatment as the status tag, in
+              the In Progress orange. Jumps to this vehicle's trip page. */}
+          {v.vehicle_label && (
+            <a
+              href={`/trips/trip/${encodeURIComponent(v.vehicle_label)}${
+                v.trip_id ? `?trip_id=${encodeURIComponent(v.trip_id)}` : ""
+              }`}
+              className="status-warn inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold transition-opacity hover:opacity-80"
+            >
+              <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-current" />
+              View Trip
+              <svg className="h-3 w-3 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path
+                  fillRule="evenodd"
+                  d="M7.21 14.77a.75.75 0 0 1 .02-1.06L10.94 10 7.23 6.29a.75.75 0 0 1 1.06-1.06l4.24 4.24a.75.75 0 0 1 0 1.06l-4.24 4.24a.75.75 0 0 1-1.08 0Z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </a>
+          )}
         </div>
 
         {/* Headway */}

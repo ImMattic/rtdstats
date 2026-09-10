@@ -356,12 +356,19 @@ export interface ActiveVehicle {
   route_id: string;
   route_short_name: string | null;
   route_color: string | null;
+  route_type: string | null;
+  /** rail / bus / other, from the route's GTFS route_type. */
+  mode: string;
   start_time: string;
   end_time: string;
+  duration_minutes: number;
   start_stop_name: string | null;
   end_stop_name: string | null;
   /** False when the trip ended without a geofenced arrival at its terminus stop_sequence. */
   reached_terminus: boolean;
+  /** Still reporting positions as of the request — the server's read of "live". */
+  in_progress: boolean;
+  trip_status: "in_progress" | "complete" | "incomplete";
   last_latitude: number | null;
   last_longitude: number | null;
   last_occupancy_status: string | null;
@@ -370,11 +377,48 @@ export interface ActiveVehicle {
   stop_arrival_count: number;
 }
 
+export interface TripRouteFacet {
+  route_id: string;
+  route_short_name: string | null;
+  route_color: string | null;
+  mode: string;
+  trip_count: number;
+}
+
+export interface TripVehicleFacet {
+  vehicle_label: string;
+  /** Every route this fleet number served in the window, in the order first seen. */
+  route_short_names: string[];
+  route_color: string | null;
+  mode: string;
+  trip_count: number;
+}
+
+/** Per-option counts for the Trip Explorer's filter menu, taken before filters. */
+export interface TripFacets {
+  trip_count: number;
+  /**
+   * True when a route filter was in force, which the API applies in SQL — these
+   * counts then describe the chosen routes rather than the whole window.
+   */
+  route_scoped: boolean;
+  routes: TripRouteFacet[];
+  vehicles: TripVehicleFacet[];
+  statuses: Record<string, number>;
+  modes: Record<string, number>;
+  occupancy: Record<string, number>;
+  max_duration_minutes: number;
+}
+
 export interface ActiveVehiclesResponse {
   start: string;
   end: string;
+  /** Trips matching every filter — what pagination counts against. */
   vehicle_count: number;
+  /** Trips in the window before any filter, for "N of M" copy. */
+  window_count: number;
   vehicles: ActiveVehicle[];
+  facets: TripFacets;
 }
 
 export interface VehicleStopEvent {

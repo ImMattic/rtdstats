@@ -401,7 +401,10 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
     if (data?.trip_id) setResolvedTripId(data.trip_id);
   }, [data?.trip_id]);
 
-  // The breadcrumb returns to the originating list window, not this leg's bounds.
+  // The breadcrumb returns to the originating list view — its window *and* its
+  // filters — not this leg's bounds. `ret` carries the whole query the list was
+  // showing; the older per-field params still work for links already out there.
+  const ret = searchParams.get("ret");
   const retStart = searchParams.get("ret_start");
   const retEnd = searchParams.get("ret_end");
   const retRouteId = searchParams.get("ret_route_id");
@@ -409,7 +412,8 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
   if (retStart) backQs.set("start", retStart);
   if (retEnd) backQs.set("end", retEnd);
   if (retRouteId) backQs.set("route_id", retRouteId);
-  const backHref = `/trips${backQs.toString() ? `?${backQs}` : ""}`;
+  const backSearch = ret || backQs.toString();
+  const backHref = `/trips${backSearch ? `?${backSearch}` : ""}`;
 
   const routeHex = routeColor(data?.route_color ?? "888888");
 
