@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     export_max_span_days: int = 31
     historical_max_span_days: int = 7
     vehicles_max_span_hours: int = 24
+    # How far back raw rows still exist.  Mirrors the retention policy created in
+    # migration 002 (add_retention_policy, INTERVAL '365 days'); it is published
+    # via /api/v1/meta/limits purely so date pickers can grey out days we know
+    # hold no data.  Change the migration if you want the real retention moved.
+    data_retention_days: int = 365
 
     # ── RTD GTFS-RT feed URLs ─────────────────────────────────────────────────
     gtfs_rt_vehicle_url: str = (

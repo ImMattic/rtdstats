@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -59,10 +60,24 @@ export default function NavBar() {
         <div className="flex items-center gap-4 rounded-full border border-rtd-darkred bg-rtd-red/95 px-4 py-2 text-white shadow-xl shadow-black/30 backdrop-blur-md sm:gap-8 sm:px-5">
           <Link
             href="/"
-            className="text-lg font-extrabold tracking-tight transition-opacity hover:opacity-80 sm:text-xl"
+            className="flex shrink-0 items-center gap-2 text-lg font-extrabold tracking-tight text-white transition-opacity hover:opacity-80 sm:text-xl"
             aria-label="TransitDen — Live Map"
           >
-            Transit<span className="text-rtd-gold">Den</span>
+            {/* Square white mark, sized to the bar's cap height. `alt=""` since
+                the link already carries the name. `priority` because it sits
+                above the fold on every page. `unoptimized` because the source is
+                a 4 KB PNG and the standalone runtime image has no sharp — the
+                optimizer would fail at runtime for no gain. */}
+            <Image
+              src="/transitden_logo_white_512.png"
+              alt=""
+              width={512}
+              height={512}
+              priority
+              unoptimized
+              className="h-7 w-7 sm:h-8 sm:w-8"
+            />
+            TransitDen
           </Link>
           <nav
             className="relative hidden sm:flex gap-1"

@@ -1,5 +1,17 @@
 // ── Shared domain types mirroring the backend Pydantic schemas ──────────────
 
+/**
+ * The server's own request caps, from /api/v1/meta/limits. Date pickers read
+ * these so they can disable out-of-range days instead of letting the API reject
+ * the window afterwards.
+ */
+export interface LimitsResponse {
+  vehicles_max_span_hours: number;
+  historical_max_span_days: number;
+  export_max_span_days: number;
+  data_retention_days: number;
+}
+
 export interface RailShape {
   route_id: string;
   short_name: string;
