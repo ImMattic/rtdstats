@@ -68,7 +68,7 @@ services:
       - "${FRONTEND_BIND_IP:-0.0.0.0}:3000:3000"
     environment:
       BACKEND_URL: http://backend:8000
-      NEXT_PUBLIC_SITE_URL: https://${STAGING_DOMAIN:?STAGING_DOMAIN is required}
+      SITE_URL: https://${STAGING_DOMAIN:?STAGING_DOMAIN is required}
       CARTO_API_KEY: ${CARTO_API_KEY:-}
     depends_on:
       - backend
