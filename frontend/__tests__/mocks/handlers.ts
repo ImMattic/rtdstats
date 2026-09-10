@@ -8,6 +8,7 @@ import type {
   RoutesResponse,
   RailShapesResponse,
   HistoricalResponse,
+  LimitsResponse,
 } from "@/lib/types";
 
 export const MOCK_VEHICLE = {
@@ -68,6 +69,14 @@ const MOCK_ALERT = {
 };
 
 export const handlers = [
+  http.get("/api/v1/meta/limits", () =>
+    HttpResponse.json<LimitsResponse>({
+      vehicles_max_span_hours: 24,
+      historical_max_span_days: 7,
+      export_max_span_days: 31,
+      data_retention_days: 365,
+    })
+  ),
   http.get("/api/v1/realtime/vehicles", () =>
     HttpResponse.json<RealtimeResponse>({
       updated_at: "2026-06-20T12:00:00Z",

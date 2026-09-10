@@ -5,6 +5,7 @@ import type {
   FrequencyResponse,
   HeatmapResponse,
   HistoricalResponse,
+  LimitsResponse,
   OccupancyResponse,
   OnTimeResponse,
   OverviewResponse,
@@ -45,6 +46,12 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(res.status, `API ${res.status}: ${text}`);
   }
   return res.json() as Promise<T>;
+}
+
+// ── Meta ───────────────────────────────────────────────────────────────────
+
+export function fetchLimits(): Promise<LimitsResponse> {
+  return apiFetch("/api/v1/meta/limits");
 }
 
 // ── Realtime ───────────────────────────────────────────────────────────────

@@ -24,6 +24,7 @@ import {
   fetchRidership,
   fetchActiveVehicles,
   fetchVehicleTrip,
+  fetchLimits,
   type HistoricalParams,
   type ActiveVehiclesParams,
   type VehicleTripParams,
@@ -35,6 +36,19 @@ const ANALYTICS_INTERVAL = 300_000;
 // Poll interval for real-time data (ms). RTD's GTFS-RT protobuf feed refreshes
 // roughly every 30 seconds — fetching faster than the data changes is wasted work.
 const REALTIME_INTERVAL = 30_000;
+
+/**
+ * The API's time-range caps. Fixed for the life of a deploy, so fetch once and
+ * never revalidate; callers fall back to DEFAULT_RANGE_LIMITS while it loads.
+ */
+export function useLimits() {
+  return useQuery({
+    queryKey: ["limits"],
+    queryFn: fetchLimits,
+    staleTime: Infinity,
+    retry: 1,
+  });
+}
 
 export function useVehicles() {
   return useQuery({

@@ -1,12 +1,24 @@
 "use client";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useActiveVehicles, useRoutes, useVehicles } from "@/lib/hooks";
+import { useActiveVehicles, useLimits, useRoutes, useVehicles } from "@/lib/hooks";
 import { Card, SectionHeading } from "@/components/ui/Card";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ExportButton from "@/components/ui/ExportButton";
 import TripStatusBadge from "@/components/ui/TripStatusBadge";
+import DateTimePicker from "@/components/ui/DateTimePicker";
 import { computeTripStatus, formatDateTime, isTripInProgress, routeColor } from "@/lib/utils";
+import {
+  DEFAULT_RANGE_LIMITS,
+  clampLocal,
+  describeLimits,
+  fromLocalInput,
+  isoToLocalInput,
+  localInputToIso,
+  rangeBounds,
+  toLocalInput,
+  type RangeLimits,
+} from "@/lib/dateRange";
 import type { ActiveVehicle } from "@/lib/types";
 
 const OCCUPANCY_SHORT: Record<string, string> = {
@@ -40,12 +52,6 @@ function RouteBadge({ shortName, color }: { shortName: string | null; color: str
   );
 }
 
-function toDatetimeLocal(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 function TripsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -56,12 +62,10 @@ function TripsContent() {
   const urlStrict = searchParams.get("strict") === "true";
 
   const [startLocal, setStartLocal] = useState(() =>
-    urlStart
-      ? toDatetimeLocal(urlStart)
-      : toDatetimeLocal(new Date(Date.now() - 3_600_000).toISOString()),
+    urlStart ? isoToLocalInput(urlStart) : toLocalInput(new Date(Date.now() - 3_600_000)),
   );
   const [endLocal, setEndLocal] = useState(() =>
-    urlEnd ? toDatetimeLocal(urlEnd) : toDatetimeLocal(new Date().toISOString()),
+    urlEnd ? isoToLocalInput(urlEnd) : toLocalInput(new Date()),
   );
   const [routeId, setRouteId] = useState(urlRouteId ?? "");
   const [strict, setStrict] = useState(urlStrict);
@@ -75,12 +79,64 @@ function TripsContent() {
 
   // Sync picker state when URL params change (e.g. after "Load trips" or browser back/forward)
   useEffect(() => {
-    if (urlStart) setStartLocal(toDatetimeLocal(urlStart));
-    if (urlEnd) setEndLocal(toDatetimeLocal(urlEnd));
+    if (urlStart) setStartLocal(isoToLocalInput(urlStart));
+    if (urlEnd) setEndLocal(isoToLocalInput(urlEnd));
     setRouteId(urlRouteId ?? "");
     setStrict(urlStrict);
     setPage(1);
   }, [urlStart, urlEnd, urlRouteId, urlStrict]);
+
+  // ── Selectable date window ────────────────────────────────────────────────
+  // The API rejects a range that is inverted, wider than vehicles_max_span_hours,
+  // or older than the hypertable's retention. Rather than let someone pick such a
+  // range and read the error afterwards, we hand those same limits to the pickers
+  // so the impossible days come up greyed out.
+  const limitsQuery = useLimits();
+  const limits: RangeLimits = useMemo(
+    () =>
+      limitsQuery.data
+        ? {
+            maxSpanHours: limitsQuery.data.vehicles_max_span_hours,
+            retentionDays: limitsQuery.data.data_retention_days,
+          }
+        : DEFAULT_RANGE_LIMITS,
+    [limitsQuery.data],
+  );
+
+  // "Now" is the upper bound of every field, so keep it fresh — but on a minute
+  // tick, not per render, or the bounds would churn on every keystroke elsewhere.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const bounds = useMemo(
+    () => rangeBounds(startLocal, limits, now),
+    [startLocal, limits, now],
+  );
+
+  // Moving the start re-anchors the window, which can leave the end more than
+  // maxSpanHours away or in the future. Pull it back in and say so, instead of
+  // greying out every earlier date and trapping someone who wants an older day.
+  const [endAdjusted, setEndAdjusted] = useState(false);
+  useEffect(() => {
+    const clamped = clampLocal(endLocal, bounds.end);
+    if (clamped !== endLocal) {
+      setEndLocal(clamped);
+      setEndAdjusted(true);
+    }
+  }, [endLocal, bounds.end]);
+
+  function handleStartChange(value: string) {
+    setEndAdjusted(false);
+    setStartLocal(clampLocal(value, bounds.start));
+  }
+
+  function handleEndChange(value: string) {
+    setEndAdjusted(false);
+    setEndLocal(clampLocal(value, bounds.end));
+  }
 
   const defaultStart = useMemo(() => new Date(Date.now() - 3_600_000).toISOString(), []);
   const defaultEnd = useMemo(() => new Date().toISOString(), []);
@@ -135,20 +191,21 @@ function TripsContent() {
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
+  // The pickers can no longer produce an invalid range, but a stale URL or a
+  // hand-typed value on the native mobile control still can — so keep the guard.
   const isValidRange = useMemo(() => {
-    try {
-      return new Date(startLocal) < new Date(endLocal);
-    } catch {
-      return false;
-    }
-  }, [startLocal, endLocal]);
+    const s = fromLocalInput(startLocal);
+    const e = fromLocalInput(endLocal);
+    if (!s || !e || s >= e) return false;
+    return e.getTime() - s.getTime() <= limits.maxSpanHours * 3_600_000;
+  }, [startLocal, endLocal, limits.maxSpanHours]);
 
   function handleLoad() {
+    const startIso = localInputToIso(startLocal);
+    const endIso = localInputToIso(endLocal);
+    if (!startIso || !endIso) return;
     setPage(1);
-    const qs = new URLSearchParams({
-      start: new Date(startLocal).toISOString(),
-      end: new Date(endLocal).toISOString(),
-    });
+    const qs = new URLSearchParams({ start: startIso, end: endIso });
     if (routeId) qs.set("route_id", routeId);
     if (strict) qs.set("strict", "true");
     router.push(`/trips?${qs}`);
@@ -214,24 +271,20 @@ function TripsContent() {
           subtitle="Select a date/time range and optionally filter by route, then click Load"
         />
         <div className="flex flex-wrap items-end gap-4">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-fg-subtle">Start</label>
-            <input
-              type="datetime-local"
-              value={startLocal}
-              onChange={(e) => setStartLocal(e.target.value)}
-              className="rounded border border-line bg-card px-2 py-1.5 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-fg-subtle">End</label>
-            <input
-              type="datetime-local"
-              value={endLocal}
-              onChange={(e) => setEndLocal(e.target.value)}
-              className="rounded border border-line bg-card px-2 py-1.5 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-          </div>
+          <DateTimePicker
+            id="trips-start"
+            label="Start"
+            value={startLocal}
+            onChange={handleStartChange}
+            bounds={bounds.start}
+          />
+          <DateTimePicker
+            id="trips-end"
+            label="End"
+            value={endLocal}
+            onChange={handleEndChange}
+            bounds={bounds.end}
+          />
 
           {/* Route combobox */}
           <div className="flex flex-col gap-1">
@@ -385,6 +438,13 @@ function TripsContent() {
             Load trips
           </button>
         </div>
+
+        <p className="mt-3 text-xs text-fg-subtle" aria-live="polite">
+          {describeLimits(limits)}
+          {endAdjusted && (
+            <span className="ml-1 text-warn">End moved to stay inside that window.</span>
+          )}
+        </p>
 
         <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-fg-muted">
           <input

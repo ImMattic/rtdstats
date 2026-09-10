@@ -66,6 +66,8 @@ _CACHE_CONTROL_RULES = (
     ("/api/v1/realtime/", "public, max-age=5"),
     ("/api/v1/stats/", "public, max-age=60"),
     ("/api/v1/routes", "public, max-age=3600"),
+    # Request limits only change with a deploy / env edit.
+    ("/api/v1/meta/", "public, max-age=3600"),
 )
 
 
