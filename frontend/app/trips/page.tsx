@@ -117,24 +117,18 @@ function TripsContent() {
   );
 
   // Moving the start re-anchors the window, which can leave the end more than
-  // maxSpanHours away or in the future. Pull it back in and say so, instead of
+  // maxSpanHours away or in the future. Pull it back in silently, instead of
   // greying out every earlier date and trapping someone who wants an older day.
-  const [endAdjusted, setEndAdjusted] = useState(false);
   useEffect(() => {
     const clamped = clampLocal(endLocal, bounds.end);
-    if (clamped !== endLocal) {
-      setEndLocal(clamped);
-      setEndAdjusted(true);
-    }
+    if (clamped !== endLocal) setEndLocal(clamped);
   }, [endLocal, bounds.end]);
 
   function handleStartChange(value: string) {
-    setEndAdjusted(false);
     setStartLocal(clampLocal(value, bounds.start));
   }
 
   function handleEndChange(value: string) {
-    setEndAdjusted(false);
     setEndLocal(clampLocal(value, bounds.end));
   }
 
@@ -439,12 +433,7 @@ function TripsContent() {
           </button>
         </div>
 
-        <p className="mt-3 text-xs text-fg-subtle" aria-live="polite">
-          {describeLimits(limits)}
-          {endAdjusted && (
-            <span className="ml-1 text-warn">End moved to stay inside that window.</span>
-          )}
-        </p>
+        <p className="mt-3 text-xs text-fg-subtle">{describeLimits(limits)}</p>
 
         <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-fg-muted">
           <input
