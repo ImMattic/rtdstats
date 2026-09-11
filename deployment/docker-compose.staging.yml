@@ -46,6 +46,10 @@ services:
       GTFS_RT_TRIP_URL: https://www.rtd-denver.com/files/gtfs-rt/TripUpdate.pb
       POLLING_INTERVAL_SECONDS: "10"
       STUCK_VEHICLE_MINUTES: "5"
+      # Unset by default, which switches the /sim game simulator off entirely
+      # (its routes 404). Set it in deployment/.env to enable it on staging —
+      # never on prod, where a fake Nuggets game on the live map is a lie.
+      SPORTS_SIM_PASSWORD: ${SPORTS_SIM_PASSWORD:-}
       CORS_ORIGINS: '["https://${STAGING_DOMAIN:?STAGING_DOMAIN is required}"]'
     depends_on:
       db:

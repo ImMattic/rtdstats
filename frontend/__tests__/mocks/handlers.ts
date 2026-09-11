@@ -9,6 +9,7 @@ import type {
   RailShapesResponse,
   HistoricalResponse,
   LimitsResponse,
+  GamesResponse,
 } from "@/lib/types";
 
 export const MOCK_VEHICLE = {
@@ -143,6 +144,17 @@ export const handlers = [
     HttpResponse.json<AlertsResponse>({
       computed_at: "2026-06-20T12:00:00Z",
       alerts: [],
+    })
+  ),
+
+  // No home game is the ordinary answer — most days in Denver have none.
+  http.get("/api/v1/sports/games", () =>
+    HttpResponse.json<GamesResponse>({
+      games: [],
+      generated_at: "2026-06-20T12:00:00Z",
+      clock_rate: 1,
+      simulated: false,
+      sim_expires_at: null,
     })
   ),
 ];

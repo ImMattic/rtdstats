@@ -8,11 +8,21 @@ import {
   useRef,
   useState,
 } from "react";
-import { useRoutes, useStopsSearch } from "@/lib/hooks";
+import { useGames, useRoutes, useStopsSearch } from "@/lib/hooks";
 import type { StopInfo, VehiclePosition } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import MapFilterControl from "./MapFilterControl";
+import GameSlideView from "./GameSlideView";
 import { countActiveMapFilters, type MapFilters } from "@/lib/mapFilters";
+import {
+  carouselTurnCount,
+  describeGame,
+  gameClock,
+  gameForTurn,
+  virtualNow,
+  visibleGames,
+  type GameSlideView as GameView,
+} from "@/lib/gameSlides";
 
 interface Props {
   /** The whole live feed — what search looks through and what the menu counts. */
@@ -29,10 +39,13 @@ interface Props {
   onSelectStop: (stop: StopInfo) => void;
 }
 
-const CYCLE_COUNT = 2;
 /** Auto-advance interval for the status carousel. Keep in step with the
  *  `status-ring-sweep` keyframe duration in globals.css. */
 const CYCLE_MS = 15000;
+/** How often the countdown on a game slide is recomputed while it's on screen.
+ *  Off-screen games only need a slow pulse to age out of the rotation. */
+const GAME_TICK_MS = 1000;
+const GAME_IDLE_TICK_MS = 20000;
 const SEARCH_WIDTH = "min(90vw, 23rem)";
 
 export default function MapStatusBar({
@@ -67,6 +80,32 @@ export default function MapStatusBar({
   const routes = useRoutes();
   const { data: stopResults } = useStopsSearch(query);
 
+  // ── Home-game slides ──────────────────────────────────────────────────
+  // Nothing here renders on a day with no Denver home game: the endpoint
+  // returns an empty list and the carousel keeps its original two turns.
+  const { data: gamesData, dataUpdatedAt: gamesUpdatedAt } = useGames();
+  const [tick, setTick] = useState(() => Date.now());
+
+  const clock = useMemo(
+    () => (gamesData ? gameClock(gamesData, gamesUpdatedAt) : null),
+    [gamesData, gamesUpdatedAt],
+  );
+
+  const gameViews: GameView[] = useMemo(() => {
+    if (!gamesData || !clock) return [];
+    const at = virtualNow(clock, tick);
+    return visibleGames(gamesData.games, at).map((g) => describeGame(g, at));
+  }, [gamesData, clock, tick]);
+
+  const cycleCount = carouselTurnCount(gameViews.length);
+  // Games come and go under the carousel, so the index is always read modulo
+  // the current length rather than trusted to stay in range.
+  const activeCycle = cycle % cycleCount;
+  const activeGame = gameForTurn(activeCycle, gameViews);
+  const gameSignature = activeGame
+    ? `${activeGame.id}|${activeGame.lead}|${activeGame.score ?? ""}|${activeGame.status}`
+    : "";
+
   // Pill width follows the status content so it hugs whatever the current
   // cycle state needs, then animates to the wide search field on takeover.
   const [statusWidth, setStatusWidth] = useState<number>();
@@ -81,7 +120,7 @@ export default function MapStatusBar({
     return () => window.removeEventListener("resize", measure);
   }, [
     mode,
-    cycle,
+    activeCycle,
     vehicleCount,
     routeCount,
     vehicles.length,
@@ -89,6 +128,9 @@ export default function MapStatusBar({
     dataUpdatedAt,
     isLoading,
     isError,
+    // A game slide changes width as its own text does — "in 45 min" is
+    // narrower than "7:00 PM MT", and a score appears mid-game.
+    gameSignature,
   ]);
 
   const openSearch = useCallback(() => {
@@ -103,7 +145,24 @@ export default function MapStatusBar({
     setDropdownOpen(false);
   }, []);
 
-  const advance = useCallback(() => setCycle((c) => (c + 1) % CYCLE_COUNT), []);
+  const advance = useCallback(
+    () => setCycle((c) => (c + 1) % cycleCount),
+    [cycleCount],
+  );
+
+  // Keep the countdown moving between polls. Fast while a game slide is the one
+  // on screen; a slow pulse otherwise, which is only there so a game that has
+  // passed its two-hour mark leaves the rotation without waiting for a fetch.
+  // `describeGame` hands back a fresh object every tick, so the timer keys off
+  // whether a game is showing rather than off the view itself — depending on
+  // the object would tear the interval down and rebuild it once a second.
+  const gameOnScreen = activeGame !== undefined;
+  useEffect(() => {
+    if (gameViews.length === 0) return;
+    const interval = gameOnScreen ? GAME_TICK_MS : GAME_IDLE_TICK_MS;
+    const id = setInterval(() => setTick(Date.now()), interval);
+    return () => clearInterval(id);
+  }, [gameViews.length, gameOnScreen]);
 
   // Auto-advance the carousel. Re-armed whenever `cycle` changes, so a manual
   // tap resets the countdown (and the sweep ring, which is keyed on `cycle`).
@@ -186,8 +245,10 @@ export default function MapStatusBar({
   }
 
   // ── Cycle content ─────────────────────────────────────────────────────
+  // In turn order: vehicle count, then a turn per home game, then freshness.
   const cycleBody = () => {
-    if (cycle === 0) {
+    if (activeGame) return <GameSlideView view={activeGame} />;
+    if (activeCycle === 0) {
       return (
         <span className="flex items-center gap-2 font-medium text-fg-muted">
           <span
@@ -274,7 +335,11 @@ export default function MapStatusBar({
           <div
             className={cn(
               "group flex h-9 items-center overflow-hidden rounded-full border bg-card/90 text-sm text-fg-muted shadow-lg shadow-black/30 backdrop-blur-md transition-[width,opacity,background-color,border-color,box-shadow] duration-300 ease-out",
-              filtersActive ? "border-accent/60" : "border-line",
+              activeGame
+                ? "border-transparent"
+                : filtersActive
+                  ? "border-accent/60"
+                  : "border-line",
               mode === "search"
                 ? "pointer-events-none"
                 : "cursor-pointer hover:border-line-strong hover:bg-card hover:shadow-black/40",
@@ -288,6 +353,10 @@ export default function MapStatusBar({
                     : undefined,
               opacity: mode === "search" ? 0 : 1,
               maxWidth: "calc(100vw - 8rem)",
+              // The team's colour carries onto the pill's rim while its slide is
+              // up. Decorative only — the readable pairing is the badge, which
+              // picks its own text colour by contrast.
+              ...(activeGame ? { borderColor: `${activeGame.color}99` } : {}),
             }}
             aria-hidden={mode === "search"}
           >
@@ -295,11 +364,11 @@ export default function MapStatusBar({
               ref={statusRowRef}
               type="button"
               onClick={advance}
-              aria-label="Cycle map info"
+              aria-label={activeGame ? activeGame.label : "Cycle map info"}
               tabIndex={mode === "search" ? -1 : 0}
               className="flex items-center whitespace-nowrap px-3 transition-transform duration-150 ease-out active:scale-[0.97]"
             >
-              <span key={cycle} className="animate-cycle-in inline-flex items-center">
+              <span key={activeCycle} className="animate-cycle-in inline-flex items-center">
                 {cycleBody()}
               </span>
             </button>
@@ -312,12 +381,17 @@ export default function MapStatusBar({
             <svg
               className={cn(
                 "pointer-events-none absolute inset-0 h-full w-full overflow-visible",
-                filtersActive ? "text-accent/70" : "text-fg-subtle/60",
+                activeGame
+                  ? undefined
+                  : filtersActive
+                    ? "text-accent/70"
+                    : "text-fg-subtle/60",
               )}
+              style={activeGame ? { color: activeGame.color } : undefined}
               aria-hidden="true"
             >
               <rect
-                key={cycle}
+                key={activeCycle}
                 x="0"
                 y="0"
                 width="100%"

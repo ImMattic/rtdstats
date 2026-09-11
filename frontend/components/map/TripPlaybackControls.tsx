@@ -27,7 +27,7 @@ export default function TripPlaybackControls({ playback, startMs, endMs, routeCo
 
   return (
     <div className="mt-3 space-y-2">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <button
           type="button"
           onClick={atEnd && !isPlaying ? replay : toggle}
@@ -61,19 +61,22 @@ export default function TripPlaybackControls({ playback, startMs, endMs, routeCo
           value={currentMs}
           onChange={(e) => seek(Number(e.target.value))}
           aria-label="Playback timeline"
-          className="rtd-range h-1.5 flex-1 cursor-pointer appearance-none rounded-full"
+          className="rtd-range h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full"
           style={{
             background: `linear-gradient(to right, ${accent} 0%, ${accent} ${progress}%, rgb(var(--line-2)) ${progress}%, rgb(var(--line-2)) 100%)`,
             color: accent,
           }}
         />
 
-        <span className="shrink-0 font-mono text-xs tabular-nums text-fg-muted">
+        {/* Its own line at narrow widths (basis-full), inline with the slider
+            once there's room for it — otherwise it was the part getting
+            clipped by the card's edge. */}
+        <span className="basis-full text-right font-mono text-xs tabular-nums text-fg-muted sm:basis-auto sm:shrink-0 sm:text-left">
           {clockWithSeconds(currentMs)} / {clockWithSeconds(endMs)}
         </span>
       </div>
 
-      <div className="flex items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         <span className="mr-1 text-xs text-fg-subtle">Speed</span>
         {SPEEDS.map((s) => {
           const isActive = s === speed;

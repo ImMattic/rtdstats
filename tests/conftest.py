@@ -81,6 +81,8 @@ def clear_module_caches():
     import app.services.ingestion as ingestion_mod
     import app.services.gtfs_schedule as schedule_mod
     import app.services.ontime as ontime_mod
+    import app.services.sports as sports_mod
+    import app.services.sports_sim as sports_sim_mod
 
     realtime_mod._vehicles_cache.clear()
     realtime_mod._vehicles_locks.clear()
@@ -93,6 +95,8 @@ def clear_module_caches():
     schedule_mod._schedule_cache = None
     schedule_mod._trip_stop_schedule_cache = None
     ontime_mod._recorded.clear()
+    sports_mod.reset_caches()
+    sports_sim_mod.reset()
     yield
 
 

@@ -25,6 +25,10 @@ _settings = get_settings()
 # broader prefix that would swallow it.
 _BUCKETS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("export", ("/api/v1/export/",)),
+    # Password exchange for the game simulator — the one endpoint here worth
+    # guessing at, so it gets a tight budget of its own.  Must precede the
+    # broader /api/ prefix.
+    ("sim_auth", ("/api/v1/sports/sim/session",)),
     ("expensive", ("/api/v1/historical/", "/api/v1/vehicles/")),
     ("default", ("/api/",)),
 )
@@ -33,6 +37,7 @@ _BUCKETS: tuple[tuple[str, tuple[str, ...]], ...] = (
 def _bucket_limits() -> dict[str, int]:
     return {
         "export": _settings.rate_limit_export_per_minute,
+        "sim_auth": _settings.rate_limit_sim_auth_per_minute,
         "expensive": _settings.rate_limit_expensive_per_minute,
         "default": _settings.rate_limit_default_per_minute,
     }

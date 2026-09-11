@@ -500,3 +500,91 @@ export interface RidershipResponse {
   series: RidershipPoint[];
   by_route_latest: RidershipRoute[];
 }
+
+// ── Denver home games (map status carousel) ─────────────────────────────────
+
+export type GameState = "pre" | "in" | "post";
+export type GameResult = "win" | "loss" | "draw";
+
+/** One home game, in whatever phase it's currently in. Mirrors the backend
+ *  GameSlide — see backend/app/schemas/sports.py. */
+export interface GameSlide {
+  id: string;
+  league: string;
+  sport_emoji: string;
+  team_key: string;
+  team_abbr: string;
+  team_name: string;
+  opponent_abbr: string;
+  opponent_name: string;
+  /** Hex without '#'. */
+  color: string;
+  alt_color: string;
+  state: GameState;
+  start: string;
+  end: string | null;
+  detail: string;
+  team_score: number | null;
+  opponent_score: number | null;
+  result: GameResult | null;
+  venue: string | null;
+  simulated: boolean;
+}
+
+export interface GamesResponse {
+  games: GameSlide[];
+  /** Server time the payload was built — the client anchors its clock here. */
+  generated_at: string;
+  /** Virtual seconds per real second; >1 only while the simulator runs. */
+  clock_rate: number;
+  simulated: boolean;
+  sim_expires_at: string | null;
+}
+
+export interface SportsTeam {
+  key: string;
+  name: string;
+  abbr: string;
+  league: string;
+  emoji: string;
+  color: string;
+  alt_color: string;
+}
+
+export interface SportsTeamsResponse {
+  teams: SportsTeam[];
+}
+
+// ── Game simulator (unlisted /sim page) ─────────────────────────────────────
+
+export interface SimSessionResponse {
+  token: string;
+  expires_at: string;
+}
+
+export interface SimGameRequest {
+  team_key: string;
+  opponent_abbr: string;
+  opponent_name: string;
+  lead_minutes: number;
+  game_minutes: number;
+  final_team_score: number;
+  final_opponent_score: number;
+}
+
+export interface SimStartRequest {
+  games: SimGameRequest[];
+  speed: number;
+  duration_minutes: number;
+  hide_real: boolean;
+}
+
+export interface SimStatusResponse {
+  active: boolean;
+  started_at: string | null;
+  expires_at: string | null;
+  speed: number | null;
+  hide_real: boolean | null;
+  elapsed_virtual_minutes: number | null;
+  games: GameSlide[];
+}

@@ -235,7 +235,7 @@ function StopTimeline({
   onToggleAnchor: (anchorKey: string) => void;
 }) {
   return (
-    <ol className="max-h-[560px] overflow-y-auto pr-1">
+    <ol className="max-h-[560px] overflow-y-auto overflow-x-hidden pr-1">
       {rows.map((row, i) => {
         const { stop } = row;
         const isFirst = i === 0;
@@ -282,16 +282,16 @@ function StopTimeline({
             </div>
 
             {/* Content */}
-            <div className="flex flex-1 items-start justify-between gap-3 py-2">
+            <div className="flex min-w-0 flex-1 items-start justify-between gap-2 py-2 sm:gap-3">
               <div className="min-w-0">
                 <p
-                  className={`truncate text-sm ${
+                  className={`truncate text-[13px] sm:text-sm ${
                     stop.is_timepoint ? "font-semibold text-fg" : "font-medium text-fg-muted"
                   }`}
                 >
                   {stop.stop_name ?? stop.stop_id}
                 </p>
-                <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-fg-subtle">
+                <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-fg-subtle sm:text-[11px]">
                   <span>#{stop.stop_sequence}</span>
                   {terminus && (
                     <span className="rounded bg-raised px-1 py-px font-medium uppercase tracking-wide text-fg-muted">
@@ -304,30 +304,34 @@ function StopTimeline({
                 </p>
               </div>
 
-              <div className="shrink-0 text-right">
+              {/* Arrival time reads as plain (high-contrast) text; the delay
+                  is what gets the status-tinted badge beside it. */}
+              <div className="min-w-0 shrink-0 text-right">
                 {stop.observed ? (
                   <>
-                    <div className="flex items-center justify-end gap-1.5">
-                      <span className="text-sm tabular-nums text-fg">{hhmm(stop.actual_time)}</span>
+                    <div className="flex flex-wrap items-center justify-end gap-x-1 gap-y-0.5">
+                      <span className="shrink-0 text-[11px] font-semibold tabular-nums text-fg sm:text-sm">
+                        {hhmm(stop.actual_time)}
+                      </span>
                       <span
-                        className={`rounded-full px-1.5 py-0.5 text-[11px] ${delayBadge(
+                        className={`inline-block shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums ${delayBadge(
                           stop.delay_seconds ?? 0,
                         )}`}
                       >
-                        {formatDelay(stop.delay_seconds) || "On time"}
+                        {formatDelay(stop.delay_seconds) || "on time"}
                       </span>
                     </div>
-                    <div className="mt-0.5 text-[11px] tabular-nums text-fg-subtle">
+                    <div className="mt-0.5 text-[10px] tabular-nums text-fg-subtle sm:text-[11px]">
                       {stop.event_type === "departure" ? "departed · sched " : "sched "}
                       {hhmm(stop.scheduled_time)}
                     </div>
                   </>
                 ) : (
                   <>
-                    <div className="text-sm tabular-nums text-fg-muted">
+                    <div className="text-[13px] tabular-nums text-fg-muted sm:text-sm">
                       {hhmm(stop.scheduled_time)}
                     </div>
-                    <div className="mt-0.5 text-[11px] text-fg-subtle">scheduled</div>
+                    <div className="mt-0.5 text-[10px] text-fg-subtle sm:text-[11px]">scheduled</div>
                   </>
                 )}
               </div>
@@ -348,7 +352,7 @@ function ShowAllStopsToggle({
   onChange: () => void;
 }) {
   return (
-    <label className="flex select-none items-center gap-2 text-xs text-fg-muted">
+    <label className="flex shrink-0 select-none items-center gap-2 whitespace-nowrap text-xs text-fg-muted">
       <span>Show all stops</span>
       <button
         type="button"
@@ -566,9 +570,14 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
                 title="Stop Timeline"
                 subtitle={
                   data.stops.length
+                    ? `${observedStopCount}/${data.stops.length} tracked`
+                    : undefined
+                }
+                hint={
+                  data.stops.length
                     ? isCondensed
-                      ? `${CONDENSED_STOP_COUNT} key stops, origin → terminus · ${observedStopCount}/${data.stops.length} tracked · expand a stop to see more`
-                      : `Every scheduled stop, origin → terminus · ${observedStopCount}/${data.stops.length} tracked`
+                      ? `Showing ${CONDENSED_STOP_COUNT} key stops, origin → terminus. Expand a stop to see the stops collapsed between it and the next one.`
+                      : "Every scheduled stop, origin → terminus."
                     : undefined
                 }
                 right={
@@ -592,7 +601,7 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
             <Card className="lg:col-span-1">
               <SectionHeading
                 title="Trip Track"
-                subtitle="Press play to replay the trip, or hover a stop for its scheduled position"
+                hint="Press play to replay the trip, or hover a stop for its scheduled position."
               />
               {data.positions.length === 0 && data.stops.length === 0 ? (
                 <p className="py-6 text-center text-sm text-fg-subtle">

@@ -28,6 +28,10 @@ pandas>=2.0
 
 # Misc
 requests>=2.31
+# zoneinfo's fallback tz database. python:3.11-slim may ship without
+# /usr/share/zoneinfo, and the home-game feed needs America/Denver to work out
+# which day's games to ask ESPN for.
+tzdata>=2024.1
 
 # Testing
 pytest>=8.0
