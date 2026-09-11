@@ -310,7 +310,7 @@ function StopTimeline({
                 {stop.observed ? (
                   <>
                     <div className="flex flex-wrap items-center justify-end gap-x-1 gap-y-0.5">
-                      <span className="shrink-0 text-[11px] font-semibold tabular-nums text-fg sm:text-sm">
+                      <span className="shrink-0 text-[10px] font-semibold tabular-nums text-fg sm:text-sm">
                         {hhmm(stop.actual_time)}
                       </span>
                       <span

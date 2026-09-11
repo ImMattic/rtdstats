@@ -25,9 +25,10 @@ interface Props {
   /** Every RTD route, from the static GTFS bundle. */
   routes: RouteInfo[];
   onReset: () => void;
-  /** Stages the current edits as chips — the table doesn't move until "Load trips". */
+  /** Commits the current edits immediately — the table (and chip row) update
+   *  as soon as this fires, independent of the date/time window. */
   onApply: () => void;
-  /** Greyed out until the draft differs from what's already staged as chips. */
+  /** Greyed out until the draft differs from what's already applied. */
   applyDisabled?: boolean;
 }
 
@@ -63,10 +64,11 @@ type TripFilterListKey = Exclude<
  *
  * It drops out of the filter bar rather than floating over it, because the date
  * range above stays part of the same decision — you pick a window and then say
- * what you want out of it. "Apply filters" only stages the edits as removable
- * chips; nothing is queried until "Load trips" up in the bar, which also closes
- * this menu. As groups are narrowed, options that can no longer match drop out
- * of the other lists — pick "Rail" and the buses leave the route list.
+ * what you want out of it. "Apply filters" commits the edits immediately —
+ * the table and the chip row update right away, and this menu closes — while
+ * the date/time window is a separate decision that only moves on "Load trips"
+ * up in the bar. As groups are narrowed, options that can no longer match drop
+ * out of the other lists — pick "Rail" and the buses leave the route list.
  */
 export default function TripFilterMenu({
   open,

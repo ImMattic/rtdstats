@@ -82,24 +82,25 @@ function TripsContent() {
   const [endLocal, setEndLocal] = useState(() =>
     urlEnd ? isoToLocalInput(urlEnd) : toLocalInput(new Date()),
   );
-  // Three tiers, narrowing toward the table:
-  //   draft   — live edits inside the menu
-  //   staged  — what "Apply filters" locked in; drives the chip row, nothing else
-  //   URL     — what "Load trips" committed; the only thing the query reads
+  // Two tiers, narrowing toward the table:
+  //   draft — live edits inside the menu, not yet queried
+  //   URL   — what's actually being asked for; the only thing the query reads.
+  //           "Apply filters" commits the filter set here immediately; "Load
+  //           trips" commits a new date/time window (keeping whatever filter
+  //           set is already applied).
   const [draft, setDraft] = useState<TripFilters>(appliedFilters);
-  const [staged, setStaged] = useState<TripFilters>(appliedFilters);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const PAGE_SIZE_OPTIONS = [15, 30, 50, 100] as const;
   const [pageSize, setPageSize] = useState<number>(15);
   const [page, setPage] = useState(1);
 
-  // Sync picker state when URL params change (e.g. after "Load trips" or browser back/forward)
+  // Sync picker state when URL params change (e.g. after "Apply filters",
+  // "Load trips", or browser back/forward)
   useEffect(() => {
     if (urlStart) setStartLocal(isoToLocalInput(urlStart));
     if (urlEnd) setEndLocal(isoToLocalInput(urlEnd));
     setDraft(appliedFilters);
-    setStaged(appliedFilters);
     setPage(1);
   }, [urlStart, urlEnd, appliedFilters]);
 
@@ -196,26 +197,30 @@ function TripsContent() {
     [router],
   );
 
-  /** "Load trips" — the only path that moves the table. Commits the staged set
-   *  (chips), not the raw draft, and tucks the menu away. */
+  /** "Load trips" — commits a new date/time window, keeping whatever filter
+   *  set is already applied. */
   const handleLoad = useCallback(() => {
     const startIso = localInputToIso(startLocal);
     const endIso = localInputToIso(endLocal);
     if (!startIso || !endIso) return;
     setPage(1);
     setMenuOpen(false);
-    pushQuery(staged, startIso, endIso);
-  }, [staged, startLocal, endLocal, pushQuery]);
+    pushQuery(appliedFilters, startIso, endIso);
+  }, [appliedFilters, startLocal, endLocal, pushQuery]);
 
-  /** "Apply filters" inside the menu — stage the draft as chips only. */
-  const stageFilters = useCallback(() => setStaged(draft), [draft]);
+  /** "Apply filters" inside the menu — commits the draft immediately and
+   *  tucks the menu away, keeping the current date/time window. */
+  const applyFilters = useCallback(() => {
+    setPage(1);
+    setMenuOpen(false);
+    pushQuery(draft, fetchStart, fetchEnd);
+  }, [draft, fetchStart, fetchEnd, pushQuery]);
 
-  /** Removing a chip / Reset / Clear is an unambiguous instruction, so it drops
-   *  the condition from every tier and reloads straight away. */
+  /** Removing a chip / Reset / Clear is an unambiguous instruction too, so it
+   *  applies straight away just like "Apply filters" does. */
   const applyImmediately = useCallback(
     (filters: TripFilters) => {
       setDraft(filters);
-      setStaged(filters);
       setPage(1);
       pushQuery(filters, fetchStart, fetchEnd);
     },
@@ -262,15 +267,14 @@ function TripsContent() {
     [sortedRoutes, facets],
   );
 
-  // Chips mirror the staged set, which "Apply filters" fills and "Load trips"
-  // then commits — so a chip can be showing before the table has caught up.
+  // Chips mirror the applied filter set — "Apply filters" commits straight
+  // to the URL, so the chip row always matches what the table is showing.
   const chips = useMemo(
-    () => tripFilterChips(staged, routeNameOf),
-    [staged, routeNameOf],
+    () => tripFilterChips(appliedFilters, routeNameOf),
+    [appliedFilters, routeNameOf],
   );
 
   const appliedCount = countActiveTripFilters(appliedFilters);
-  const stagedCount = countActiveTripFilters(staged);
 
   const matched = data?.vehicle_count ?? 0;
   const windowTotal = data?.window_count ?? 0;
@@ -302,7 +306,7 @@ function TripsContent() {
       <Card>
         <SectionHeading
           title="Filters"
-          hint="Pick a date and time range, add any filters you want, then load the trips."
+          hint="Filters apply as soon as you hit Apply filters. Pick a date and time range and hit Load trips to change the window."
         />
         <div className="flex flex-wrap items-end gap-3">
           <DateTimePicker
@@ -331,18 +335,18 @@ function TripsContent() {
               aria-label="Filter trips"
               className={cn(
                 "press flex h-9 items-center gap-1.5 rounded border px-2.5 text-sm font-medium transition-[transform,background-color,border-color,color] duration-150",
-                stagedCount > 0 || menuOpen
+                appliedCount > 0 || menuOpen
                   ? "border-accent bg-accent/10 text-accent"
                   : "border-line bg-card text-fg-muted hover:border-line-strong hover:text-fg",
               )}
             >
               <FilterIcon className="h-4 w-4" />
-              {stagedCount > 0 && (
+              {appliedCount > 0 && (
                 <span
-                  key={stagedCount}
+                  key={appliedCount}
                   className="animate-badge-pop rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold leading-none text-accent-ink"
                 >
-                  {stagedCount}
+                  {appliedCount}
                 </span>
               )}
             </button>
@@ -371,8 +375,8 @@ function TripsContent() {
           facets={facets}
           routes={sortedRoutes}
           onReset={() => applyImmediately(EMPTY_TRIP_FILTERS)}
-          onApply={stageFilters}
-          applyDisabled={tripFiltersEqual(draft, staged)}
+          onApply={applyFilters}
+          applyDisabled={tripFiltersEqual(draft, appliedFilters)}
         />
 
         {chips.length > 0 && (

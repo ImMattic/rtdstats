@@ -60,22 +60,40 @@ export default function NavBar() {
         <div className="flex items-center gap-4 rounded-full border border-rtd-darkred bg-rtd-red/95 px-4 py-2 text-white shadow-xl shadow-black/30 backdrop-blur-md sm:gap-8 sm:px-5">
           <Link
             href="/"
-            className="flex shrink-0 items-center gap-2 text-lg font-extrabold tracking-tight text-white transition-opacity hover:opacity-80 sm:text-xl"
+            className="flex shrink-0 items-baseline gap-1 text-lg font-extrabold tracking-tight text-white transition-opacity hover:opacity-80 sm:text-xl"
             aria-label="TransitDen — Live Map"
           >
-            {/* Square white mark, sized to the bar's cap height. `alt=""` since
-                the link already carries the name. `priority` because it sits
-                above the fold on every page. `unoptimized` because the source is
-                a 4 KB PNG and the standalone runtime image has no sharp — the
+            {/* `transitden_logo_white_trimmed.png` is `transitden_logo_white_512.png`
+                with its transparent padding cropped off (the source canvas carried
+                13px of empty margin on each side and 59px top/bottom around the
+                arch mark) — untrimmed, that dead space sat between the visible
+                glyph and the box we align to, so bottom-aligning the box didn't
+                bottom-align the icon itself.
+                  Height is 0.72em + 3px, not 1em — `em` is the font's full
+                em-box, which is taller than what actually reads as "text
+                height": Inter publishes a capHeight of 1467/2048 units,
+                ≈0.72em, so a 1em-tall icon oversized itself above the caps by
+                the remaining ~0.28em no matter how the leftover +Npx on top
+                was tuned (that's the bug every earlier "+10px" / "+1px" /
+                "+0.25px" pass was chasing — the miss was in the base unit, not
+                the addend). The +3px on top of the corrected 0.72em base is
+                what makes the mark read a bit bigger than the wordmark, same
+                as the original ask. Width is `auto`
+                so the crop's own aspect ratio holds instead of being forced
+                square. The link is `items-baseline`, so the icon's bottom edge
+                still lands on the text baseline. `alt=""` since the link
+                already carries the name. `priority` because it sits above the
+                fold on every page. `unoptimized` because the source is a few
+                KB PNG and the standalone runtime image has no sharp — the
                 optimizer would fail at runtime for no gain. */}
             <Image
-              src="/transitden_logo_white_512.png"
+              src="/transitden_logo_white_trimmed.png"
               alt=""
-              width={512}
-              height={512}
+              width={488}
+              height={394}
               priority
               unoptimized
-              className="h-7 w-7 sm:h-8 sm:w-8"
+              className="h-[calc(0.72em+3px)] w-auto"
             />
             TransitDen
           </Link>

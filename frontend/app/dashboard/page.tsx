@@ -172,7 +172,7 @@ export default function DashboardPage() {
         : `${effectiveRouteIds.length} routes`;
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 pb-6 pt-24 text-fg">
+    <div className="mx-auto w-full max-w-7xl space-y-6 overflow-x-hidden px-4 pb-6 pt-24 text-fg">
       {/* Header + controls */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
