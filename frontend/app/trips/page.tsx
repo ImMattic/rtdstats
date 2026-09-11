@@ -302,7 +302,7 @@ function TripsContent() {
       <Card>
         <SectionHeading
           title="Filters"
-          subtitle="Pick a date and time range, add any filters you want, then load the trips"
+          hint="Pick a date and time range, add any filters you want, then load the trips."
         />
         <div className="flex flex-wrap items-end gap-3">
           <DateTimePicker
@@ -320,41 +320,46 @@ function TripsContent() {
             bounds={bounds.end}
           />
 
-          <button
-            type="button"
-            onClick={() => setMenuOpen((o) => !o)}
-            aria-expanded={menuOpen}
-            aria-label="Filter trips"
-            className={cn(
-              "press flex items-center gap-1.5 rounded border px-2.5 py-1.5 text-sm font-medium transition-[transform,background-color,border-color,color] duration-150",
-              stagedCount > 0 || menuOpen
-                ? "border-accent bg-accent/10 text-accent"
-                : "border-line bg-card text-fg-muted hover:border-line-strong hover:text-fg",
-            )}
-          >
-            <FilterIcon className="h-4 w-4" />
-            {stagedCount > 0 && (
-              <span
-                key={stagedCount}
-                className="animate-badge-pop rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold leading-none text-accent-ink"
-              >
-                {stagedCount}
-              </span>
-            )}
-          </button>
+          {/* Grouped so the pair moves to its own line as a unit when the row
+              wraps, with the filter button staying immediately left of Load
+              trips instead of drifting up next to the End field. */}
+          <div className="flex items-stretch gap-3">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((o) => !o)}
+              aria-expanded={menuOpen}
+              aria-label="Filter trips"
+              className={cn(
+                "press flex h-9 items-center gap-1.5 rounded border px-2.5 text-sm font-medium transition-[transform,background-color,border-color,color] duration-150",
+                stagedCount > 0 || menuOpen
+                  ? "border-accent bg-accent/10 text-accent"
+                  : "border-line bg-card text-fg-muted hover:border-line-strong hover:text-fg",
+              )}
+            >
+              <FilterIcon className="h-4 w-4" />
+              {stagedCount > 0 && (
+                <span
+                  key={stagedCount}
+                  className="animate-badge-pop rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold leading-none text-accent-ink"
+                >
+                  {stagedCount}
+                </span>
+              )}
+            </button>
 
-          <button
-            onClick={handleLoad}
-            disabled={!isValidRange}
-            className={cn(
-              "press rounded px-4 py-1.5 text-sm font-medium transition-[transform,opacity,background-color,color] duration-150",
-              isValidRange
-                ? "bg-accent text-accent-ink hover:opacity-90"
-                : "cursor-not-allowed bg-raised text-fg-subtle",
-            )}
-          >
-            Load trips
-          </button>
+            <button
+              onClick={handleLoad}
+              disabled={!isValidRange}
+              className={cn(
+                "press h-9 rounded px-4 text-sm font-medium transition-[transform,opacity,background-color,color] duration-150",
+                isValidRange
+                  ? "bg-accent text-accent-ink hover:opacity-90"
+                  : "cursor-not-allowed bg-raised text-fg-subtle",
+              )}
+            >
+              Load trips
+            </button>
+          </div>
         </div>
 
         <p className="mt-3 text-xs text-fg-subtle">{describeLimits(limits)}</p>
@@ -395,7 +400,7 @@ function TripsContent() {
       <Card>
         <SectionHeading
           title="Vehicles"
-          subtitle="Click a row to see the vehicle's stop-by-stop timeline"
+          hint="Click a row to see the vehicle's stop-by-stop timeline."
         />
 
         {isLoading && <LoadingSpinner />}

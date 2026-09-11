@@ -248,7 +248,8 @@ export default function DashboardPage() {
       <Card>
         <SectionHeading
           title="On-Time Performance Trend"
-          subtitle={`${granularity === "hour" ? "Hourly" : "Daily"} on-time rate (bars: avg delay) · 80% target line`}
+          subtitle={granularity === "hour" ? "Hourly" : "Daily"}
+          hint="Bars show average delay. The dashed line marks RTD's 80% on-time target."
         />
         {trend.isLoading ? <LoadingSpinner /> : <TrendChart points={trend.data?.points ?? []} granularity={granularity} onPointClick={handleTrendPointClick} />}
       </Card>
@@ -273,7 +274,10 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
-          <SectionHeading title="Route Reliability Scorecard" subtitle="Click a route to filter the whole dashboard" />
+          <SectionHeading
+            title="Route Reliability Scorecard"
+            hint="Click a route to filter the whole dashboard."
+          />
           {scorecard.isLoading ? (
             <LoadingSpinner />
           ) : (
@@ -310,7 +314,10 @@ export default function DashboardPage() {
           )}
         </Card>
         <Card>
-          <SectionHeading title="Current Frequency (Live)" subtitle="Estimated headway from active vehicles" />
+          <SectionHeading
+            title="Current Frequency (Live)"
+            hint="Estimated headway from active vehicles."
+          />
           {frequency.isLoading ? <LoadingSpinner /> : <FrequencyTable routes={frequency.data?.routes ?? []} onRowClick={handleFrequencyRowClick} />}
         </Card>
       </div>
@@ -340,7 +347,10 @@ export default function DashboardPage() {
 
       {/* ── Live alerts ─────────────────────────────────────────────── */}
       <Card>
-        <SectionHeading title="Stuck Vehicle Alerts" subtitle="Vehicles stationary beyond the alert threshold" />
+        <SectionHeading
+          title="Stuck Vehicle Alerts"
+          hint="Vehicles stationary beyond the alert threshold."
+        />
         {alerts.isLoading ? <LoadingSpinner /> : <DelayIncidents alerts={alerts.data?.alerts ?? []} />}
       </Card>
     </div>
