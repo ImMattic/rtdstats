@@ -1,7 +1,7 @@
 "use client";
 import L from "leaflet";
 import { useEffect, useMemo, useState } from "react";
-import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Tooltip, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Pane, Tooltip, useMap } from "react-leaflet";
 import type { VehicleStopEvent, VehiclePositionTrack } from "@/lib/types";
 import { interpolateTrackPosition, formatTime } from "@/lib/utils";
 import { useTheme } from "@/lib/useTheme";
@@ -9,10 +9,15 @@ import { createVehicleIcon } from "./vehicleIcon";
 
 const DENVER_CENTER: [number, number] = [39.7392, -104.9903];
 
+// Same four-way bucketing (and the same design-token colours, hand-copied since
+// Leaflet's canvas/SVG renderer can't read Tailwind classes) as `nodeFill` on the
+// Stop Timeline — keep the two in sync so a dot here always reads the same status
+// as its row there. See frontend/DESIGN_TOKENS.md for the token values.
 function stopDelayColor(seconds: number, mode: "dark" | "light"): string {
-  if (seconds > 300) return mode === "light" ? "#dc2626" : "#EC3A35"; // late
-  if (seconds < -300) return mode === "light" ? "#2563eb" : "#5B9BF5"; // early
-  return "#16a34a";                                                   // on time
+  if (seconds > 600) return mode === "light" ? "#C50C2B" : "#F03E48"; // danger — 10+ min late
+  if (seconds > 300) return mode === "light" ? "#B44D08" : "#F6871F"; // warn — 5–10 min late
+  if (seconds < -300) return mode === "light" ? "#04789C" : "#41C1EF"; // accent — 5+ min early
+  return mode === "light" ? "#007A6B" : "#009483";                     // ok — on time
 }
 
 function BoundsAdjuster({
@@ -136,60 +141,64 @@ export default function VehicleTripMap({ positions, stops, routeColor, isRail = 
       )}
 
       {/* Stop markers: solid + delay-coloured where the vehicle was tracked,
-          small hollow dots for scheduled-only stops. */}
-      {stops.map((stop) => {
-        if (!stop.stop_lat || !stop.stop_lon) return null;
-        const tracked = stop.observed !== false && stop.delay_seconds != null;
-        const outline = resolvedTheme === "light" ? "#ffffff" : "#0D0E11";
-        return (
-          <CircleMarker
-            key={`${stop.stop_id}-${stop.stop_sequence}`}
-            center={[stop.stop_lat, stop.stop_lon]}
-            radius={tracked ? 7 : 4}
-            pathOptions={
-              tracked
-                ? {
-                    color: "#ffffff",
-                    weight: 1.5,
-                    fillColor: stopDelayColor(stop.delay_seconds ?? 0, resolvedTheme),
-                    fillOpacity: 0.9,
-                  }
-                : {
-                    color: fillColor,
-                    weight: 1.5,
-                    fillColor: outline,
-                    fillOpacity: 1,
-                    opacity: 0.7,
-                  }
-            }
-            eventHandlers={{
-              click: () =>
-                setMapClickStop((prev) =>
-                  prev &&
-                  prev.stop_id === stop.stop_id &&
-                  prev.stop_sequence === stop.stop_sequence
-                    ? null
-                    : stop,
-                ),
-            }}
-          >
-            <Tooltip direction="top" offset={[0, -10]} opacity={1}>
-              <span className="font-semibold">{stop.stop_name ?? stop.stop_id}</span>
-              <br />
-              {tracked ? (
-                <span>
-                  {(stop.delay_seconds ?? 0) > 0 ? "+" : ""}
-                  {((stop.delay_seconds ?? 0) / 60).toFixed(1)}m
-                </span>
-              ) : (
-                <span>
-                  {stop.scheduled_time ? `sched ${formatTime(stop.scheduled_time)}` : "scheduled"}
-                </span>
-              )}
-            </Tooltip>
-          </CircleMarker>
-        );
-      })}
+          small hollow dots for scheduled-only stops. Given their own pane above
+          the default overlayPane (where the route line lives) so the dots always
+          sit on top of the line, regardless of render order. */}
+      <Pane name="stop-dots" style={{ zIndex: 450 }}>
+        {stops.map((stop) => {
+          if (!stop.stop_lat || !stop.stop_lon) return null;
+          const tracked = stop.observed !== false && stop.delay_seconds != null;
+          const outline = resolvedTheme === "light" ? "#ffffff" : "#0D0E11";
+          return (
+            <CircleMarker
+              key={`${stop.stop_id}-${stop.stop_sequence}`}
+              center={[stop.stop_lat, stop.stop_lon]}
+              radius={tracked ? 7 : 4}
+              pathOptions={
+                tracked
+                  ? {
+                      color: "#ffffff",
+                      weight: 1.5,
+                      fillColor: stopDelayColor(stop.delay_seconds ?? 0, resolvedTheme),
+                      fillOpacity: 0.9,
+                    }
+                  : {
+                      color: fillColor,
+                      weight: 1.5,
+                      fillColor: outline,
+                      fillOpacity: 1,
+                      opacity: 0.7,
+                    }
+              }
+              eventHandlers={{
+                click: () =>
+                  setMapClickStop((prev) =>
+                    prev &&
+                    prev.stop_id === stop.stop_id &&
+                    prev.stop_sequence === stop.stop_sequence
+                      ? null
+                      : stop,
+                  ),
+              }}
+            >
+              <Tooltip direction="top" offset={[0, -10]} opacity={1}>
+                <span className="font-semibold">{stop.stop_name ?? stop.stop_id}</span>
+                <br />
+                {tracked ? (
+                  <span>
+                    {(stop.delay_seconds ?? 0) > 0 ? "+" : ""}
+                    {((stop.delay_seconds ?? 0) / 60).toFixed(1)}m
+                  </span>
+                ) : (
+                  <span>
+                    {stop.scheduled_time ? `sched ${formatTime(stop.scheduled_time)}` : "scheduled"}
+                  </span>
+                )}
+              </Tooltip>
+            </CircleMarker>
+          );
+        })}
+      </Pane>
 
       {/* Hover marker: where the vehicle was at the hovered stop's scheduled arrival time */}
       {highlight && (

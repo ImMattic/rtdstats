@@ -373,6 +373,10 @@ export interface ActiveVehicle {
   last_longitude: number | null;
   last_occupancy_status: string | null;
   last_delay_seconds: number | null;
+  /** Mean of every geofenced stop_arrival_events delay on this trip; null with no observed arrivals. */
+  avg_delay_seconds: number | null;
+  /** Share of those arrivals within ±ontime_threshold_seconds of schedule. */
+  on_time_pct: number | null;
   observation_count: number;
   stop_arrival_count: number;
 }
@@ -449,6 +453,18 @@ export interface VehicleStopEvent {
   actual_lat: number | null;
   actual_lon: number | null;
   actual_bearing: number | null;
+  /**
+   * Which rule produced `actual_time`. All but "terminus_fallback" are
+   * measurements; that one is the vehicle's closest approach to the end of the
+   * line after its feed cut out short of the geofence, so it is a lower bound
+   * on the real arrival. null for rows written before the column existed.
+   */
+  detection_method?:
+    | "geofence"
+    | "segment"
+    | "origin_departure"
+    | "terminus_fallback"
+    | null;
 }
 
 export interface VehiclePositionTrack {

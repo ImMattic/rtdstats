@@ -2,8 +2,22 @@
 
 In-process state is sufficient (and correct) because the backend runs a single
 uvicorn worker. Requests arrive via Caddy → Next.js rewrite, so the client IP
-must be read from X-Forwarded-For — ``request.client.host`` would only ever be
-the frontend container.
+must be read from a forwarding header — ``request.client.host`` would only ever
+be the frontend container.
+
+Which header matters more than it looks. The deployed chain is
+browser → Cloudflare → Caddy → Next.js → here, and every hop after the browser
+appends to (or passes along) ``X-Forwarded-For``. Reading the *rightmost* entry
+therefore yields whichever of our own proxies spoke last — the same value for
+every visitor on earth, so the whole site shares one budget and the tight
+buckets (20/min for the vehicles and historical endpoints) start returning 429
+to everyone as soon as traffic is anything but idle. That is invisible in
+development, where there is no proxy chain at all.
+
+So ``client_ip_header`` (Cloudflare's ``CF-Connecting-IP`` by default) is
+consulted first: Cloudflare sets it to the real client and overwrites whatever
+the client supplied, and the hops below it pass it through untouched. The
+rightmost-XFF read stays as the fallback for a deployment without that edge.
 """
 from __future__ import annotations
 
@@ -104,9 +118,15 @@ def _match_bucket(path: str) -> str | None:
 
 def _client_ip(request: Request) -> str:
     if _settings.trust_proxy_headers:
+        header = _settings.client_ip_header.strip().lower()
+        if header:
+            edge_ip = request.headers.get(header)
+            if edge_ip and edge_ip.strip():
+                return edge_ip.strip()
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
-            # Rightmost entry is the hop appended by our own edge (Caddy);
-            # earlier entries are client-supplied and spoofable.
+            # No edge header: rightmost entry is the last hop that appended,
+            # which is our own proxy only when nothing sits in front of it.
+            # Earlier entries are client-supplied and spoofable.
             return forwarded.rsplit(",", 1)[-1].strip()
     return request.client.host if request.client else "unknown"

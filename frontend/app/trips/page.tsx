@@ -2,6 +2,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useActiveVehicles, useLimits, useRoutes, useVehicles } from "@/lib/hooks";
+import { ApiError } from "@/lib/api";
 import { Card, SectionHeading } from "@/components/ui/Card";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ExportButton from "@/components/ui/ExportButton";
@@ -13,6 +14,7 @@ import {
   cn,
   computeTripStatus,
   formatDateTime,
+  formatDelayMin,
   isTripInProgress,
   occupancyLabel,
   routeColor,
@@ -39,6 +41,41 @@ import {
   type RangeLimits,
 } from "@/lib/dateRange";
 import type { ActiveVehicle } from "@/lib/types";
+
+function ChevronLeftIcon() {
+  return (
+    <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path
+        fillRule="evenodd"
+        d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path
+        fillRule="evenodd"
+        d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
+// Same four-way bucketing used for the delay dots on the trip map / stop
+// timeline (see VehicleTripMap.tsx) — an average delay reads on the same scale
+// as a single stop's.
+function avgDelayColor(seconds: number | null): string {
+  if (seconds === null) return "text-fg-muted";
+  if (seconds > 600) return "text-danger";
+  if (seconds > 300) return "text-warn";
+  if (seconds < -300) return "text-accent";
+  return "text-ok";
+}
 
 function formatDuration(minutes: number): string {
   const mins = Math.round(minutes);
@@ -82,24 +119,25 @@ function TripsContent() {
   const [endLocal, setEndLocal] = useState(() =>
     urlEnd ? isoToLocalInput(urlEnd) : toLocalInput(new Date()),
   );
-  // Three tiers, narrowing toward the table:
-  //   draft   — live edits inside the menu
-  //   staged  — what "Apply filters" locked in; drives the chip row, nothing else
-  //   URL     — what "Load trips" committed; the only thing the query reads
+  // Two tiers, narrowing toward the table:
+  //   draft — live edits inside the menu, not yet queried
+  //   URL   — what's actually being asked for; the only thing the query reads.
+  //           "Apply filters" commits the filter set here immediately; "Load
+  //           trips" commits a new date/time window (keeping whatever filter
+  //           set is already applied).
   const [draft, setDraft] = useState<TripFilters>(appliedFilters);
-  const [staged, setStaged] = useState<TripFilters>(appliedFilters);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const PAGE_SIZE_OPTIONS = [15, 30, 50, 100] as const;
   const [pageSize, setPageSize] = useState<number>(15);
   const [page, setPage] = useState(1);
 
-  // Sync picker state when URL params change (e.g. after "Load trips" or browser back/forward)
+  // Sync picker state when URL params change (e.g. after "Apply filters",
+  // "Load trips", or browser back/forward)
   useEffect(() => {
     if (urlStart) setStartLocal(isoToLocalInput(urlStart));
     if (urlEnd) setEndLocal(isoToLocalInput(urlEnd));
     setDraft(appliedFilters);
-    setStaged(appliedFilters);
     setPage(1);
   }, [urlStart, urlEnd, appliedFilters]);
 
@@ -155,13 +193,14 @@ function TripsContent() {
   const fetchStart = urlStart ?? defaultStart;
   const fetchEnd = urlEnd ?? defaultEnd;
 
-  const { data, isLoading, isError, isFetching } = useActiveVehicles({
+  const { data, isLoading, isError, isFetching, error } = useActiveVehicles({
     start: fetchStart,
     end: fetchEnd,
     ...tripFiltersToQuery(appliedFilters),
     limit: pageSize,
     offset: (page - 1) * pageSize,
   });
+  const isRateLimited = error instanceof ApiError && error.status === 429;
   // Cross-reference the live realtime feed so each row can show whether its
   // trip is still in progress or already complete.
   const live = useVehicles();
@@ -196,26 +235,30 @@ function TripsContent() {
     [router],
   );
 
-  /** "Load trips" — the only path that moves the table. Commits the staged set
-   *  (chips), not the raw draft, and tucks the menu away. */
+  /** "Load trips" — commits a new date/time window, keeping whatever filter
+   *  set is already applied. */
   const handleLoad = useCallback(() => {
     const startIso = localInputToIso(startLocal);
     const endIso = localInputToIso(endLocal);
     if (!startIso || !endIso) return;
     setPage(1);
     setMenuOpen(false);
-    pushQuery(staged, startIso, endIso);
-  }, [staged, startLocal, endLocal, pushQuery]);
+    pushQuery(appliedFilters, startIso, endIso);
+  }, [appliedFilters, startLocal, endLocal, pushQuery]);
 
-  /** "Apply filters" inside the menu — stage the draft as chips only. */
-  const stageFilters = useCallback(() => setStaged(draft), [draft]);
+  /** "Apply filters" inside the menu — commits the draft immediately and
+   *  tucks the menu away, keeping the current date/time window. */
+  const applyFilters = useCallback(() => {
+    setPage(1);
+    setMenuOpen(false);
+    pushQuery(draft, fetchStart, fetchEnd);
+  }, [draft, fetchStart, fetchEnd, pushQuery]);
 
-  /** Removing a chip / Reset / Clear is an unambiguous instruction, so it drops
-   *  the condition from every tier and reloads straight away. */
+  /** Removing a chip / Reset / Clear is an unambiguous instruction too, so it
+   *  applies straight away just like "Apply filters" does. */
   const applyImmediately = useCallback(
     (filters: TripFilters) => {
       setDraft(filters);
-      setStaged(filters);
       setPage(1);
       pushQuery(filters, fetchStart, fetchEnd);
     },
@@ -262,15 +305,14 @@ function TripsContent() {
     [sortedRoutes, facets],
   );
 
-  // Chips mirror the staged set, which "Apply filters" fills and "Load trips"
-  // then commits — so a chip can be showing before the table has caught up.
+  // Chips mirror the applied filter set — "Apply filters" commits straight
+  // to the URL, so the chip row always matches what the table is showing.
   const chips = useMemo(
-    () => tripFilterChips(staged, routeNameOf),
-    [staged, routeNameOf],
+    () => tripFilterChips(appliedFilters, routeNameOf),
+    [appliedFilters, routeNameOf],
   );
 
   const appliedCount = countActiveTripFilters(appliedFilters);
-  const stagedCount = countActiveTripFilters(staged);
 
   const matched = data?.vehicle_count ?? 0;
   const windowTotal = data?.window_count ?? 0;
@@ -278,6 +320,28 @@ function TripsContent() {
   // filter set narrows to exactly that.
   const exportRouteId =
     appliedFilters.routeIds.length === 1 ? appliedFilters.routeIds[0] : undefined;
+
+  const totalPages = Math.max(1, Math.ceil(matched / pageSize));
+
+  // Type-a-page-number box. Held as its own string (not derived straight from
+  // `page`) so a mid-edit value like "" or "1" while backspacing isn't fought
+  // over by the effect that follows the current page — that effect only steps
+  // in once `page` itself actually changes (e.g. via the arrow buttons).
+  const [pageInput, setPageInput] = useState(String(page));
+  useEffect(() => setPageInput(String(page)), [page]);
+
+  function commitPageInput() {
+    const n = Math.round(Number(pageInput));
+    // Reject anything that isn't a real number (empty, "-", "abc", …) by
+    // snapping back to the current page rather than guessing what was meant.
+    if (!Number.isFinite(n) || pageInput.trim() === "") {
+      setPageInput(String(page));
+      return;
+    }
+    const clamped = Math.min(Math.max(n, 1), totalPages);
+    setPage(clamped);
+    setPageInput(String(clamped));
+  }
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 pb-6 pt-24 text-fg">
@@ -302,7 +366,7 @@ function TripsContent() {
       <Card>
         <SectionHeading
           title="Filters"
-          hint="Pick a date and time range, add any filters you want, then load the trips."
+          hint="Filters apply as soon as you hit Apply filters. Pick a date and time range and hit Load trips to change the window."
         />
         <div className="flex flex-wrap items-end gap-3">
           <DateTimePicker
@@ -331,18 +395,18 @@ function TripsContent() {
               aria-label="Filter trips"
               className={cn(
                 "press flex h-9 items-center gap-1.5 rounded border px-2.5 text-sm font-medium transition-[transform,background-color,border-color,color] duration-150",
-                stagedCount > 0 || menuOpen
+                appliedCount > 0 || menuOpen
                   ? "border-accent bg-accent/10 text-accent"
                   : "border-line bg-card text-fg-muted hover:border-line-strong hover:text-fg",
               )}
             >
               <FilterIcon className="h-4 w-4" />
-              {stagedCount > 0 && (
+              {appliedCount > 0 && (
                 <span
-                  key={stagedCount}
+                  key={appliedCount}
                   className="animate-badge-pop rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold leading-none text-accent-ink"
                 >
-                  {stagedCount}
+                  {appliedCount}
                 </span>
               )}
             </button>
@@ -371,8 +435,8 @@ function TripsContent() {
           facets={facets}
           routes={sortedRoutes}
           onReset={() => applyImmediately(EMPTY_TRIP_FILTERS)}
-          onApply={stageFilters}
-          applyDisabled={tripFiltersEqual(draft, staged)}
+          onApply={applyFilters}
+          applyDisabled={tripFiltersEqual(draft, appliedFilters)}
         />
 
         {chips.length > 0 && (
@@ -407,7 +471,9 @@ function TripsContent() {
 
         {isError && (
           <p className="py-8 text-center text-sm text-danger">
-            Failed to load vehicles. The time window may be out of range.
+            {isRateLimited
+              ? "You're refreshing too quickly. Please wait a moment and try again."
+              : "Failed to load vehicles. The time window may be out of range."}
           </p>
         )}
 
@@ -440,17 +506,36 @@ function TripsContent() {
                 isFetching && "opacity-60",
               )}
             >
-              <table className="min-w-full text-sm text-fg-muted">
+              {/* table-fixed + an explicit width on every column but From → To: that
+                  one column is left unset, so the fixed-layout algorithm hands it
+                  whatever space the others don't need — it's the only column that
+                  grows or shrinks (and truncates) as the table is resized. Every
+                  fixed width carries a few px of slack beyond its own content's
+                  measured size: nowrap content can't shrink to fit like From → To
+                  can, so a column sized exactly to its content — no margin — will
+                  force the whole table a hair wider than 100% the moment a browser
+                  renders that text even fractionally wider than expected, which
+                  reads as a barely-there permanent scrollbar. border-collapse is
+                  explicit rather than trusted to Preflight, for the same reason:
+                  belt and suspenders against a few stray px. The table's min-width
+                  is the sum of the fixed columns plus a floor for From → To, so
+                  squeezing below that hands off to the wrapper's horizontal scroll
+                  instead of crushing every column to fit. */}
+              <table className="w-full min-w-[960px] table-fixed border-collapse text-sm text-fg-muted">
                 <thead className="bg-raised text-xs uppercase text-fg-subtle">
                   <tr>
-                    <th className="px-3 py-2 text-left">Status</th>
-                    <th className="px-3 py-2 text-left">Route</th>
-                    <th className="px-3 py-2 text-left">Vehicle</th>
-                    <th className="w-[600px] px-3 py-2 text-left">From → To</th>
-                    <th className="px-3 py-2 text-left">Start Time</th>
-                    <th className="px-3 py-2 text-left">End Time</th>
-                    <th className="px-3 py-2 text-right">Duration</th>
-                    <th className="px-3 py-2 text-left">Occupancy</th>
+                    <th className="w-10 whitespace-nowrap px-3 py-2 text-left">
+                      <span className="sr-only">Status</span>
+                    </th>
+                    <th className="w-16 whitespace-nowrap px-3 py-2 text-left">Route</th>
+                    <th className="w-20 whitespace-nowrap px-3 py-2 text-left">Vehicle</th>
+                    <th className="whitespace-nowrap px-3 py-2 text-left">From → To</th>
+                    <th className="w-24 whitespace-nowrap px-3 py-2 text-left">Start Time</th>
+                    <th className="w-24 whitespace-nowrap px-3 py-2 text-left">End Time</th>
+                    <th className="w-20 whitespace-nowrap px-3 py-2 text-right">Duration</th>
+                    <th className="w-[136px] whitespace-nowrap px-3 py-2 text-left">Occupancy</th>
+                    <th className="w-[88px] whitespace-nowrap px-3 py-2 text-right">Avg Delay</th>
+                    <th className="w-16 whitespace-nowrap px-3 py-2 text-right">On-Time</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -460,7 +545,7 @@ function TripsContent() {
                       className="cursor-pointer hover:bg-accent/10"
                       onClick={() => handleVehicleClick(v)}
                     >
-                      <td className="px-3 py-2">
+                      <td className="w-10 px-3 py-2">
                         {/* The API decided the status the filter matched on; the
                             live feed is fresher, so a trip that is still running
                             keeps its blinking dot between refetches. */}
@@ -468,43 +553,62 @@ function TripsContent() {
                           variant="dot"
                           status={computeTripStatus(
                             v.in_progress ||
-                              isTripInProgress(live.data?.vehicles, v.vehicle_label, v.trip_id),
+                              isTripInProgress(
+                                live.data?.vehicles,
+                                v.vehicle_label,
+                                v.trip_id,
+                                v.end_time,
+                              ),
                             v.reached_terminus,
                           )}
                         />
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="w-16 whitespace-nowrap px-3 py-2">
                         <RouteBadge shortName={v.route_short_name} color={v.route_color} />
                       </td>
-                      <td className="px-3 py-2 font-semibold">
+                      <td className="w-20 whitespace-nowrap px-3 py-2 font-semibold">
                         {v.vehicle_label ? `#${v.vehicle_label}` : "—"}
                       </td>
-                      <td className="w-[600px] max-w-[600px] px-3 py-2 text-fg-muted">
+                      <td className="overflow-hidden px-3 py-2 text-fg-muted">
                         <span className="block truncate" title={`${v.start_stop_name ?? "—"} → ${v.end_stop_name ?? "—"}`}>
                           {v.start_stop_name ?? "—"}
                           <span className="px-1 text-fg-subtle">→</span>
                           {v.end_stop_name ?? "—"}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-fg-muted">
+                      {/* whitespace-nowrap: the locale time string can wrap its AM/PM
+                          onto its own line at some column widths, which grows the row
+                          to two lines and jitters the table height between pages. */}
+                      <td className="w-24 whitespace-nowrap px-3 py-2 text-fg-muted">
                         {new Date(v.start_time).toLocaleTimeString([], {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
                       </td>
-                      <td className="px-3 py-2 text-fg-muted">
+                      <td className="w-24 whitespace-nowrap px-3 py-2 text-fg-muted">
                         {new Date(v.end_time).toLocaleTimeString([], {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-fg-muted">
+                      <td className="w-20 whitespace-nowrap px-3 py-2 text-right font-mono text-fg-muted">
                         {formatDuration(v.duration_minutes)}
                       </td>
-                      <td className="px-3 py-2 text-fg-muted">
+                      <td className="w-[136px] whitespace-nowrap px-3 py-2 text-fg-muted">
                         {v.last_occupancy_status
                           ? occupancyLabel(v.last_occupancy_status)
                           : "—"}
+                      </td>
+                      <td
+                        className={cn(
+                          "w-[88px] whitespace-nowrap px-3 py-2 text-right font-mono",
+                          avgDelayColor(v.avg_delay_seconds),
+                        )}
+                      >
+                        {formatDelayMin(v.avg_delay_seconds)}
+                      </td>
+                      <td className="w-16 whitespace-nowrap px-3 py-2 text-right font-mono text-fg-muted">
+                        {v.on_time_pct !== null ? `${Math.round(v.on_time_pct)}%` : "—"}
                       </td>
                     </tr>
                   ))}
@@ -515,7 +619,6 @@ function TripsContent() {
             {/* Pagination controls */}
             {(() => {
               const totalCount = matched;
-              const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
               const start = (page - 1) * pageSize + 1;
               const end = Math.min(page * pageSize, totalCount);
               return (
@@ -525,7 +628,9 @@ function TripsContent() {
                   </span>
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1.5">
-                      <label className="text-xs text-fg-subtle">Rows per page</label>
+                      {/* Smaller on mobile — "Rows per page" is the thing that was
+                          getting squeezed against the page buttons in the same row. */}
+                      <label className="text-[10px] text-fg-subtle sm:text-xs">Rows per page</label>
                       <select
                         value={pageSize}
                         onChange={(e) => {
@@ -539,23 +644,45 @@ function TripsContent() {
                         ))}
                       </select>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => setPage((p) => Math.max(1, p - 1))}
                         disabled={page === 1}
-                        className="rounded border border-line px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-40 hover:bg-raised"
+                        aria-label="Previous page"
+                        className="press flex h-7 w-7 items-center justify-center rounded border border-line disabled:cursor-not-allowed disabled:opacity-40 hover:bg-raised"
                       >
-                        ‹ Prev
+                        <ChevronLeftIcon />
                       </button>
-                      <span className="px-1 text-xs">
-                        Page {page} of {totalPages}
+                      <span className="flex items-center gap-1 px-1 text-xs">
+                        Page
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={pageInput}
+                          onChange={(e) => setPageInput(e.target.value)}
+                          onBlur={commitPageInput}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              commitPageInput();
+                              e.currentTarget.blur();
+                            }
+                          }}
+                          aria-label={`Go to page, ${totalPages} total pages`}
+                          className="w-9 rounded border border-line bg-card px-1 py-0.5 text-center text-xs text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                        />
+                        {/* Dropped on mobile — the row was already tight with the
+                            input and both arrow buttons, and the total is one tap
+                            away (the input itself, or either arrow button greying
+                            out) without needing to spell it out here. */}
+                        <span className="hidden sm:inline">of {totalPages}</span>
                       </span>
                       <button
                         onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                         disabled={page >= totalPages}
-                        className="rounded border border-line px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-40 hover:bg-raised"
+                        aria-label="Next page"
+                        className="press flex h-7 w-7 items-center justify-center rounded border border-line disabled:cursor-not-allowed disabled:opacity-40 hover:bg-raised"
                       >
-                        Next ›
+                        <ChevronRightIcon />
                       </button>
                     </div>
                   </div>

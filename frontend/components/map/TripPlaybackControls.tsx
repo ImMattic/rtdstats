@@ -1,7 +1,7 @@
 "use client";
 import type { Playback } from "@/lib/usePlayback";
 
-const SPEEDS = [1, 1.5, 2, 2.5, 3];
+const SPEEDS = [0.5, 0.75, 1, 2, 3];
 
 function clockWithSeconds(ms: number): string {
   return new Date(ms).toLocaleTimeString([], {

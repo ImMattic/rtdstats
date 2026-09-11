@@ -51,6 +51,13 @@ class StopArrivalEvent(Base):
     actual_lon: Mapped[float | None] = mapped_column(nullable=True)
     actual_bearing: Mapped[float | None] = mapped_column(nullable=True)
 
+    # How this row was derived — see DETECTION_* in services/ontime.py.  Every
+    # method but ``terminus_fallback`` is a measurement; that one is a lower
+    # bound recorded from a wider circle when the feed cut out on approach, so
+    # anything that cares about precision can tell the two apart.  Nullable for
+    # pre-007 rows, which predate the distinction.
+    detection_method: Mapped[str | None] = mapped_column(String(24), nullable=True)
+
     __table_args__ = (
         Index(
             "ix_sae_trip_stop_date",

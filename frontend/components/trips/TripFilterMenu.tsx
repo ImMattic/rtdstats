@@ -2,6 +2,7 @@
 
 import {
   FilterChips,
+  FilterDualSlider,
   FilterOptionList,
   FilterRange,
   FilterSection,
@@ -14,7 +15,15 @@ import type { TripFilters } from "@/lib/tripFilters";
 import { countActiveTripFilters } from "@/lib/tripFilters";
 import { modeOf } from "@/lib/mapFilters";
 import type { RouteInfo, TripFacets } from "@/lib/types";
-import { occupancyLabel, OCCUPANCY_ORDER, routeColor } from "@/lib/utils";
+import { formatDelayMin, occupancyLabel, OCCUPANCY_ORDER, routeColor } from "@/lib/utils";
+
+// Fixed rather than data-driven (unlike Duration's facets-backed hint): a
+// trip's delay/on-time reading isn't bounded by anything in the window the way
+// its duration is, so the slider needs a sensible scale of its own.
+const AVG_DELAY_BOUNDS = { min: -600, max: 1800 }; // -10 min .. +30 min
+const AVG_DELAY_STEP = 60; // 1 minute
+const ON_TIME_BOUNDS = { min: 0, max: 100 };
+const ON_TIME_STEP = 5;
 
 interface Props {
   open: boolean;
@@ -25,9 +34,10 @@ interface Props {
   /** Every RTD route, from the static GTFS bundle. */
   routes: RouteInfo[];
   onReset: () => void;
-  /** Stages the current edits as chips — the table doesn't move until "Load trips". */
+  /** Commits the current edits immediately — the table (and chip row) update
+   *  as soon as this fires, independent of the date/time window. */
   onApply: () => void;
-  /** Greyed out until the draft differs from what's already staged as chips. */
+  /** Greyed out until the draft differs from what's already applied. */
   applyDisabled?: boolean;
 }
 
@@ -63,10 +73,11 @@ type TripFilterListKey = Exclude<
  *
  * It drops out of the filter bar rather than floating over it, because the date
  * range above stays part of the same decision — you pick a window and then say
- * what you want out of it. "Apply filters" only stages the edits as removable
- * chips; nothing is queried until "Load trips" up in the bar, which also closes
- * this menu. As groups are narrowed, options that can no longer match drop out
- * of the other lists — pick "Rail" and the buses leave the route list.
+ * what you want out of it. "Apply filters" commits the edits immediately —
+ * the table and the chip row update right away, and this menu closes — while
+ * the date/time window is a separate decision that only moves on "Load trips"
+ * up in the bar. As groups are narrowed, options that can no longer match drop
+ * out of the other lists — pick "Rail" and the buses leave the route list.
  */
 export default function TripFilterMenu({
   open,
@@ -228,6 +239,42 @@ export default function TripFilterMenu({
                   presets={DURATION_PRESETS}
                   onChange={(min, max) =>
                     onChange({ ...value, minDurationMinutes: min, maxDurationMinutes: max })
+                  }
+                />
+              </FilterSection>
+
+              <FilterSection
+                title="Avg delay"
+                activeCount={
+                  value.minAvgDelaySeconds !== null || value.maxAvgDelaySeconds !== null ? 1 : 0
+                }
+                hint="Mean of every geofenced stop arrival on the trip; negative means early."
+              >
+                <FilterDualSlider
+                  min={value.minAvgDelaySeconds}
+                  max={value.maxAvgDelaySeconds}
+                  bounds={AVG_DELAY_BOUNDS}
+                  step={AVG_DELAY_STEP}
+                  formatValue={(v) => formatDelayMin(v)}
+                  onChange={(min, max) =>
+                    onChange({ ...value, minAvgDelaySeconds: min, maxAvgDelaySeconds: max })
+                  }
+                />
+              </FilterSection>
+
+              <FilterSection
+                title="On-time %"
+                activeCount={value.minOnTimePct !== null || value.maxOnTimePct !== null ? 1 : 0}
+                hint="Share of those arrivals within RTD's ±5-minute on-time window."
+              >
+                <FilterDualSlider
+                  min={value.minOnTimePct}
+                  max={value.maxOnTimePct}
+                  bounds={ON_TIME_BOUNDS}
+                  step={ON_TIME_STEP}
+                  formatValue={(v) => `${v}%`}
+                  onChange={(min, max) =>
+                    onChange({ ...value, minOnTimePct: min, maxOnTimePct: max })
                   }
                 />
               </FilterSection>

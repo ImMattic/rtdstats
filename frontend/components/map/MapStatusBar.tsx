@@ -7,13 +7,23 @@ import {
   useMemo,
   useRef,
   useState,
+  // Aliased: this file also uses the DOM's own `MouseEvent` (the outside-click
+  // listener below), so importing React's under the same name would shadow it.
+  type MouseEvent as ReactMouseEvent,
 } from "react";
-import { useGames, useRoutes, useStopsSearch } from "@/lib/hooks";
+import { useGames, useStopsSearch } from "@/lib/hooks";
 import type { StopInfo, VehiclePosition } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import MapFilterControl from "./MapFilterControl";
 import GameSlideView from "./GameSlideView";
-import { countActiveMapFilters, type MapFilters } from "@/lib/mapFilters";
+import { FilterIcon } from "@/components/ui/FilterControls";
+import {
+  countActiveMapFilters,
+  modeOf,
+  vehicleKey,
+  type MapFilters,
+  type TransitMode,
+} from "@/lib/mapFilters";
 import {
   carouselTurnCount,
   describeGame,
@@ -77,7 +87,6 @@ export default function MapStatusBar({
   const statusRowRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const routes = useRoutes();
   const { data: stopResults } = useStopsSearch(query);
 
   // ── Home-game slides ──────────────────────────────────────────────────
@@ -193,29 +202,86 @@ export default function MapStatusBar({
     };
   }, [mode, closeSearch]);
 
-  const sortedRoutes = useMemo(() => {
-    const list = routes.data?.routes ?? [];
-    return [...list].sort((a, b) =>
-      a.short_name.localeCompare(b.short_name, undefined, { numeric: true }),
+  // ── Route/vehicle browser ────────────────────────────────────────────────
+  // Grouped straight from the live feed rather than the static route list, so
+  // what's browsable here — and what "all active vehicles underneath" means —
+  // is exactly the set of routes and vehicles actually running right now.
+  interface RouteGroup {
+    routeId: string;
+    shortName: string;
+    longName: string;
+    color: string;
+    mode: TransitMode;
+    vehicles: { key: string; label: string }[];
+  }
+
+  const collator = useMemo(() => new Intl.Collator(undefined, { numeric: true }), []);
+
+  const routeGroups = useMemo<RouteGroup[]>(() => {
+    const map = new Map<string, RouteGroup>();
+    for (const v of vehicles) {
+      let group = map.get(v.route_id);
+      if (!group) {
+        group = {
+          routeId: v.route_id,
+          shortName: v.route_short_name || v.route_id,
+          longName: v.route_long_name ?? "",
+          color: v.route_color || "888888",
+          mode: modeOf(v.route_type),
+          vehicles: [],
+        };
+        map.set(v.route_id, group);
+      }
+      const key = vehicleKey(v);
+      if (!group.vehicles.some((x) => x.key === key)) {
+        group.vehicles.push({ key, label: v.vehicle_label ?? key });
+      }
+    }
+    for (const group of map.values()) {
+      group.vehicles.sort((a, b) => collator.compare(a.label, b.label));
+    }
+    return [...map.values()].sort((a, b) => collator.compare(a.shortName, b.shortName));
+  }, [vehicles, collator]);
+
+  // A route matches on its own name; a vehicle number matches through the route
+  // it's running on, so searching a fleet number pulls up the route it belongs to.
+  const queryLower = query.toLowerCase().trim();
+  const matchedRouteGroups = useMemo(() => {
+    if (!queryLower) return routeGroups;
+    return routeGroups.filter(
+      (g) =>
+        g.shortName.toLowerCase().includes(queryLower) ||
+        g.longName.toLowerCase().includes(queryLower) ||
+        g.vehicles.some((v) => v.label.toLowerCase().includes(queryLower)),
     );
-  }, [routes.data]);
+  }, [routeGroups, queryLower]);
 
   const groupedRoutes = useMemo(() => {
-    const q = query.toLowerCase().trim();
-    const filtered = q
-      ? sortedRoutes.filter(
-          (r) =>
-            r.short_name.toLowerCase().includes(q) ||
-            r.long_name.toLowerCase().includes(q),
-        )
-      : sortedRoutes;
-    const rail = filtered.filter(
-      (r) => r.type_name !== "bus" && r.type_name !== "other",
-    );
-    const bus = filtered.filter((r) => r.type_name === "bus");
-    const other = filtered.filter((r) => r.type_name === "other");
+    const rail = matchedRouteGroups.filter((g) => g.mode === "rail");
+    const bus = matchedRouteGroups.filter((g) => g.mode === "bus");
+    const other = matchedRouteGroups.filter((g) => g.mode === "other");
     return { rail, bus, other };
-  }, [sortedRoutes, query]);
+  }, [matchedRouteGroups]);
+
+  // A single matching route — searching "15", or a fleet number that only runs
+  // on one route — drops its vehicles open automatically; anything broader
+  // stays collapsed until its caret is tapped. Manual taps are tracked
+  // separately so they win over the auto-expand, and reset on every new query
+  // so a stale expansion doesn't carry into an unrelated search.
+  const autoExpandRouteId =
+    queryLower && matchedRouteGroups.length === 1 ? matchedRouteGroups[0].routeId : null;
+  const [expandOverride, setExpandOverride] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    setExpandOverride({});
+  }, [query]);
+
+  function isRouteOpen(routeId: string): boolean {
+    return expandOverride[routeId] ?? routeId === autoExpandRouteId;
+  }
+
+  function toggleRouteOpen(routeId: string) {
+    setExpandOverride((o) => ({ ...o, [routeId]: !isRouteOpen(routeId) }));
+  }
 
   const stops = query.trim().length >= 2 ? stopResults?.stops ?? [] : [];
   const hasRoutes =
@@ -229,12 +295,12 @@ export default function MapStatusBar({
     groupedRoutes.other.length +
     stops.length;
 
-  function handleSelectRoute(routeId: string) {
+  function handleSelectVehicle(key: string) {
     // Prefer one the filters are already showing, so the map jumps to a marker
     // that's on screen rather than to a vehicle the current filters hide.
     const vehicle =
-      filteredVehicles.find((v) => v.route_id === routeId) ??
-      vehicles.find((v) => v.route_id === routeId);
+      filteredVehicles.find((v) => vehicleKey(v) === key) ??
+      vehicles.find((v) => vehicleKey(v) === key);
     if (vehicle) onSelect(vehicle);
     closeSearch();
   }
@@ -242,6 +308,31 @@ export default function MapStatusBar({
   function handleSelectStop(stop: StopInfo) {
     onSelectStop(stop);
     closeSearch();
+  }
+
+  // Quick add/remove straight from the browser — the funnel icon on a route or
+  // vehicle row toggles it in the live filter set immediately, no draft/Apply
+  // step, since this is meant as the fast path past opening the full menu.
+  function toggleRouteFilter(e: ReactMouseEvent, routeId: string) {
+    e.stopPropagation();
+    const active = filters.routeIds.includes(routeId);
+    onFiltersChange({
+      ...filters,
+      routeIds: active
+        ? filters.routeIds.filter((id) => id !== routeId)
+        : [...filters.routeIds, routeId],
+    });
+  }
+
+  function toggleVehicleFilter(e: ReactMouseEvent, key: string) {
+    e.stopPropagation();
+    const active = filters.vehicleKeys.includes(key);
+    onFiltersChange({
+      ...filters,
+      vehicleKeys: active
+        ? filters.vehicleKeys.filter((k) => k !== key)
+        : [...filters.vehicleKeys, key],
+    });
   }
 
   // ── Cycle content ─────────────────────────────────────────────────────
@@ -449,28 +540,102 @@ export default function MapStatusBar({
                   >
                     {label}
                   </li>
-                  {list.map((r) => (
-                    <li key={r.route_id}>
-                      <button
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => handleSelectRoute(r.route_id)}
-                        className="flex w-full items-center gap-3 border-t border-line px-3 py-2.5 text-left transition-colors hover:bg-raised"
-                      >
-                        <span
-                          className="h-3 w-3 shrink-0 rounded-full"
-                          style={{ backgroundColor: `#${r.color}` }}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-fg">
-                            {r.short_name}
-                          </p>
-                          <p className="truncate text-xs text-fg-subtle">
-                            {r.long_name}
-                          </p>
-                        </div>
-                      </button>
-                    </li>
-                  ))}
+                  {list.map((g) => {
+                    const open = isRouteOpen(g.routeId);
+                    const routeActive = filters.routeIds.includes(g.routeId);
+                    return (
+                      <Fragment key={g.routeId}>
+                        <li className="flex items-stretch border-t border-line">
+                          {/* Caret + name — the dropdown trigger */}
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => toggleRouteOpen(g.routeId)}
+                            aria-expanded={open}
+                            aria-label={`${open ? "Hide" : "Show"} active vehicles on route ${g.shortName}`}
+                            className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-raised"
+                          >
+                            <CaretIcon
+                              className={cn(
+                                "shrink-0 text-fg-subtle transition-transform duration-150",
+                                open && "rotate-90",
+                              )}
+                            />
+                            <span
+                              className="h-3 w-3 shrink-0 rounded-full"
+                              style={{ backgroundColor: `#${g.color}` }}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-fg">
+                                {g.shortName}
+                              </p>
+                              <p className="truncate text-xs text-fg-subtle">
+                                {g.longName || `${g.vehicles.length} active`}
+                              </p>
+                            </div>
+                          </button>
+                          {/* Quick-filter — adds/removes this route from the map
+                              filters without opening the full filter menu. */}
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={(e) => toggleRouteFilter(e, g.routeId)}
+                            aria-pressed={routeActive}
+                            aria-label={
+                              routeActive
+                                ? `Remove route ${g.shortName} from filters`
+                                : `Add route ${g.shortName} to filters`
+                            }
+                            className={cn(
+                              "flex shrink-0 items-center justify-center px-3 transition-colors",
+                              routeActive
+                                ? "text-accent"
+                                : "text-fg-subtle hover:text-fg-muted",
+                            )}
+                          >
+                            <FilterIcon className="h-4 w-4" />
+                          </button>
+                        </li>
+                        {open &&
+                          g.vehicles.map((v) => {
+                            const vehicleActive = filters.vehicleKeys.includes(v.key);
+                            return (
+                              <li key={v.key} className="flex items-stretch border-t border-line/60">
+                                <button
+                                  type="button"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => handleSelectVehicle(v.key)}
+                                  className="flex min-w-0 flex-1 items-center gap-2.5 py-2 pl-10 pr-3 text-left transition-colors hover:bg-raised"
+                                >
+                                  <span className="truncate text-sm text-fg-muted">
+                                    #{v.label}
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={(e) => toggleVehicleFilter(e, v.key)}
+                                  aria-pressed={vehicleActive}
+                                  aria-label={
+                                    vehicleActive
+                                      ? `Remove vehicle #${v.label} from filters`
+                                      : `Add vehicle #${v.label} to filters`
+                                  }
+                                  className={cn(
+                                    "flex shrink-0 items-center justify-center px-3 transition-colors",
+                                    vehicleActive
+                                      ? "text-accent"
+                                      : "text-fg-subtle hover:text-fg-muted",
+                                  )}
+                                >
+                                  <FilterIcon className="h-3.5 w-3.5" />
+                                </button>
+                              </li>
+                            );
+                          })}
+                      </Fragment>
+                    );
+                  })}
                 </Fragment>
               ) : null,
             )}
@@ -536,6 +701,19 @@ export default function MapStatusBar({
         )}
       </div>
     </div>
+  );
+}
+
+/** Right-pointing at rest, rotated 90° open — the route row's dropdown trigger. */
+function CaretIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg className={`h-3.5 w-3.5 ${className}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path
+        fillRule="evenodd"
+        d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+        clipRule="evenodd"
+      />
+    </svg>
   );
 }
 

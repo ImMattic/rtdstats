@@ -7,6 +7,7 @@ validation is checked through the API, since it happens before any SQL runs.
 """
 from __future__ import annotations
 
+import itertools
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -17,7 +18,9 @@ from app.api.v1.vehicles import (
     _matches_filters,
     _mode_of,
     _split_csv,
+    _trip_delay_stats,
 )
+from app.models.stop_arrival import StopArrivalEvent
 
 NOW = datetime(2026, 9, 10, 18, 0, tzinfo=timezone.utc)
 LIVE_CUTOFF = NOW - timedelta(seconds=90)
@@ -161,6 +164,99 @@ def test_duration_bounds_are_inclusive():
     assert matches(trip, max_duration_minutes=40) is True
     assert matches(trip, min_duration_minutes=41) is False
     assert matches(trip, max_duration_minutes=39) is False
+
+
+def test_avg_delay_bounds_are_inclusive_and_signed():
+    trip = describe()
+    trip["avg_delay_seconds"] = -30.0
+    assert matches(trip, min_avg_delay_seconds=-30) is True
+    assert matches(trip, min_avg_delay_seconds=-29) is False
+    assert matches(trip, max_avg_delay_seconds=-30) is True
+    assert matches(trip, max_avg_delay_seconds=-31) is False
+
+
+def test_avg_delay_bound_excludes_a_trip_with_no_observed_arrivals():
+    trip = describe()
+    trip["avg_delay_seconds"] = None
+    assert matches(trip, min_avg_delay_seconds=0) is False
+    assert matches(trip, max_avg_delay_seconds=0) is False
+
+
+def test_on_time_pct_bounds_are_inclusive():
+    trip = describe()
+    trip["on_time_pct"] = 80.0
+    assert matches(trip, min_on_time_pct=80) is True
+    assert matches(trip, min_on_time_pct=81) is False
+    assert matches(trip, max_on_time_pct=80) is True
+    assert matches(trip, max_on_time_pct=79) is False
+
+
+def test_on_time_pct_bound_excludes_a_trip_with_no_observed_arrivals():
+    trip = describe()
+    trip["on_time_pct"] = None
+    assert matches(trip, min_on_time_pct=50) is False
+
+
+# ── Avg delay / on-time aggregation ─────────────────────────────────────────
+# Reads app.models.stop_arrival.StopArrivalEvent directly, unlike the endpoint's
+# own aggregate SQL — plain AVG/CASE/GROUP BY, so SQLite can run it.
+
+
+_arrival_ids = itertools.count(1)
+
+
+def _arrival(**overrides) -> StopArrivalEvent:
+    # SQLite's autoincrement doesn't kick in for this BigInteger PK under the
+    # async driver used in tests, so every row needs an explicit id.
+    base = dict(
+        id=next(_arrival_ids),
+        trip_id="t1",
+        route_id="r15",
+        stop_id="s1",
+        stop_sequence=1,
+        scheduled_time=NOW,
+        actual_time=NOW,
+        delay_seconds=0,
+        service_date=NOW.date(),
+        timestamp=NOW,
+    )
+    base.update(overrides)
+    return StopArrivalEvent(**base)
+
+
+@pytest.mark.asyncio
+async def test_trip_delay_stats_averages_delay_and_scores_on_time(db_session):
+    db_session.add_all(
+        [
+            _arrival(delay_seconds=0),
+            _arrival(stop_id="s2", stop_sequence=2, delay_seconds=600),
+        ]
+    )
+    await db_session.commit()
+
+    stats = await _trip_delay_stats(
+        db_session, NOW - timedelta(hours=1), NOW + timedelta(hours=1), {"t1"}
+    )
+    avg_delay, on_time_pct = stats["t1"]
+    assert avg_delay == 300.0
+    # Only the 0s arrival is within RTD's default ±300s on-time window.
+    assert on_time_pct == 50.0
+
+
+@pytest.mark.asyncio
+async def test_trip_delay_stats_of_no_trip_ids_is_empty(db_session):
+    assert await _trip_delay_stats(db_session, NOW, NOW, set()) == {}
+
+
+@pytest.mark.asyncio
+async def test_trip_delay_stats_omits_a_trip_outside_the_scan_window(db_session):
+    db_session.add(_arrival())
+    await db_session.commit()
+
+    stats = await _trip_delay_stats(
+        db_session, NOW + timedelta(hours=2), NOW + timedelta(hours=3), {"t1"}
+    )
+    assert stats == {}
 
 
 # ── Facets ───────────────────────────────────────────────────────────────────
