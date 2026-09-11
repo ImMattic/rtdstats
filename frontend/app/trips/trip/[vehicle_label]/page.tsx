@@ -310,7 +310,15 @@ function StopTimeline({
                 {stop.observed ? (
                   <>
                     <div className="flex flex-wrap items-center justify-end gap-x-1 gap-y-0.5">
-                      <span className="shrink-0 text-[10px] font-semibold tabular-nums text-fg sm:text-sm">
+                      <span
+                        className="shrink-0 text-[10px] font-semibold tabular-nums text-fg sm:text-sm"
+                        title={
+                          stop.detection_method === "terminus_fallback"
+                            ? "Estimated: the feed stopped reporting on approach, so this is the last sighting near the stop — the vehicle arrived at or after this time."
+                            : undefined
+                        }
+                      >
+                        {stop.detection_method === "terminus_fallback" ? "≥ " : ""}
                         {hhmm(stop.actual_time)}
                       </span>
                       <span
@@ -331,7 +339,19 @@ function StopTimeline({
                     <div className="text-[13px] tabular-nums text-fg-muted sm:text-sm">
                       {hhmm(stop.scheduled_time)}
                     </div>
-                    <div className="mt-0.5 text-[10px] text-fg-subtle sm:text-[11px]">scheduled</div>
+                    {/* Only RTD timepoints are geofenced, which is every rail
+                        station but under a fifth of bus stops. Saying so stops
+                        an ordinary bus stop from reading as a missed arrival. */}
+                    <div
+                      className="mt-0.5 text-[10px] text-fg-subtle sm:text-[11px]"
+                      title={
+                        stop.is_timepoint === false
+                          ? "RTD does not time this stop, so no arrival is recorded here."
+                          : undefined
+                      }
+                    >
+                      {stop.is_timepoint === false ? "not timed" : "scheduled"}
+                    </div>
                   </>
                 )}
               </div>
@@ -391,7 +411,22 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
   // tell whether this leg is still being tracked right now.
   const live = useVehicles();
   const effectiveTripId = tripId ?? resolvedTripId;
-  const isInProgress = isTripInProgress(live.data?.vehicles, vehicleLabel, effectiveTripId);
+  // This leg's last-seen time, which is what separates "still running" from
+  // "matches something running now". Neither a vehicle label nor a GTFS trip id
+  // is scoped to a date, and RTD labels rail vehicles with a run number reused
+  // every day, so yesterday's train matches the live feed exactly. Getting that
+  // wrong drops the `end` bound below and asks the API for a window wider than
+  // it will serve — a 422, and the page renders "Failed to load trip data".
+  //
+  // Seeded from the bound the list put in the URL, then advanced by each fetch
+  // so a genuinely live trip stays live instead of ageing out of the window.
+  const [lastSeen, setLastSeen] = useState<string | undefined>(end);
+  const isInProgress = isTripInProgress(
+    live.data?.vehicles,
+    vehicleLabel,
+    effectiveTripId,
+    lastSeen,
+  );
 
   const { data, isLoading, isError } = useVehicleTrip(
     vehicleLabel,
@@ -404,6 +439,13 @@ function TripDetailContent({ vehicleLabel }: { vehicleLabel: string }) {
   useEffect(() => {
     if (data?.trip_id) setResolvedTripId(data.trip_id);
   }, [data?.trip_id]);
+
+  const newestPosition = data?.positions.length
+    ? data.positions[data.positions.length - 1].timestamp
+    : undefined;
+  useEffect(() => {
+    if (newestPosition) setLastSeen(newestPosition);
+  }, [newestPosition]);
 
   // The breadcrumb returns to the originating list view — its window *and* its
   // filters — not this leg's bounds. `ret` carries the whole query the list was

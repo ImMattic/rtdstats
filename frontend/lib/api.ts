@@ -213,6 +213,10 @@ export interface ActiveVehiclesParams {
   occupancy?: string;
   min_duration_minutes?: number;
   max_duration_minutes?: number;
+  min_avg_delay_seconds?: number;
+  max_avg_delay_seconds?: number;
+  min_on_time_pct?: number;
+  max_on_time_pct?: number;
   strict?: boolean;
   limit?: number;
   offset?: number;
@@ -229,6 +233,10 @@ export function fetchActiveVehicles(params: ActiveVehiclesParams = {}): Promise<
     occupancy: params.occupancy,
     min_duration_minutes: params.min_duration_minutes,
     max_duration_minutes: params.max_duration_minutes,
+    min_avg_delay_seconds: params.min_avg_delay_seconds,
+    max_avg_delay_seconds: params.max_avg_delay_seconds,
+    min_on_time_pct: params.min_on_time_pct,
+    max_on_time_pct: params.max_on_time_pct,
     strict: params.strict ? "true" : undefined,
     limit: params.limit,
     offset: params.offset,

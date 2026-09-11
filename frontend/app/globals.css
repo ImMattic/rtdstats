@@ -385,6 +385,22 @@ input[type="range"].rtd-range::-moz-range-thumb {
   cursor: pointer;
 }
 
+/* Dual-range sliders stack two <input type="range"> on top of each other, each
+   spanning the full track — without this, whichever one sits later in the DOM
+   would eat every pointer event and the other thumb could never be grabbed.
+   Ignoring pointer events on the track but not the thumb (its own element even
+   with the parent set to `none`) is what lets both stay independently
+   draggable. See FilterDualSlider in components/ui/FilterControls.tsx. */
+input[type="range"].rtd-range-dual {
+  pointer-events: none;
+}
+input[type="range"].rtd-range-dual::-webkit-slider-thumb {
+  pointer-events: auto;
+}
+input[type="range"].rtd-range-dual::-moz-range-thumb {
+  pointer-events: auto;
+}
+
 /* Native date/time picker indicator stays visible on dark. */
 :root:not([data-theme="light"]) input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   filter: invert(0.85);

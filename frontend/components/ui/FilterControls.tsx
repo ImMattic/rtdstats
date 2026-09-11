@@ -452,6 +452,81 @@ export function FilterRange({ min, max, onChange, unit, presets = [] }: RangeInp
   );
 }
 
+interface DualSliderProps {
+  /** null on either end reads as "unbounded" — snapped to the slider's own edge. */
+  min: number | null;
+  max: number | null;
+  bounds: { min: number; max: number };
+  step?: number;
+  onChange: (min: number | null, max: number | null) => void;
+  /** Renders one bound for the readouts below the track, e.g. "+2 min" or "45%". */
+  formatValue: (value: number) => string;
+}
+
+/**
+ * A two-thumb range slider — used for Avg Delay and On-Time %, where (unlike
+ * Duration's `FilterRange`) a couple of typed numbers isn't as quick to reason
+ * about as dragging within a known scale. Built from two overlapping native
+ * `<input type="range">` elements rather than a dependency: each one's own
+ * track ignores pointer events (`.rtd-range-dual` in globals.css) so only its
+ * thumb is grabbable, which is what lets both stay independently draggable
+ * despite sharing the same box. Dragging a handle back to the slider's own
+ * edge clears that side's filter rather than pinning it there.
+ */
+export function FilterDualSlider({ min, max, bounds, step = 1, onChange, formatValue }: DualSliderProps) {
+  const lo = min ?? bounds.min;
+  const hi = max ?? bounds.max;
+  const span = bounds.max - bounds.min || 1;
+  const pctLo = ((lo - bounds.min) / span) * 100;
+  const pctHi = ((hi - bounds.min) / span) * 100;
+
+  return (
+    <div className="space-y-2 pt-1">
+      <div className="relative h-4">
+        <div className="absolute left-0 right-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-line-2" />
+        <div
+          className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-accent"
+          style={{ left: `${pctLo}%`, right: `${100 - pctHi}%` }}
+        />
+        <input
+          type="range"
+          className="rtd-range rtd-range-dual absolute inset-0 w-full cursor-pointer appearance-none bg-transparent text-accent"
+          min={bounds.min}
+          max={bounds.max}
+          step={step}
+          value={lo}
+          onChange={(e) => {
+            const next = Math.min(Number(e.target.value), hi);
+            onChange(next <= bounds.min ? null : next, max);
+          }}
+          aria-label="Minimum"
+        />
+        <input
+          type="range"
+          className="rtd-range rtd-range-dual absolute inset-0 w-full cursor-pointer appearance-none bg-transparent text-accent"
+          min={bounds.min}
+          max={bounds.max}
+          step={step}
+          value={hi}
+          onChange={(e) => {
+            const next = Math.max(Number(e.target.value), lo);
+            onChange(min, next >= bounds.max ? null : next);
+          }}
+          aria-label="Maximum"
+        />
+      </div>
+      <div className="flex items-center justify-between text-xs">
+        <span className={min === null ? "text-fg-subtle" : "font-medium text-fg"}>
+          {formatValue(lo)}
+        </span>
+        <span className={max === null ? "text-fg-subtle" : "font-medium text-fg"}>
+          {formatValue(hi)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 /** Removable summary chip for the applied-filter row above a result list. */
 export function ActiveFilterChip({
   label,

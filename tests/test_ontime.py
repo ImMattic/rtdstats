@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from app.services.ontime import (
     OriginDepartureTracker,
+    TerminusFallbackTracker,
     _haversine_m,
     _project_onto_route,
     _scheduled_utc,
@@ -654,4 +655,192 @@ def test_stops_before_the_terminus_still_record():
             [{**_vp(lat=_C_LAT, lon=_LINE_LON), "timestamp": scheduled + timedelta(seconds=600)}],
             scheduled + timedelta(seconds=600))
         assert [e["stop_sequence"] for e in end] == [3]
+    reset_detection_state()
+
+
+# ── Terminus fallback ─────────────────────────────────────────────────────────
+#
+# The reported case: a vehicle whose feed cuts out a few hundred metres short of
+# the end of the line.  Nothing later can record its terminus arrival, so the
+# trip is filed "Incomplete" even though the replay shows it almost there.  A
+# second, wider circle at the terminus only — consulted after the trip goes
+# quiet, and only when the ordinary geofence never fired there.
+
+# Last leg SB→SC is _SEG_M (~1113 m), so the bus fallback circle is capped at
+# half of it (~556 m) rather than at the configured 750 m.
+_TERM_STALE = timedelta(minutes=15)
+
+
+def _terminus_tracker(schedule=None, **kwargs) -> TerminusFallbackTracker:
+    return TerminusFallbackTracker(
+        schedule or _LINE_SCHEDULE, stop_arrivals={}, **kwargs
+    )
+
+
+def _north_of_c(metres):
+    """A fix `metres` north (+) or south (-) of the terminus SC, on the line."""
+    return _vp(lat=_C_LAT + metres / _M_PER_DEG_LAT, lon=_LINE_LON)
+
+
+def test_terminus_fallback_rescues_a_trip_that_went_quiet_short():
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS + 600)
+    t = _terminus_tracker()
+    # 400 m short of the terminus — well outside the 152 m geofence — then
+    # nothing more from the feed.
+    t.feed(_north_of_c(-400), scheduled)
+    events = t.flush(scheduled + _TERM_STALE + timedelta(minutes=1))
+    assert len(events) == 1
+    assert events[0]["stop_sequence"] == 3
+    assert events[0]["stop_id"] == "SC"
+    assert events[0]["detection_method"] == "terminus_fallback"
+    # Timed at the sighting, so the recorded arrival is a lower bound.
+    assert events[0]["actual_time"] == scheduled
+
+
+def test_terminus_fallback_waits_for_the_trip_to_go_quiet():
+    # A vehicle still reporting on approach has not arrived yet.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS + 600)
+    t = _terminus_tracker()
+    t.feed(_north_of_c(-400), scheduled)
+    assert t.flush(scheduled + timedelta(minutes=2)) == []
+
+
+def test_terminus_fallback_keeps_the_closest_approach():
+    # Three fixes closing on the terminus: the nearest one is the arrival, not
+    # the first or the last sighting.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS + 600)
+    t = _terminus_tracker()
+    t.feed(_north_of_c(-700), scheduled)
+    t.feed(_north_of_c(-250), scheduled + timedelta(seconds=30))
+    t.feed(_north_of_c(-600), scheduled + timedelta(seconds=60))
+    events = t.flush(scheduled + timedelta(hours=1))
+    assert len(events) == 1
+    assert events[0]["actual_time"] == scheduled + timedelta(seconds=30)
+
+
+def test_terminus_fallback_skipped_when_the_ordinary_geofence_fired():
+    # The whole point: the wide circle is a fallback, never an addition.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS + 600)
+    t = _terminus_tracker()
+    t.feed(_north_of_c(-400), scheduled)
+    t.feed(_north_of_c(-50), scheduled + timedelta(seconds=30))  # inside 152 m
+    assert t.flush(scheduled + timedelta(hours=1), force=True) == []
+
+
+def test_terminus_fallback_ignores_a_vehicle_that_never_got_close():
+    # Died halfway down the last leg — too far to claim it finished.
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS + 600)
+    t = _terminus_tracker()
+    t.feed(_north_of_c(-900), scheduled)
+    assert t.flush(scheduled + timedelta(hours=1), force=True) == []
+
+
+def test_terminus_fallback_never_reaches_back_to_the_previous_stop():
+    # A short last leg caps the circle at that leg, so a vehicle that actually
+    # died at the second-to-last stop is not credited with the terminus.
+    short_leg = 300.0
+    c_lat = _B_LAT + short_leg / _M_PER_DEG_LAT
+    schedule = {
+        "T1": [
+            (1, "SA", _ARR_SECS - 600, _A_LAT, _LINE_LON, 0.0),
+            (2, "SB", _ARR_SECS, _B_LAT, _LINE_LON, _SEG_M),
+            (3, "SC", _ARR_SECS + 600, c_lat, _LINE_LON, _SEG_M + short_leg),
+        ]
+    }
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS + 600)
+    t = _terminus_tracker(schedule)
+    t.feed(_vp(lat=_B_LAT, lon=_LINE_LON), scheduled)  # sitting at SB
+    assert t.flush(scheduled + timedelta(hours=1), force=True) == []
+
+
+def test_terminus_fallback_ignores_a_loop_passing_its_own_terminus():
+    # A route that doubles back can be within the wide circle at the *start* of
+    # the trip. Requiring the fix to project past the second-to-last timepoint
+    # is what tells "on the way out" from "on the way in".
+    b_lat = 39.745
+    c_lat = _A_LAT + 400 / _M_PER_DEG_LAT  # back south, 400 m from SA
+    ab = _haversine_m(_A_LAT, _LINE_LON, b_lat, _LINE_LON)
+    bc = _haversine_m(b_lat, _LINE_LON, c_lat, _LINE_LON)
+    schedule = {
+        "T1": [
+            (1, "SA", _ARR_SECS - 600, _A_LAT, _LINE_LON, 0.0),
+            (2, "SB", _ARR_SECS, b_lat, _LINE_LON, ab),
+            (3, "SC", _ARR_SECS + 600, c_lat, _LINE_LON, ab + bc),
+        ]
+    }
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS - 600)
+    t = _terminus_tracker(schedule)
+    t.feed(_vp(lat=_A_LAT, lon=_LINE_LON), scheduled)  # at the origin
+    assert t.flush(scheduled + timedelta(hours=1), force=True) == []
+
+
+def test_terminus_fallback_emitted_once():
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS + 600)
+    t = _terminus_tracker()
+    t.feed(_north_of_c(-400), scheduled)
+    assert len(t.flush(scheduled + timedelta(hours=1), force=True)) == 1
+    t.feed(_north_of_c(-400), scheduled + timedelta(hours=1))
+    assert t.flush(scheduled + timedelta(hours=2), force=True) == []
+
+
+def test_forget_drops_a_run_the_geofence_already_closed():
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS + 600)
+    t = _terminus_tracker()
+    t.feed(_north_of_c(-400), scheduled)
+    t.forget("T1", _SERVICE_DATE)
+    assert t.flush(scheduled + timedelta(hours=1), force=True) == []
+
+
+def test_detect_arrivals_records_a_fallback_terminus():
+    # End to end: a trip stops reporting 400 m short, and the terminus arrival
+    # shows up on a later poll once the trip has been quiet long enough.
+    reset_detection_state()
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    with patch("app.services.ontime.load_trip_shape_dist_schedule", return_value=_LINE_SCHEDULE), \
+         patch("app.services.ontime.load_trip_origin_timepoints", return_value={}), \
+         patch("app.services.ontime.load_stop_arrivals_index", return_value={}):
+        at_b = detect_arrivals(
+            [{**_vp(lat=_B_LAT, lon=_LINE_LON), "timestamp": scheduled}], scheduled)
+        assert [e["stop_sequence"] for e in at_b] == [2]
+
+        short = scheduled + timedelta(seconds=540)
+        assert detect_arrivals(
+            [{**_north_of_c(-400), "timestamp": short}], short) == []
+
+        # …then silence.
+        later = short + _TERM_STALE + timedelta(minutes=1)
+        rescued = detect_arrivals([], later)
+        assert [e["stop_sequence"] for e in rescued] == [3]
+        assert rescued[0]["detection_method"] == "terminus_fallback"
+    reset_detection_state()
+
+
+def test_detect_arrivals_stamps_the_ordinary_rules():
+    reset_detection_state()
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS)
+    with patch("app.services.ontime.load_trip_shape_dist_schedule", return_value=_LINE_SCHEDULE), \
+         patch("app.services.ontime.load_trip_origin_timepoints", return_value={}), \
+         patch("app.services.ontime.load_stop_arrivals_index", return_value={}):
+        events = detect_arrivals(
+            [{**_vp(lat=_B_LAT, lon=_LINE_LON), "timestamp": scheduled}], scheduled)
+        assert events[0]["detection_method"] == "geofence"
+    reset_detection_state()
+
+
+def test_a_real_terminus_arrival_beats_the_fallback_in_the_same_poll():
+    # Both rules can fire on the same run in one cycle. The measurement must
+    # win, and the fallback must not add a second row for the same stop.
+    reset_detection_state()
+    scheduled = _scheduled_utc(_SERVICE_DATE, _ARR_SECS + 600)
+    with patch("app.services.ontime.load_trip_shape_dist_schedule", return_value=_LINE_SCHEDULE), \
+         patch("app.services.ontime.load_trip_origin_timepoints", return_value={}), \
+         patch("app.services.ontime.load_stop_arrivals_index", return_value={}):
+        far = scheduled - timedelta(minutes=30)
+        detect_arrivals([{**_north_of_c(-400), "timestamp": far}], far)
+        # Long after the stale window, but this poll also has the vehicle
+        # squarely on the terminus.
+        events = detect_arrivals(
+            [{**_vp(lat=_C_LAT, lon=_LINE_LON), "timestamp": scheduled}], scheduled)
+        assert [e["stop_sequence"] for e in events] == [3]
+        assert events[0]["detection_method"] == "geofence"
     reset_detection_state()

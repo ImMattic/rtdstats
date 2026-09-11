@@ -6,7 +6,7 @@ from typing import Annotated
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import bindparam, select, text
+from sqlalchemy import bindparam, case, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -207,6 +207,10 @@ async def get_active_vehicles(
     occupancy: Annotated[str | None, Query()] = None,
     min_duration_minutes: Annotated[float | None, Query(ge=0)] = None,
     max_duration_minutes: Annotated[float | None, Query(ge=0)] = None,
+    min_avg_delay_seconds: Annotated[float | None, Query()] = None,
+    max_avg_delay_seconds: Annotated[float | None, Query()] = None,
+    min_on_time_pct: Annotated[float | None, Query(ge=0, le=100)] = None,
+    max_on_time_pct: Annotated[float | None, Query(ge=0, le=100)] = None,
     strict: Annotated[bool, Query()] = False,
     limit: Annotated[int, Query(ge=1, le=100)] = 15,
     offset: Annotated[int, Query(ge=0, le=5_000)] = 0,
@@ -296,6 +300,16 @@ async def get_active_vehicles(
         for r in rows
     ]
 
+    # Avg delay / on-time % are filterable, so — unlike last_delay_seconds below
+    # — they have to be known for every trip in the window *before* filtering
+    # and paging run, not just for the page being returned.
+    window_trip_ids = {t["trip_id"] for t in trips if t["trip_id"]}
+    stats_map = await _trip_delay_stats(db, scan_start, scan_end, window_trip_ids)
+    for t in trips:
+        stats = stats_map.get(t["trip_id"] or "")
+        t["avg_delay_seconds"] = stats[0] if stats else None
+        t["on_time_pct"] = stats[1] if stats else None
+
     # Route is the one filter the SQL already applied, so the facets it feeds
     # describe only the selected routes.  Say so, rather than letting a menu
     # read those counts as if they covered the window.
@@ -313,13 +327,17 @@ async def get_active_vehicles(
             occupancy=wanted_occupancy,
             min_duration_minutes=min_duration_minutes,
             max_duration_minutes=max_duration_minutes,
+            min_avg_delay_seconds=min_avg_delay_seconds,
+            max_avg_delay_seconds=max_avg_delay_seconds,
+            min_on_time_pct=min_on_time_pct,
+            max_on_time_pct=max_on_time_pct,
         )
     ]
 
     page = matches[offset:offset + limit]
 
-    # Delay comes from a second table, so look it up only for the rows actually
-    # being returned rather than for every trip in the window.
+    # last_delay_seconds isn't filterable, so it's the one field still looked
+    # up only for the rows actually being returned.
     page_trip_ids = {t["trip_id"] for t in page if t["trip_id"]}
     delay_map = await _delay_map(db, scan_start, scan_end, page_trip_ids)
     for t in page:
@@ -397,6 +415,8 @@ def _describe_trip(
         "last_longitude": row["longitude"],
         "last_occupancy_status": row["occupancy_status"],
         "last_delay_seconds": None,
+        "avg_delay_seconds": None,
+        "on_time_pct": None,
         "observation_count": row["observation_count"],
         "stop_arrival_count": row["stop_arrival_count"],
     }
@@ -412,6 +432,10 @@ def _matches_filters(
     occupancy: set[str],
     min_duration_minutes: float | None,
     max_duration_minutes: float | None,
+    min_avg_delay_seconds: float | None = None,
+    max_avg_delay_seconds: float | None = None,
+    min_on_time_pct: float | None = None,
+    max_on_time_pct: float | None = None,
 ) -> bool:
     """AND across groups, OR inside each — an empty group never narrows."""
     if routes and trip["route_id"] not in routes:
@@ -429,6 +453,24 @@ def _matches_filters(
         return False
     if max_duration_minutes is not None and duration > max_duration_minutes:
         return False
+    # Both bounds require an actual reading — a trip with no observed arrivals
+    # (avg_delay_seconds/on_time_pct null) can't be shown to satisfy either one.
+    if min_avg_delay_seconds is not None or max_avg_delay_seconds is not None:
+        delay = trip["avg_delay_seconds"]
+        if delay is None:
+            return False
+        if min_avg_delay_seconds is not None and delay < min_avg_delay_seconds:
+            return False
+        if max_avg_delay_seconds is not None and delay > max_avg_delay_seconds:
+            return False
+    if min_on_time_pct is not None or max_on_time_pct is not None:
+        pct = trip["on_time_pct"]
+        if pct is None:
+            return False
+        if min_on_time_pct is not None and pct < min_on_time_pct:
+            return False
+        if max_on_time_pct is not None and pct > max_on_time_pct:
+            return False
     return True
 
 
@@ -651,6 +693,7 @@ async def get_vehicle_trip(
                         "actual_lat": ev.actual_lat if ev else None,
                         "actual_lon": ev.actual_lon if ev else None,
                         "actual_bearing": ev.actual_bearing if ev else None,
+                        "detection_method": ev.detection_method if ev else None,
                     }
                 )
 
@@ -680,6 +723,7 @@ async def get_vehicle_trip(
                         "actual_lat": ev.actual_lat,
                         "actual_lon": ev.actual_lon,
                         "actual_bearing": ev.actual_bearing,
+                        "detection_method": ev.detection_method,
                     }
                 )
             stops_list.sort(key=lambda s: s["stop_sequence"])
@@ -708,6 +752,7 @@ async def get_vehicle_trip(
                         "actual_lat": ev.actual_lat,
                         "actual_lon": ev.actual_lon,
                         "actual_bearing": ev.actual_bearing,
+                        "detection_method": ev.detection_method,
                     }
                 )
 
@@ -820,3 +865,43 @@ async def _delay_map(
     )
     result = await db.execute(stmt)
     return {tid: delay for tid, delay in result.all() if tid is not None}
+
+
+async def _trip_delay_stats(
+    db: AsyncSession,
+    start: datetime,
+    end: datetime,
+    trip_ids: set[str],
+) -> dict[str, tuple[float, float]]:
+    """Per-trip (avg_delay_seconds, on_time_pct) for the Trip Explorer table.
+
+    Reads ``stop_arrival_events`` — the same geofenced arrivals the on-time
+    dashboard stats are built from — rather than ``_delay_map`` above, which is
+    only the single latest ``trip_updates.arrival_delay`` reading. Like
+    ``_delay_map``, only looked up for the page actually being returned.
+    """
+    if not trip_ids:
+        return {}
+    on_time = case(
+        (func.abs(StopArrivalEvent.delay_seconds) <= _settings.ontime_threshold_seconds, 1.0),
+        else_=0.0,
+    )
+    stmt = (
+        select(
+            StopArrivalEvent.trip_id,
+            func.avg(StopArrivalEvent.delay_seconds),
+            func.avg(on_time) * 100,
+        )
+        .where(
+            StopArrivalEvent.trip_id.in_(trip_ids),
+            StopArrivalEvent.timestamp >= start,
+            StopArrivalEvent.timestamp <= end,
+        )
+        .group_by(StopArrivalEvent.trip_id)
+    )
+    result = await db.execute(stmt)
+    return {
+        tid: (round(avg_delay, 1), round(on_time_pct, 1))
+        for tid, avg_delay, on_time_pct in result.all()
+        if tid is not None
+    }

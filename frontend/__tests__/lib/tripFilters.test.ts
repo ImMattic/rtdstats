@@ -19,7 +19,7 @@ describe("tripFiltersFromParams", () => {
   it("reads every group out of a query string", () => {
     const f = tripFiltersFromParams(
       new URLSearchParams(
-        "modes=rail,bus&routes=E,15&vehicles=1001&status=complete&occupancy=FULL&min_duration=10&max_duration=45&strict=true",
+        "modes=rail,bus&routes=E,15&vehicles=1001&status=complete&occupancy=FULL&min_duration=10&max_duration=45&min_avg_delay=-60&max_avg_delay=300&min_on_time=50&max_on_time=90&strict=true",
       ),
     );
     expect(f).toEqual({
@@ -30,8 +30,17 @@ describe("tripFiltersFromParams", () => {
       occupancy: ["FULL"],
       minDurationMinutes: 10,
       maxDurationMinutes: 45,
+      minAvgDelaySeconds: -60,
+      maxAvgDelaySeconds: 300,
+      minOnTimePct: 50,
+      maxOnTimePct: 90,
       strict: true,
     });
+  });
+
+  it("reads a negative avg-delay bound, unlike duration which can't go negative", () => {
+    const f = tripFiltersFromParams(new URLSearchParams("min_avg_delay=-120"));
+    expect(f.minAvgDelaySeconds).toBe(-120);
   });
 
   it("drops values the API would reject rather than passing them through", () => {
@@ -66,6 +75,10 @@ describe("tripFiltersToParams", () => {
       occupancy: ["EMPTY"],
       minDurationMinutes: 5,
       maxDurationMinutes: 90,
+      minAvgDelaySeconds: -90,
+      maxAvgDelaySeconds: 600,
+      minOnTimePct: 60,
+      maxOnTimePct: 95,
       strict: true,
     });
     const params = new URLSearchParams(tripFiltersToParams(f));
@@ -94,6 +107,13 @@ describe("countActiveTripFilters", () => {
       ),
     ).toBe(2);
     expect(countActiveTripFilters(filters({ routeIds: ["A", "B", "C"] }))).toBe(1);
+  });
+
+  it("counts avg delay and on-time as one condition each, same as duration", () => {
+    expect(
+      countActiveTripFilters(filters({ minAvgDelaySeconds: -60, maxAvgDelaySeconds: 300 })),
+    ).toBe(1);
+    expect(countActiveTripFilters(filters({ minOnTimePct: 80 }))).toBe(1);
   });
 });
 
@@ -129,6 +149,30 @@ describe("tripFilterChips", () => {
 
   it("says nothing when nothing is applied", () => {
     expect(tripFilterChips(EMPTY_TRIP_FILTERS, routeName)).toEqual([]);
+  });
+
+  it("collapses an avg-delay range into one chip, signed values and all", () => {
+    expect(
+      tripFilterChips(
+        filters({ minAvgDelaySeconds: -60, maxAvgDelaySeconds: 300 }),
+        routeName,
+      )[0].label,
+    ).toBe("Avg delay -1.0m to +5.0m");
+    expect(
+      tripFilterChips(filters({ minAvgDelaySeconds: 300 }), routeName)[0].label,
+    ).toBe("Avg delay at least +5.0m");
+    expect(
+      tripFilterChips(filters({ maxAvgDelaySeconds: -60 }), routeName)[0].label,
+    ).toBe("Avg delay at most -1.0m");
+  });
+
+  it("collapses an on-time range into one chip", () => {
+    expect(
+      tripFilterChips(filters({ minOnTimePct: 60, maxOnTimePct: 90 }), routeName)[0].label,
+    ).toBe("On-time 60–90%");
+    expect(
+      tripFilterChips(filters({ minOnTimePct: 80 }), routeName)[0].label,
+    ).toBe("On-time 80%+");
   });
 });
 

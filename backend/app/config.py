@@ -33,8 +33,15 @@ class Settings(BaseSettings):
     # Simulator login is the only guessable endpoint on the server, so it gets
     # its own small budget rather than sharing the general one.
     rate_limit_sim_auth_per_minute: int = 5
-    # Trust X-Forwarded-For for client identity (true when behind Caddy/Next).
+    # Trust forwarding headers for client identity (true when behind Caddy/Next).
     trust_proxy_headers: bool = True
+    # Header carrying the real client IP, checked before X-Forwarded-For.
+    # Cloudflare sets CF-Connecting-IP itself, overwriting anything the client
+    # sent, and Caddy and Next pass it through — so it survives the proxy chain
+    # where X-Forwarded-For does not.  Without it every visitor rate-limits
+    # against the same key (see middleware/rate_limit.py).  Set empty to
+    # disable when no such edge is in front.
+    client_ip_header: str = "cf-connecting-ip"
     # Widest time span a single request may ask a raw-hypertable scan to cover.
     export_max_span_days: int = 31
     historical_max_span_days: int = 7
@@ -108,6 +115,24 @@ class Settings(BaseSettings):
     # never see it leave.  After this much silence, fall back to recording the
     # last moment it was seen at the stop rather than losing the event.
     origin_departure_stale_minutes: int = 15
+    # ── Terminus fallback ────────────────────────────────────────────────────
+    # A trip whose feed cuts out short of its last stop never gets a terminus
+    # arrival, and a missing terminus arrival is exactly what marks a finished
+    # trip "Incomplete".  So when — and only when — the ordinary geofence above
+    # never fired at the terminus, a second, wider circle is consulted once the
+    # trip has gone quiet: if the vehicle's closest approach to the last stop
+    # was inside it, that approach is recorded as the arrival.
+    #
+    # The fallback is always additionally capped at half the distance from the
+    # second-to-last timepoint to the terminus (see TerminusFallbackTracker), so
+    # however wide these are set the circle can never reach back far enough to
+    # confuse the previous stop with the last one.
+    arrival_terminus_fallback_radius_m: int = 750
+    arrival_terminus_fallback_radius_rail_m: int = 1500
+    # How long a trip must be absent from the feed before the fallback is
+    # allowed to resolve it.  Too short and a vehicle merely idling on approach
+    # gets an arrival it hasn't made yet; this matches the origin's own window.
+    arrival_terminus_fallback_stale_minutes: int = 15
 
     # ── Denver home games (ESPN scoreboard) ──────────────────────────────────
     # Powers the map status carousel's game slides.  Home games only: an away

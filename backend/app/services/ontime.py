@@ -32,9 +32,11 @@ The public entry points:
     No I/O, easy to unit-test.
   * ``OriginDepartureTracker`` — stateful: a stream of positions in time order →
     one *departure* event per trip origin.
-  * ``detect_arrivals`` — runs both over a poll's worth of positions, loading the
-    cached schedule and de-duping so a bus loitering near a timepoint yields a
-    single event.
+  * ``TerminusFallbackTracker`` — stateful: a wider last-resort circle at the
+    *final* timepoint, for trips whose feed cuts out on approach.
+  * ``detect_arrivals`` — runs all of them over a poll's worth of positions,
+    loading the cached schedule and de-duping so a bus loitering near a
+    timepoint yields a single event.
 """
 from __future__ import annotations
 
@@ -66,6 +68,9 @@ _recorded: set[tuple[str, int, date]] = set()
 # _live_tracker) because it needs the GTFS static caches to be warm.
 _live_tracker_instance: OriginDepartureTracker | None = None
 
+# Terminus-fallback state for the live ingest loop, same lifecycle.
+_live_terminus_tracker: TerminusFallbackTracker | None = None
+
 # Each trip's most recent (position row, observation time), so the next poll
 # can interpolate which timepoints were passed in between — see
 # classify_segment_arrivals.  Pruned alongside _recorded.
@@ -78,6 +83,18 @@ _last_fix: dict[str, tuple[dict[str, Any], datetime]] = {}
 # those sightings used to be free to write more rows against the finished trip.
 _finished: set[tuple[str, date]] = set()
 
+
+# Which rule wrote a row, stored on the event as ``detection_method``.  The
+# first three are measurements — the vehicle was seen at, or demonstrably
+# travelled across, the stop.  TERMINUS_FALLBACK is not: it is the closest
+# approach inside a much wider circle, recorded only because the feed went
+# quiet before the vehicle reached the real one, so it is a lower bound on the
+# true arrival time.  Keeping the distinction in the row means a later question
+# about precision can be answered without re-deriving anything.
+DETECTION_GEOFENCE = "geofence"
+DETECTION_SEGMENT = "segment"
+DETECTION_ORIGIN_DEPARTURE = "origin_departure"
+DETECTION_TERMINUS_FALLBACK = "terminus_fallback"
 
 # GTFS route_type: 0 tram/light rail, 1 subway, 2 rail.  3 is bus.
 _RAIL_ROUTE_TYPES = frozenset({"0", "1", "2"})
@@ -111,6 +128,13 @@ def _radius_for(route_id: str | None) -> float:
     if route_id and route_id in _rail_routes():
         return _settings.arrival_radius_rail_m
     return _settings.arrival_radius_m
+
+
+def _terminus_fallback_radius_for(route_id: str | None) -> float:
+    """Last-resort terminus circle for this route — see TerminusFallbackTracker."""
+    if route_id and route_id in _rail_routes():
+        return _settings.arrival_terminus_fallback_radius_rail_m
+    return _settings.arrival_terminus_fallback_radius_m
 
 
 def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -214,6 +238,7 @@ def _build_event(
     bearing: float | None,
     max_delay_s: int,
     stop_arrivals: dict[tuple[str, str], list[int]] | None,
+    detection_method: str,
 ) -> dict[str, Any] | None:
     """Turn a matched (stop, observation time) pair into a stop-event row.
 
@@ -272,6 +297,7 @@ def _build_event(
         "actual_lat": lat,
         "actual_lon": lon,
         "actual_bearing": bearing,
+        "detection_method": detection_method,
     }
 
 
@@ -366,6 +392,7 @@ def classify_arrival(
         bearing=vp_row.get("bearing"),
         max_delay_s=max_delay_s,
         stop_arrivals=stop_arrivals,
+        detection_method=DETECTION_GEOFENCE,
     )
 
 
@@ -475,6 +502,7 @@ def classify_segment_arrivals(
             bearing=vp_row.get("bearing"),
             max_delay_s=max_delay_s,
             stop_arrivals=stop_arrivals,
+            detection_method=DETECTION_SEGMENT,
         )
         if event is not None:
             events.append(event)
@@ -733,12 +761,229 @@ class OriginDepartureTracker:
             bearing=pending.bearing,
             max_delay_s=self._max_delay_s,
             stop_arrivals=self._stop_arrivals,
+            detection_method=DETECTION_ORIGIN_DEPARTURE,
         )
 
     def _prune_done(self, today: date) -> None:
         cutoff = today - timedelta(days=1)
         if any(sd < cutoff for _, _, sd in self._done):
             self._done.difference_update({k for k in self._done if k[2] < cutoff})
+
+
+# ── Terminus fallback ────────────────────────────────────────────────────────
+#
+# A trip is judged "complete" by one thing: an arrival recorded at its final
+# timepoint.  So the failure mode with the loudest symptom is a vehicle whose
+# feed simply stops a few hundred metres short of the end of the line — parked
+# at the terminal but no longer reporting, or dropped by the feed on approach.
+# Nothing later can rescue it, the terminus stays blank, and the trip is filed
+# as "Incomplete" even though the replay plainly shows it almost there.
+#
+# Widening ``arrival_radius_m`` is the wrong lever: it is used at *every*
+# timepoint, so paying for these at the ordinary radius would blur every
+# mid-route stop on the system.  Instead the terminus — and only the terminus —
+# gets a second, much wider circle, consulted only after the trip has gone
+# quiet and only when the ordinary circle never fired there.  The arrival
+# recorded is the vehicle's *closest approach*, which is a lower bound on the
+# real arrival: it stops short by however long the vehicle still needed for the
+# remaining distance.  That is why the row is stamped TERMINUS_FALLBACK rather
+# than passed off as a measurement.
+#
+# The wide circle is capped at the distance from the second-to-last timepoint,
+# so it can never grow far enough to mistake the previous stop for the last
+# one, and a candidate fix must also have projected past that timepoint along
+# the route — which is what keeps a loop route that passes near its own
+# terminus early in the trip from resolving on the way out.
+
+
+@dataclass
+class _TerminusApproach:
+    """A trip's closest sighting to its final timepoint, so far."""
+
+    trip_id: str
+    route_id: str | None
+    stop_id: str
+    stop_sequence: int
+    arrival_secs: int
+    service_date: date
+    best_dist_m: float
+    best_time: datetime
+    lat: float
+    lon: float
+    bearing: float | None
+    last_seen: datetime
+
+
+class TerminusFallbackTracker:
+    """Streams positions and rescues terminus arrivals the geofence missed.
+
+    ``feed`` never returns an event: whether a trip ended short is only knowable
+    once it stops reporting, so events come out of ``flush`` after the trip has
+    been silent for ``arrival_terminus_fallback_stale_minutes``.  A trip seen
+    inside the *ordinary* terminus geofence is dropped from tracking on the
+    spot — the normal path has it, and this is strictly a fallback.
+
+    The same instance is reused across polls by ``detect_arrivals``; the
+    backfill script builds its own.
+    """
+
+    def __init__(
+        self,
+        schedule: dict[str, list[tuple[int, str, int, float, float, float]]] | None = None,
+        *,
+        radius_m: float | None = None,
+        max_delay_s: int | None = None,
+        stop_arrivals: dict[tuple[str, str], list[int]] | None = None,
+        stale_after: timedelta | None = None,
+    ) -> None:
+        self._schedule = schedule
+        self._radius_m = radius_m
+        self._max_delay_s = (
+            _settings.arrival_max_delay_seconds if max_delay_s is None else max_delay_s
+        )
+        self._stop_arrivals = stop_arrivals
+        self._stale_after = stale_after or timedelta(
+            minutes=_settings.arrival_terminus_fallback_stale_minutes
+        )
+        self._pending: dict[tuple[str, date], _TerminusApproach] = {}
+        # Runs that need no fallback — either already emitted one, or seen
+        # inside the ordinary geofence, which means the normal path has it.
+        self._done: set[tuple[str, date]] = set()
+
+    @property
+    def schedule(self) -> dict[str, list[tuple[int, str, int, float, float, float]]]:
+        if self._schedule is None:
+            self._schedule = load_trip_shape_dist_schedule()
+        return self._schedule
+
+    def _fallback_radius(
+        self,
+        route_id: str | None,
+        timepoints: list[tuple[int, str, int, float, float, float]],
+    ) -> float:
+        """The wide circle for this trip's terminus, capped at half the last leg.
+
+        Whatever the configured radius, the circle never extends past the
+        midpoint between the last two timepoints, so every fix inside it is
+        unambiguously nearer the terminus than the stop before it — the same
+        nearest-timepoint rule the ordinary detector uses.  Without the cap, a
+        vehicle that actually died at the second-to-last stop would be credited
+        with reaching the end of the line.
+
+        RTD's final legs are long (median 1.7 km for bus, 1.9 km for rail), so
+        the cap binds only where the last two stops really are close together.
+        """
+        configured = (
+            _terminus_fallback_radius_for(route_id)
+            if self._radius_m is None
+            else self._radius_m
+        )
+        if len(timepoints) < 2:
+            return configured
+        last_leg_m = timepoints[-1][5] - timepoints[-2][5]
+        return min(configured, last_leg_m / 2)
+
+    def feed(self, vp_row: dict[str, Any], actual_time: datetime) -> None:
+        """Absorb one position, keeping the closest approach to the terminus."""
+        trip_id = vp_row.get("trip_id")
+        lat = vp_row.get("latitude")
+        lon = vp_row.get("longitude")
+        if not trip_id or lat is None or lon is None:
+            return
+
+        timepoints = self.schedule.get(trip_id)
+        if not timepoints:
+            return
+        seq, stop_id, arrival_secs, term_lat, term_lon, _ = timepoints[-1]
+
+        _, service_date, _ = _pick_service_date(actual_time, arrival_secs)
+        key = (trip_id, service_date)
+        if key in self._done:
+            return
+
+        route_id = vp_row.get("route_id")
+        dist_m = _haversine_m(lat, lon, term_lat, term_lon)
+
+        # Inside the ordinary geofence: classify_arrival owns this one.  Stop
+        # tracking rather than carrying a candidate the dedup would discard.
+        if dist_m <= _radius_for(route_id):
+            self._done.add(key)
+            self._pending.pop(key, None)
+            return
+
+        pending = self._pending.get(key)
+        if pending is not None:
+            pending.last_seen = actual_time
+            pending.route_id = route_id or pending.route_id
+
+        if dist_m > self._fallback_radius(route_id, timepoints):
+            return
+        # Must be *approaching* the end of the line, not merely near it: a loop
+        # route passes its own terminus on the way out, and a vehicle staging
+        # nearby before the trip starts has not arrived at anything.
+        if len(timepoints) >= 2:
+            vehicle_dist_m, _ = _project_onto_route(lat, lon, timepoints)
+            if vehicle_dist_m < timepoints[-2][5]:
+                return
+
+        if pending is None:
+            self._pending[key] = _TerminusApproach(
+                trip_id=trip_id,
+                route_id=route_id,
+                stop_id=stop_id,
+                stop_sequence=seq,
+                arrival_secs=arrival_secs,
+                service_date=service_date,
+                best_dist_m=dist_m,
+                best_time=actual_time,
+                lat=lat,
+                lon=lon,
+                bearing=vp_row.get("bearing"),
+                last_seen=actual_time,
+            )
+        elif dist_m < pending.best_dist_m:
+            pending.best_dist_m = dist_m
+            pending.best_time = actual_time
+            pending.lat, pending.lon = lat, lon
+            pending.bearing = vp_row.get("bearing")
+
+    def forget(self, trip_id: str, service_date: date) -> None:
+        """Drop a run whose terminus arrival has been recorded by another rule."""
+        key = (trip_id, service_date)
+        self._done.add(key)
+        self._pending.pop(key, None)
+
+    def flush(self, now: datetime, *, force: bool = False) -> list[dict[str, Any]]:
+        """Emit fallback arrivals for trips that have gone quiet on approach."""
+        out: list[dict[str, Any]] = []
+        for key, pending in list(self._pending.items()):
+            if not force and now - pending.last_seen < self._stale_after:
+                continue
+            del self._pending[key]
+            self._done.add(key)
+            event = _build_event(
+                trip_id=pending.trip_id,
+                route_id=pending.route_id,
+                stop_id=pending.stop_id,
+                stop_sequence=pending.stop_sequence,
+                arrival_secs=pending.arrival_secs,
+                actual_time=pending.best_time,
+                lat=pending.lat,
+                lon=pending.lon,
+                bearing=pending.bearing,
+                max_delay_s=self._max_delay_s,
+                stop_arrivals=self._stop_arrivals,
+                detection_method=DETECTION_TERMINUS_FALLBACK,
+            )
+            if event is not None:
+                out.append(event)
+        self._prune_done(now.astimezone(_DENVER).date())
+        return out
+
+    def _prune_done(self, today: date) -> None:
+        cutoff = today - timedelta(days=1)
+        if any(sd < cutoff for _, sd in self._done):
+            self._done.difference_update({k for k in self._done if k[1] < cutoff})
 
 
 def _prune_recorded(today: date) -> None:
@@ -782,6 +1027,19 @@ def _live_tracker(
     return _live_tracker_instance
 
 
+def _live_terminus(
+    schedule: dict[str, list[tuple[int, str, int, float, float, float]]],
+    arrivals_index: dict[tuple[str, str], list[int]],
+) -> TerminusFallbackTracker:
+    """The ingest loop's terminus tracker — one instance, so approaches persist."""
+    global _live_terminus_tracker
+    if _live_terminus_tracker is None:
+        _live_terminus_tracker = TerminusFallbackTracker(
+            schedule, stop_arrivals=arrivals_index
+        )
+    return _live_terminus_tracker
+
+
 def detect_arrivals(
     vp_rows: list[dict[str, Any]],
     default_time: datetime,
@@ -803,10 +1061,12 @@ def detect_arrivals(
 
     arrivals_index = load_stop_arrivals_index()
     tracker = _live_tracker(origins, arrivals_index)
+    terminus = _live_terminus(schedule, arrivals_index)
 
     candidates: list[dict[str, Any]] = []
     for row in vp_rows:
         actual = row.get("timestamp") or default_time
+        terminus.feed(row, actual)
         departure = tracker.feed(row, actual)
         if departure is not None:
             candidates.append(departure)
@@ -844,6 +1104,9 @@ def detect_arrivals(
             candidates.append(arrival)
 
     candidates.extend(tracker.flush(default_time))
+    # Last, so a terminus arrival found by any of the rules above closes the run
+    # first and this poll's fallback candidates for it fall out below.
+    candidates.extend(terminus.flush(default_time))
 
     events: list[dict[str, Any]] = []
     for event in candidates:
@@ -859,6 +1122,9 @@ def detect_arrivals(
         timepoints = schedule.get(trip_id)
         if timepoints and event["stop_sequence"] == timepoints[-1][0]:
             _finished.add(run)
+            # The run is over — release the fallback's state for it rather than
+            # letting it carry an approach that could never be emitted.
+            terminus.forget(trip_id, event["service_date"])
 
     today = default_time.astimezone(_DENVER).date()
     _prune_recorded(today)
@@ -869,8 +1135,9 @@ def detect_arrivals(
 
 def reset_detection_state() -> None:
     """Drop all in-process dedup/pending state (tests; not used in production)."""
-    global _live_tracker_instance
+    global _live_tracker_instance, _live_terminus_tracker
     _recorded.clear()
     _finished.clear()
     _last_fix.clear()
     _live_tracker_instance = None
+    _live_terminus_tracker = None

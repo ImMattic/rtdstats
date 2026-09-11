@@ -5,7 +5,7 @@
 // pure: state → query params → URL, and back again.
 
 import type { TransitMode } from "@/lib/mapFilters";
-import { occupancyLabel, type TripStatus } from "@/lib/utils";
+import { formatDelayMin, occupancyLabel, type TripStatus } from "@/lib/utils";
 
 export interface TripFilters {
   modes: TransitMode[];
@@ -17,6 +17,12 @@ export interface TripFilters {
   occupancy: string[];
   minDurationMinutes: number | null;
   maxDurationMinutes: number | null;
+  /** Mean of stop_arrival_events.delay_seconds across the trip; seconds, signed. */
+  minAvgDelaySeconds: number | null;
+  maxAvgDelaySeconds: number | null;
+  /** Share of those arrivals within RTD's on-time window, 0–100. */
+  minOnTimePct: number | null;
+  maxOnTimePct: number | null;
   /** Only trips lying entirely inside the window, rather than merely touching it. */
   strict: boolean;
 }
@@ -29,6 +35,10 @@ export const EMPTY_TRIP_FILTERS: TripFilters = {
   occupancy: [],
   minDurationMinutes: null,
   maxDurationMinutes: null,
+  minAvgDelaySeconds: null,
+  maxAvgDelaySeconds: null,
+  minOnTimePct: null,
+  maxOnTimePct: null,
   strict: false,
 };
 
@@ -44,6 +54,8 @@ export function countActiveTripFilters(f: TripFilters): number {
     (f.statuses.length > 0 ? 1 : 0) +
     (f.occupancy.length > 0 ? 1 : 0) +
     (f.minDurationMinutes !== null || f.maxDurationMinutes !== null ? 1 : 0) +
+    (f.minAvgDelaySeconds !== null || f.maxAvgDelaySeconds !== null ? 1 : 0) +
+    (f.minOnTimePct !== null || f.maxOnTimePct !== null ? 1 : 0) +
     (f.strict ? 1 : 0)
   );
 }
@@ -64,6 +76,13 @@ function parseNumber(raw: string | null): number | null {
   if (raw === null || raw.trim() === "") return null;
   const n = Number(raw);
   return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/** Like `parseNumber`, but negative is valid — avg delay reads negative when early. */
+function parseSignedNumber(raw: string | null): number | null {
+  if (raw === null || raw.trim() === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
 }
 
 /**
@@ -91,6 +110,10 @@ export function tripFiltersFromParams(params: URLSearchParams): TripFilters {
     occupancy: parseList(params.get("occupancy")),
     minDurationMinutes: parseNumber(params.get("min_duration")),
     maxDurationMinutes: parseNumber(params.get("max_duration")),
+    minAvgDelaySeconds: parseSignedNumber(params.get("min_avg_delay")),
+    maxAvgDelaySeconds: parseSignedNumber(params.get("max_avg_delay")),
+    minOnTimePct: parseNumber(params.get("min_on_time")),
+    maxOnTimePct: parseNumber(params.get("max_on_time")),
     strict: params.get("strict") === "true",
   };
 }
@@ -105,6 +128,10 @@ export function tripFiltersToParams(f: TripFilters): Record<string, string> {
   if (f.occupancy.length) out.occupancy = f.occupancy.join(",");
   if (f.minDurationMinutes !== null) out.min_duration = String(f.minDurationMinutes);
   if (f.maxDurationMinutes !== null) out.max_duration = String(f.maxDurationMinutes);
+  if (f.minAvgDelaySeconds !== null) out.min_avg_delay = String(f.minAvgDelaySeconds);
+  if (f.maxAvgDelaySeconds !== null) out.max_avg_delay = String(f.maxAvgDelaySeconds);
+  if (f.minOnTimePct !== null) out.min_on_time = String(f.minOnTimePct);
+  if (f.maxOnTimePct !== null) out.max_on_time = String(f.maxOnTimePct);
   if (f.strict) out.strict = "true";
   return out;
 }
@@ -119,6 +146,10 @@ export function tripFiltersToQuery(f: TripFilters) {
     occupancy: f.occupancy.length ? f.occupancy.join(",") : undefined,
     min_duration_minutes: f.minDurationMinutes ?? undefined,
     max_duration_minutes: f.maxDurationMinutes ?? undefined,
+    min_avg_delay_seconds: f.minAvgDelaySeconds ?? undefined,
+    max_avg_delay_seconds: f.maxAvgDelaySeconds ?? undefined,
+    min_on_time_pct: f.minOnTimePct ?? undefined,
+    max_on_time_pct: f.maxOnTimePct ?? undefined,
     strict: f.strict,
   };
 }
@@ -191,6 +222,34 @@ export function tripFilterChips(
       next: { ...f, minDurationMinutes: null, maxDurationMinutes: null },
     });
   }
+  if (f.minAvgDelaySeconds !== null || f.maxAvgDelaySeconds !== null) {
+    const { minAvgDelaySeconds: lo, maxAvgDelaySeconds: hi } = f;
+    const label =
+      lo !== null && hi !== null
+        ? `${formatDelayMin(lo)} to ${formatDelayMin(hi)}`
+        : lo !== null
+          ? `at least ${formatDelayMin(lo)}`
+          : `at most ${formatDelayMin(hi)}`;
+    chips.push({
+      id: "avgDelay",
+      label: `Avg delay ${label}`,
+      next: { ...f, minAvgDelaySeconds: null, maxAvgDelaySeconds: null },
+    });
+  }
+  if (f.minOnTimePct !== null || f.maxOnTimePct !== null) {
+    const { minOnTimePct: lo, maxOnTimePct: hi } = f;
+    const label =
+      lo !== null && hi !== null
+        ? `${lo}–${hi}%`
+        : lo !== null
+          ? `${lo}%+`
+          : `Under ${hi}%`;
+    chips.push({
+      id: "onTime",
+      label: `On-time ${label}`,
+      next: { ...f, minOnTimePct: null, maxOnTimePct: null },
+    });
+  }
   if (f.strict) {
     chips.push({ id: "strict", label: "Whole trips only", next: { ...f, strict: false } });
   }
@@ -209,6 +268,10 @@ export function tripFiltersEqual(a: TripFilters, b: TripFilters): boolean {
     sameList(a.occupancy, b.occupancy) &&
     a.minDurationMinutes === b.minDurationMinutes &&
     a.maxDurationMinutes === b.maxDurationMinutes &&
+    a.minAvgDelaySeconds === b.minAvgDelaySeconds &&
+    a.maxAvgDelaySeconds === b.maxAvgDelaySeconds &&
+    a.minOnTimePct === b.minOnTimePct &&
+    a.maxOnTimePct === b.maxOnTimePct &&
     a.strict === b.strict
   );
 }

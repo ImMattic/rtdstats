@@ -96,3 +96,30 @@ async def test_rightmost_forwarded_entry_wins(limited_client):
             headers={"X-Forwarded-For": f"10.0.0.{i}, 9.9.9.9"},
         )
     assert resp.status_code == 429
+
+
+async def test_edge_header_separates_clients_behind_one_proxy(limited_client):
+    # The production shape: every request arrives with the same rightmost
+    # X-Forwarded-For entry (our own proxy chain), and only CF-Connecting-IP
+    # still distinguishes visitors. Without it the whole site would share one
+    # budget and the second visitor here would already be 429.
+    chain = "203.0.113.7, 172.16.0.1"
+    for _ in range(6):
+        await limited_client.get(
+            "/api/v1/export/vehicles",
+            headers={"X-Forwarded-For": chain, "CF-Connecting-IP": "203.0.113.7"},
+        )
+    resp = await limited_client.get(
+        "/api/v1/export/vehicles",
+        headers={"X-Forwarded-For": chain, "CF-Connecting-IP": "198.51.100.4"},
+    )
+    assert resp.status_code == 200
+
+
+async def test_edge_header_still_enforces_its_own_budget(limited_client):
+    for _ in range(6):
+        resp = await limited_client.get(
+            "/api/v1/export/vehicles",
+            headers={"CF-Connecting-IP": "203.0.113.9"},
+        )
+    assert resp.status_code == 429

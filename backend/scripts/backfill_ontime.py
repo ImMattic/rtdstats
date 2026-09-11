@@ -75,6 +75,7 @@ from app.services.gtfs_schedule import (  # noqa: E402
 )
 from app.services.ontime import (  # noqa: E402
     OriginDepartureTracker,
+    TerminusFallbackTracker,
     classify_arrival,
     classify_segment_arrivals,
 )
@@ -170,6 +171,7 @@ def _dedupe(
     seen: set[tuple[str, int, date]],
     finished: set[tuple[str, date]],
     schedule: dict[str, list[tuple[int, str, int, float, float, float]]],
+    terminus: TerminusFallbackTracker,
 ) -> list[dict]:
     """Keep the first event per (trip, stop, service date).
 
@@ -177,7 +179,7 @@ def _dedupe(
     loop would have: a run is closed as soon as its terminus arrival is
     recorded, and later sightings under the same trip_id (a vehicle turning
     around, or looping back past stops it already served) add nothing.
-    ``seen`` and ``finished`` are both mutated.
+    ``seen``, ``finished`` and the terminus tracker are all mutated.
     """
     out: list[dict] = []
     for event in candidates:
@@ -193,6 +195,7 @@ def _dedupe(
         timepoints = schedule.get(trip_id)
         if timepoints and event["stop_sequence"] == timepoints[-1][0]:
             finished.add(run)
+            terminus.forget(trip_id, event["service_date"])
     return out
 
 
@@ -203,6 +206,7 @@ async def _backfill(batch_size: int) -> int:
 
     origins = load_trip_origin_timepoints()
     tracker = OriginDepartureTracker(origins)
+    terminus = TerminusFallbackTracker(schedule)
 
     seen: set[tuple[str, int, date]] = set()
     # Runs closed by their terminus arrival — see _dedupe.
@@ -245,6 +249,7 @@ async def _backfill(batch_size: int) -> int:
                     "current_status": cur_status,
                     "current_stop_sequence": cur_stop_seq,
                 }
+                terminus.feed(vp_row, ts)
                 departure = tracker.feed(vp_row, ts)
                 if departure is not None:
                     candidates.append(departure)
@@ -276,12 +281,14 @@ async def _backfill(batch_size: int) -> int:
                 if arrival is not None:
                     candidates.append(arrival)
 
-            # Trips that went quiet at their origin: resolve against this batch's
+            # Trips that went quiet at their origin, and trips that went quiet
+            # on approach to their terminus: resolve both against this batch's
             # watermark rather than holding them until the end of the replay.
             if last_ts is not None:
                 candidates.extend(tracker.flush(last_ts))
+                candidates.extend(terminus.flush(last_ts))
 
-            events = _dedupe(candidates, seen, finished, schedule)
+            events = _dedupe(candidates, seen, finished, schedule, terminus)
             if events:
                 async with AsyncSessionLocal() as writer:
                     async with writer.begin():
@@ -292,10 +299,12 @@ async def _backfill(batch_size: int) -> int:
             if len(rows) < batch_size:
                 break
 
-    # Anything still sitting at an origin when the positions ran out.
+    # Anything still sitting at an origin, or still short of its terminus, when
+    # the positions ran out.
+    watermark = last_ts or datetime.now(timezone.utc)
     trailing = _dedupe(
-        tracker.flush(last_ts or datetime.now(timezone.utc), force=True),
-        seen, finished, schedule,
+        tracker.flush(watermark, force=True) + terminus.flush(watermark, force=True),
+        seen, finished, schedule, terminus,
     )
     if trailing:
         async with AsyncSessionLocal() as writer:

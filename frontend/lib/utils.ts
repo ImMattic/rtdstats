@@ -7,16 +7,36 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * How recently a leg must have reported to be a candidate for "still running".
+ * Matches _LIVE_TRIP_WINDOW on the trips-list endpoint, which decides the same
+ * thing server-side.
+ */
+const LIVE_LEG_WINDOW_MS = 90_000;
+
+/**
  * Whether a (vehicle, trip) leg is still being tracked live — i.e. it shows
  * up in the current GTFS-RT realtime feed under the same vehicle label *and*
  * trip id. `liveVehicles` is the `vehicles` array from `useVehicles()`.
+ *
+ * `legEnd` is the leg's own last-seen time, and it is not optional in spirit:
+ * neither a vehicle label nor a trip id is scoped to a date, so the pair alone
+ * cannot tell today's run from an earlier one. Rail is where that bites —
+ * RTD labels rail vehicles with a run number (1-99, reused every day) rather
+ * than a fleet number, and a GTFS trip id is reused for months — so yesterday's
+ * 3pm train matches the live feed exactly at 3pm today. A leg that last
+ * reported hours ago is finished whatever the feed says.
  */
 export function isTripInProgress(
   liveVehicles: VehiclePosition[] | undefined,
   vehicleLabel: string | null | undefined,
   tripId: string | null | undefined,
+  legEnd?: string | null,
 ): boolean {
   if (!liveVehicles || !vehicleLabel || !tripId) return false;
+  if (legEnd) {
+    const ended = Date.parse(legEnd);
+    if (Number.isNaN(ended) || Date.now() - ended > LIVE_LEG_WINDOW_MS) return false;
+  }
   return liveVehicles.some((v) => v.vehicle_label === vehicleLabel && v.trip_id === tripId);
 }
 
