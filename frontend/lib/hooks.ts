@@ -25,6 +25,8 @@ import {
   fetchActiveVehicles,
   fetchVehicleTrip,
   fetchLimits,
+  fetchGames,
+  fetchSportsTeams,
   type HistoricalParams,
   type ActiveVehiclesParams,
   type VehicleTripParams,
@@ -217,6 +219,42 @@ export function useVehicleTrip(
     // While the trip is still in progress, keep polling so new stops/positions
     // stream in as they're geofenced — see isTripInProgress in lib/utils.
     refetchInterval: options.live ? REALTIME_INTERVAL : false,
+  });
+}
+
+/**
+ * Denver home games for the map's status carousel.
+ *
+ * The poll interval follows how fast the answer can change, which on most days
+ * is "not at all" — Denver has no home game, the endpoint returns an empty list,
+ * and two minutes is plenty. A simulation is the opposite case: its clock runs
+ * at up to 600×, so the payload has to be re-read every few seconds or the
+ * countdown drifts away from the phase the server thinks it's in.
+ *
+ * `throwOnError` is deliberately left off and errors are swallowed by callers:
+ * if this endpoint is unreachable the map simply shows no game slides.
+ */
+export function useGames() {
+  return useQuery({
+    queryKey: ["games"],
+    queryFn: fetchGames,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return 120_000;
+      if (data.simulated) return 5_000;
+      return data.games.some((g) => g.state === "in") ? 30_000 : 120_000;
+    },
+    staleTime: 0,
+    retry: 1,
+  });
+}
+
+/** The tracked clubs — only the simulator page needs these. */
+export function useSportsTeams() {
+  return useQuery({
+    queryKey: ["sportsTeams"],
+    queryFn: fetchSportsTeams,
+    staleTime: Infinity,
   });
 }
 

@@ -27,21 +27,29 @@ squeezing it in alongside smaller changes.
     - [ ] Integrate with Transit App API to confirm stuck status when GTFS-RT is unreliable.
 
 ## Event & Game Awareness
-Surface local sporting events so riders can anticipate delays and crowds. Not
-being built yet. Captured here so the design isn't lost.
-- [ ] Pull home-game schedules and live game state from a free sports API.
-    - [ ] **Home games only.** Away games don't move Denver ridership.
-    - [ ] Show nothing at all on days with no home game.
-    - [ ] Before the game: show start time (e.g. "7pm MT"). Inside one hour, switch
+Surface local sporting events so riders can anticipate delays and crowds.
+Shipped for sports via ESPN's unofficial scoreboard API — see
+`backend/app/services/sports.py` and `frontend/lib/gameSlides.ts`.
+- [X] Pull home-game schedules and live game state from a free sports API.
+    - [X] **Home games only.** Away games don't move Denver ridership.
+    - [X] Show nothing at all on days with no home game.
+    - [X] Before the game: show start time (e.g. "7pm MT"). Inside one hour, switch
       to a countdown ("COL game in 45 min").
-    - [ ] During the game: show where play is at, e.g. "top 7th" or "2nd period".
-    - [ ] After the game: show the result and how long ago it ended ("COL won 20 min
+    - [X] During the game: show where play is at, e.g. "top 7th" or "2nd period".
+    - [X] After the game: show the result and how long ago it ended ("COL won 20 min
       ago"), then clear the slide once it's two hours old.
-- [ ] Present it inside the existing "x vehicles" widget as a rotating carousel, so
+- [X] Present it inside the existing "x vehicles" widget as a rotating carousel, so
   several same-day games each get a turn.
-    - [ ] Colour each slide in that team's colours (Broncos orange, Rockies purple,
+    - [X] Colour each slide in that team's colours (Broncos orange, Rockies purple,
       and so on).
-    - [ ] Lead each slide with an emoji identifying the sport.
+    - [X] Lead each slide with an emoji identifying the sport.
+- [X] Tracked clubs: Avalanche, Nuggets, Rockies, Broncos, Rapids, Summit.
+- [X] Password-gated `/sim` page that scripts a live game server-side, so the
+  whole pre → live → final → cleared arc can be checked on a real device in a
+  few minutes. Always expires back to the ESPN feed.
+- [ ] Verify Denver Summit FC's brand hexes. The club hasn't published them, so
+  `services/sports.py` carries an approximation of the green/gold crest and
+  defers to whatever ESPN reports — which needs a look once they're playing.
 - [ ] Later: extend the same widget to non-sports events (concerts, conventions,
   festivals). There's no good free feed for these, so it likely depends on
   community-submitted entries.

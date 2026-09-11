@@ -1,9 +1,10 @@
 from fastapi import APIRouter
 
-from app.api.v1 import realtime, historical, routes, stops, stats, export, analytics, vehicles, meta
+from app.api.v1 import realtime, historical, routes, stops, stats, export, analytics, vehicles, meta, sports
 
 router = APIRouter(prefix="/api/v1")
 router.include_router(meta.router)
+router.include_router(sports.router)
 router.include_router(realtime.router)
 router.include_router(historical.router)
 router.include_router(routes.router)

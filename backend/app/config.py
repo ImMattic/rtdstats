@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     rate_limit_default_per_minute: int = 120
     rate_limit_expensive_per_minute: int = 20
     rate_limit_export_per_minute: int = 5
+    # Simulator login is the only guessable endpoint on the server, so it gets
+    # its own small budget rather than sharing the general one.
+    rate_limit_sim_auth_per_minute: int = 5
     # Trust X-Forwarded-For for client identity (true when behind Caddy/Next).
     trust_proxy_headers: bool = True
     # Widest time span a single request may ask a raw-hypertable scan to cover.
@@ -105,6 +108,31 @@ class Settings(BaseSettings):
     # never see it leave.  After this much silence, fall back to recording the
     # last moment it was seen at the stop rather than losing the event.
     origin_departure_stale_minutes: int = 15
+
+    # ── Denver home games (ESPN scoreboard) ──────────────────────────────────
+    # Powers the map status carousel's game slides.  Home games only: an away
+    # game doesn't move Denver ridership, so it never earns a turn.
+    sports_enabled: bool = True
+    # Cache TTL for the ESPN scoreboard, by how much is going on.  Idle is the
+    # common case — most days have no home game at all, and re-asking every 30 s
+    # about a day with nothing on is pure waste.
+    sports_poll_seconds_live: int = 30
+    sports_poll_seconds_soon: int = 60
+    sports_poll_seconds_idle: int = 600
+    # A finished game keeps its slide this long, then clears.
+    sports_postgame_window_minutes: int = 120
+    # Inside this many minutes of first pitch, the slide switches from a start
+    # time ("7:00 PM") to a countdown ("in 45 min").
+    sports_countdown_minutes: int = 60
+
+    # ── Game simulator (unlisted /sim page) ──────────────────────────────────
+    # Shared password for the simulator page.  Empty disables the simulator
+    # outright: its routes 404 and no fake game can ever reach the map.  Set it
+    # only on staging.
+    sports_sim_password: str = ""
+    # Hard ceiling on how long one simulation may run before it expires and
+    # live ESPN data takes back over.
+    sports_sim_max_minutes: int = 240
 
     # ── CORS ──────────────────────────────────────────────────────────────────
     cors_origins: list[str] = ["http://localhost:3000"]

@@ -22,6 +22,11 @@ import type {
   TrendResponse,
   VehicleTripResponse,
   WorstStopsResponse,
+  GamesResponse,
+  SportsTeamsResponse,
+  SimSessionResponse,
+  SimStartRequest,
+  SimStatusResponse,
 } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -238,6 +243,51 @@ export interface VehicleTripParams {
 
 export function fetchVehicleTrip(vehicleLabel: string, params: VehicleTripParams = {}): Promise<VehicleTripResponse> {
   return apiFetch(withParams(`/api/v1/vehicles/${encodeURIComponent(vehicleLabel)}/trip`, { trip_id: params.trip_id, start: params.start, end: params.end }));
+}
+
+// ── Denver home games ──────────────────────────────────────────────────────
+
+export function fetchGames(): Promise<GamesResponse> {
+  return apiFetch("/api/v1/sports/games");
+}
+
+export function fetchSportsTeams(): Promise<SportsTeamsResponse> {
+  return apiFetch("/api/v1/sports/teams");
+}
+
+// ── Game simulator ─────────────────────────────────────────────────────────
+// Every call carries the session token in a header rather than a cookie: the
+// simulator is a single unlisted page, and a header can't be sent by a
+// cross-site form the way an ambient cookie can.
+
+function simHeaders(token: string): HeadersInit {
+  return { "Content-Type": "application/json", "X-Sim-Token": token };
+}
+
+export function createSimSession(password: string): Promise<SimSessionResponse> {
+  return apiFetch("/api/v1/sports/sim/session", {
+    method: "POST",
+    body: JSON.stringify({ password }),
+  });
+}
+
+export function fetchSimStatus(token: string): Promise<SimStatusResponse> {
+  return apiFetch("/api/v1/sports/sim", { headers: simHeaders(token) });
+}
+
+export function startSim(token: string, body: SimStartRequest): Promise<SimStatusResponse> {
+  return apiFetch("/api/v1/sports/sim", {
+    method: "POST",
+    headers: simHeaders(token),
+    body: JSON.stringify(body),
+  });
+}
+
+export function stopSim(token: string): Promise<SimStatusResponse> {
+  return apiFetch("/api/v1/sports/sim", {
+    method: "DELETE",
+    headers: simHeaders(token),
+  });
 }
 
 // ── Export ─────────────────────────────────────────────────────────────────
