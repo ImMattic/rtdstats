@@ -7,7 +7,7 @@ import { Card, SectionHeading } from "@/components/ui/Card";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ExportButton from "@/components/ui/ExportButton";
 import TripStatusBadge from "@/components/ui/TripStatusBadge";
-import DateTimePicker from "@/components/ui/DateTimePicker";
+import DateRangePicker from "@/components/ui/DateRangePicker";
 import TripFilterMenu from "@/components/trips/TripFilterMenu";
 import { ActiveFilterChip, FilterIcon } from "@/components/ui/FilterControls";
 import {
@@ -31,12 +31,10 @@ import {
 } from "@/lib/tripFilters";
 import {
   DEFAULT_RANGE_LIMITS,
-  clampLocal,
   describeLimits,
   fromLocalInput,
   isoToLocalInput,
   localInputToIso,
-  rangeBounds,
   toLocalInput,
   type RangeLimits,
 } from "@/lib/dateRange";
@@ -166,25 +164,12 @@ function TripsContent() {
     return () => clearInterval(id);
   }, []);
 
-  const bounds = useMemo(
-    () => rangeBounds(startLocal, limits, now),
-    [startLocal, limits, now],
-  );
-
-  // Moving the start re-anchors the window, which can leave the end more than
-  // maxSpanHours away or in the future. Pull it back in silently, instead of
-  // greying out every earlier date and trapping someone who wants an older day.
-  useEffect(() => {
-    const clamped = clampLocal(endLocal, bounds.end);
-    if (clamped !== endLocal) setEndLocal(clamped);
-  }, [endLocal, bounds.end]);
-
-  function handleStartChange(value: string) {
-    setStartLocal(clampLocal(value, bounds.start));
-  }
-
-  function handleEndChange(value: string) {
-    setEndLocal(clampLocal(value, bounds.end));
+  // The combined picker below enforces its own bounds (retention window, max
+  // span, never past `now`) before it ever calls this, so there's no separate
+  // clamp-on-change step here the way the two split fields used to need.
+  function handleRangeChange(nextStart: string, nextEnd: string) {
+    setStartLocal(nextStart);
+    setEndLocal(nextEnd);
   }
 
   const defaultStart = useMemo(() => new Date(Date.now() - 3_600_000).toISOString(), []);
@@ -217,8 +202,8 @@ function TripsContent() {
     );
   }, [routes.data]);
 
-  // The pickers can no longer produce an invalid range, but a stale URL or a
-  // hand-typed value on the native mobile control still can — so keep the guard.
+  // The picker itself can no longer produce an invalid range, but a stale URL
+  // (a bookmark, browser back/forward) still can — so keep the guard.
   const isValidRange = useMemo(() => {
     const s = fromLocalInput(startLocal);
     const e = fromLocalInput(endLocal);
@@ -369,24 +354,17 @@ function TripsContent() {
           hint="Filters apply as soon as you hit Apply filters. Pick a date and time range and hit Load trips to change the window."
         />
         <div className="flex flex-wrap items-end gap-3">
-          <DateTimePicker
-            id="trips-start"
-            label="Start"
-            value={startLocal}
-            onChange={handleStartChange}
-            bounds={bounds.start}
-          />
-          <DateTimePicker
-            id="trips-end"
-            label="End"
-            value={endLocal}
-            onChange={handleEndChange}
-            bounds={bounds.end}
+          <DateRangePicker
+            id="trips-range"
+            start={startLocal}
+            end={endLocal}
+            onChange={handleRangeChange}
+            limits={limits}
+            now={now}
           />
 
-          {/* Grouped so the pair moves to its own line as a unit when the row
-              wraps, with the filter button staying immediately left of Load
-              trips instead of drifting up next to the End field. */}
+          {/* Grouped so the filter button and Load trips move to their own
+              line as a unit when the row wraps, rather than splitting up. */}
           <div className="flex items-stretch gap-3">
             <button
               type="button"
@@ -472,7 +450,7 @@ function TripsContent() {
         {isError && (
           <p className="py-8 text-center text-sm text-danger">
             {isRateLimited
-              ? "You're refreshing too quickly. Please wait a moment and try again."
+              ? "You've sent too many requests. Please wait a moment and try again."
               : "Failed to load vehicles. The time window may be out of range."}
           </p>
         )}
@@ -521,7 +499,7 @@ function TripsContent() {
                   is the sum of the fixed columns plus a floor for From → To, so
                   squeezing below that hands off to the wrapper's horizontal scroll
                   instead of crushing every column to fit. */}
-              <table className="w-full min-w-[960px] table-fixed border-collapse text-sm text-fg-muted">
+              <table className="w-full min-w-[976px] table-fixed border-collapse text-sm text-fg-muted">
                 <thead className="bg-raised text-xs uppercase text-fg-subtle">
                   <tr>
                     <th className="w-10 whitespace-nowrap px-3 py-2 text-left">
@@ -535,7 +513,7 @@ function TripsContent() {
                     <th className="w-20 whitespace-nowrap px-3 py-2 text-right">Duration</th>
                     <th className="w-[136px] whitespace-nowrap px-3 py-2 text-left">Occupancy</th>
                     <th className="w-[88px] whitespace-nowrap px-3 py-2 text-right">Avg Delay</th>
-                    <th className="w-16 whitespace-nowrap px-3 py-2 text-right">On-Time</th>
+                    <th className="w-20 whitespace-nowrap px-3 py-2 text-right">On-Time</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -607,7 +585,7 @@ function TripsContent() {
                       >
                         {formatDelayMin(v.avg_delay_seconds)}
                       </td>
-                      <td className="w-16 whitespace-nowrap px-3 py-2 text-right font-mono text-fg-muted">
+                      <td className="w-20 whitespace-nowrap px-3 py-2 text-right font-mono text-fg-muted">
                         {v.on_time_pct !== null ? `${Math.round(v.on_time_pct)}%` : "—"}
                       </td>
                     </tr>
