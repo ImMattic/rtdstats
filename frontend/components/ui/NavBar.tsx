@@ -10,7 +10,7 @@ import ThemeMenu from "./ThemeMenu";
 
 const NAV_LINKS = [
   { href: "/", label: "Live Map" },
-  { href: "/dashboard", label: "Dashboard" },
+  { href: "/dashboard", label: "Dashboardd" },
   { href: "/trips", label: "Trips" },
 ];
 
