@@ -1,12 +1,15 @@
 import { describe, it, expect } from "vitest";
 import {
   DEFAULT_RANGE_LIMITS,
+  RANGE_PRESETS,
   calendarDays,
   clampLocal,
   describeLimits,
   fromLocalInput,
   isDaySelectable,
+  isPresetActive,
   isSameDay,
+  presetRange,
   rangeBounds,
   toLocalInput,
 } from "@/lib/dateRange";
@@ -147,13 +150,60 @@ describe("calendarDays", () => {
 });
 
 describe("describeLimits", () => {
-  it("says a 24-hour cap as one day", () => {
+  it("says the default 72-hour cap as three days", () => {
     expect(describeLimits(DEFAULT_RANGE_LIMITS)).toBe(
-      "Ranges span at most 1 day, within the last 365 days.",
+      "Ranges span at most 3 days, within the last 365 days.",
     );
   });
 
   it("keeps hours when the cap is not a whole number of days", () => {
     expect(describeLimits({ maxSpanHours: 6, retentionDays: 30 })).toContain("6 hours");
+  });
+});
+
+describe("presetRange", () => {
+  it("anchors the window to now and reaches back exactly `hours`", () => {
+    const { start, end } = presetRange(3, LIMITS, NOW);
+    expect(end).toBe(toLocalInput(NOW));
+    expect(start).toBe(toLocalInput(new Date(2026, 8, 9, 11, 30)));
+  });
+
+  it("caps the span at the server's own limit rather than the button's label", () => {
+    const { start, end } = presetRange(72, { maxSpanHours: 24, retentionDays: 365 }, NOW);
+    expect(fromLocalInput(end)!.getTime() - fromLocalInput(start)!.getTime()).toBe(
+      24 * 3_600_000,
+    );
+  });
+
+  it("caps the span at the retention window when that is the tighter limit", () => {
+    const { start, end } = presetRange(72, { maxSpanHours: 72, retentionDays: 1 }, NOW);
+    expect(fromLocalInput(end)!.getTime() - fromLocalInput(start)!.getTime()).toBe(
+      24 * 3_600_000,
+    );
+  });
+
+  it("covers every shipped preset without throwing", () => {
+    for (const preset of RANGE_PRESETS) {
+      const { start, end } = presetRange(preset.hours, LIMITS, NOW);
+      expect(fromLocalInput(start)!.getTime()).toBeLessThan(fromLocalInput(end)!.getTime());
+    }
+  });
+});
+
+describe("isPresetActive", () => {
+  it("matches the preset that produced the exact same range", () => {
+    const { start, end } = presetRange(6, LIMITS, NOW);
+    expect(isPresetActive(start, end, 6, LIMITS, NOW)).toBe(true);
+  });
+
+  it("rejects a range that only partly overlaps a preset", () => {
+    const { start, end } = presetRange(6, LIMITS, NOW);
+    expect(isPresetActive(start, end, 3, LIMITS, NOW)).toBe(false);
+  });
+
+  it("rejects a range with the right span but an end that isn't now", () => {
+    // Six hours wide, same as the "Last 6 hours" preset, but ending an hour
+    // and a half before `NOW` rather than right on it.
+    expect(isPresetActive("2026-09-09T07:00", "2026-09-09T13:00", 6, LIMITS, NOW)).toBe(false);
   });
 });

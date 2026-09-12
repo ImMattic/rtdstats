@@ -311,7 +311,7 @@ function StopTimeline({
                   <>
                     <div className="flex flex-wrap items-center justify-end gap-x-1 gap-y-0.5">
                       <span
-                        className="shrink-0 text-[10px] font-semibold tabular-nums text-fg sm:text-sm"
+                        className="shrink-0 text-sm font-semibold tabular-nums text-fg"
                         title={
                           stop.detection_method === "terminus_fallback"
                             ? "Estimated: the feed stopped reporting on approach, so this is the last sighting near the stop — the vehicle arrived at or after this time."
@@ -322,7 +322,7 @@ function StopTimeline({
                         {hhmm(stop.actual_time)}
                       </span>
                       <span
-                        className={`inline-block shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums ${delayBadge(
+                        className={`inline-block shrink-0 rounded-full px-1 py-0.5 text-[9px] font-medium tabular-nums sm:px-1.5 sm:text-[11px] ${delayBadge(
                           stop.delay_seconds ?? 0,
                         )}`}
                       >

@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     # Widest time span a single request may ask a raw-hypertable scan to cover.
     export_max_span_days: int = 31
     historical_max_span_days: int = 7
-    vehicles_max_span_hours: int = 24
+    vehicles_max_span_hours: int = 72
     # How far back raw rows still exist.  Mirrors the retention policy created in
     # migration 002 (add_retention_policy, INTERVAL '365 days'); it is published
     # via /api/v1/meta/limits purely so date pickers can grey out days we know

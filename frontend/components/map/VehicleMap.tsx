@@ -2,13 +2,13 @@
 
 import L from "leaflet";
 import { memo, useEffect, useMemo, useState } from "react";
-import { MapContainer, TileLayer, Marker, Tooltip, Polyline, CircleMarker, ZoomControl, AttributionControl, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Tooltip, Polyline, CircleMarker, AttributionControl, useMap, useMapEvents } from "react-leaflet";
 import type { VehiclePosition, RailShape, StopInfo } from "@/lib/types";
 import { useRailShapes, useRouteShape, useRouteStops } from "@/lib/hooks";
 import { headwayColor, formatStatusLabel } from "@/lib/utils";
 import { useTheme } from "@/lib/useTheme";
 import { createVehicleIcon, iconPx } from "./vehicleIcon";
-import MapLegend from "./MapLegend";
+import MapCornerControls from "./MapCornerControls";
 
 const DENVER_CENTER: [number, number] = [39.7392, -104.9903];
 const DEFAULT_ZOOM = 11;
@@ -425,12 +425,11 @@ export default function VehicleMap({ vehicles, onVehicleClick, selectedVehicle, 
         maxZoom={19}
       />
       {/* Bottom-right corner: Leaflet prepends each bottom control, so this
-          mount order stacks them attribution → headway legend → zoom from the
-          bottom up. The legend is a control (not a floating overlay) so the map
-          drag/cursor stops at its edge. */}
+          mount order stacks them attribution → legend/zoom row from the bottom
+          up. The legend + zoom row is a control (not a floating overlay) so
+          the map drag/cursor stops at its edge. */}
       <AttributionControl position="bottomright" />
-      <MapLegend className={selectedVehicle || selectedStop ? "hidden sm:block" : undefined} />
-      <ZoomControl position="bottomright" />
+      <MapCornerControls className={selectedVehicle || selectedStop ? "hidden sm:block" : undefined} />
       <FlyToHandler flyTo={flyTo} />
       <OneFingerZoom />
       <RailLines />

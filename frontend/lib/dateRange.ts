@@ -1,14 +1,16 @@
 /**
  * Local-time helpers for the Trip Explorer's date range.
  *
- * Everything here speaks the same string shape as an `<input type="datetime-local">`
- * value — `"YYYY-MM-DDTHH:mm"`, interpreted in the browser's zone — so the custom
- * picker and the native mobile one can be swapped for each other freely.
+ * Everything here speaks the same string shape an `<input type="datetime-local">`
+ * carries — `"YYYY-MM-DDTHH:mm"`, interpreted in the browser's zone — which is
+ * what `DateRangePicker` (the only consumer) is built entirely out of.
  *
- * The point of the module is `rangeBounds`: it turns the server's request limits
- * (see /api/v1/meta/limits) into a concrete min/max for each of the two fields,
- * which is what lets the calendar grey out days that would be rejected instead of
- * letting someone pick them and read an error afterwards.
+ * The two load-bearing exports are `rangeBounds`, which turns the server's
+ * request limits (see /api/v1/meta/limits) into a concrete min/max for the
+ * start and end fields so the calendar can grey out days that would be
+ * rejected instead of letting someone pick them and read an error afterwards,
+ * and `presetRange`, which does the same arithmetic for the picker's "Last N
+ * hours" quick-range buttons.
  */
 
 /** Minute resolution — the finest granularity a datetime-local value carries. */
@@ -27,7 +29,7 @@ export interface RangeLimits {
  * `vehicles_max_span_hours` / `data_retention_days` in backend/app/config.py.
  */
 export const DEFAULT_RANGE_LIMITS: RangeLimits = {
-  maxSpanHours: 24,
+  maxSpanHours: 72,
   retentionDays: 365,
 };
 
@@ -152,6 +154,63 @@ export function rangeBounds(
       max: toLocalInput(endMax.getTime() < endMin.getTime() ? endMin : endMax),
     },
   };
+}
+
+export interface LocalRange {
+  start: string;
+  end: string;
+}
+
+/** One "Last …" quick-range button on the combined date-range picker. */
+export interface RangePreset {
+  label: string;
+  hours: number;
+}
+
+/**
+ * The five quick ranges offered on the Trip Explorer's date-range picker.
+ * "Last 3 days" only works because `vehicles_max_span_hours` (see
+ * backend/app/config.py) is 72 — if that cap ever drops back below one of
+ * these, `presetRange` still degrades gracefully by capping the span at
+ * `limits.maxSpanHours`, it just no longer matches the button's own label.
+ */
+export const RANGE_PRESETS: RangePreset[] = [
+  { label: "Last hour", hours: 1 },
+  { label: "Last 3 hours", hours: 3 },
+  { label: "Last 6 hours", hours: 6 },
+  { label: "Last day", hours: 24 },
+  { label: "Last 3 days", hours: 72 },
+];
+
+/**
+ * The concrete `[start, end]` for a "Last N hours" preset, anchored to `now`
+ * and clamped to what the server and the retention window actually allow —
+ * the same two limits `rangeBounds` enforces, so a preset button can never
+ * produce a range the API would reject.
+ */
+export function presetRange(hours: number, limits: RangeLimits, now: Date = new Date()): LocalRange {
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes());
+  const earliest = new Date(end.getTime() - limits.retentionDays * 24 * 60 * MINUTE_MS);
+  const span = Math.min(hours, limits.maxSpanHours) * 60 * MINUTE_MS;
+  const start = new Date(Math.max(end.getTime() - span, earliest.getTime()));
+  return { start: toLocalInput(start), end: toLocalInput(end) };
+}
+
+/**
+ * Whether `[startLocal, endLocal]` is exactly what the given preset currently
+ * evaluates to — so the picker can highlight which quick range, if any, is
+ * active rather than leaving every button unselected the instant a minute
+ * ticks over.
+ */
+export function isPresetActive(
+  startLocal: string,
+  endLocal: string,
+  hours: number,
+  limits: RangeLimits,
+  now: Date = new Date(),
+): boolean {
+  const preset = presetRange(hours, limits, now);
+  return startLocal === preset.start && endLocal === preset.end;
 }
 
 /** Pull `value` inside `[min, max]`, returning it unchanged when already inside. */

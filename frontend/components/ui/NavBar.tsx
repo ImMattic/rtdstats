@@ -76,7 +76,7 @@ export default function NavBar() {
                 the remaining ~0.28em no matter how the leftover +Npx on top
                 was tuned (that's the bug every earlier "+10px" / "+1px" /
                 "+0.25px" pass was chasing — the miss was in the base unit, not
-                the addend). The +3px on top of the corrected 0.72em base is
+                the addend). The +2px on top of the corrected 0.72em base is
                 what makes the mark read a bit bigger than the wordmark, same
                 as the original ask. Width is `auto`
                 so the crop's own aspect ratio holds instead of being forced
