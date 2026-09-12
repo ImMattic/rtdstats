@@ -11,7 +11,7 @@ import ThemeMenu from "./ThemeMenu";
 const NAV_LINKS = [
   { href: "/", label: "Live Map" },
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/trips", label: "Trips" },
+  { href: "/trips", label: "Tripss" },
 ];
 
 export default function NavBar() {
