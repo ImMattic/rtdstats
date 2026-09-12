@@ -36,3 +36,20 @@ staging.example.com {
 	# Staging VM frontend (Next.js proxies /api/* to the backend internally)
 	reverse_proxy 192.168.1.x:3000
 }
+
+# Production — same edge rules, different VM. Point this at the Prod VM's
+# LAN IP once it exists; the domain here must match PROD_DOMAIN in the Prod
+# VM's deployment/.env (it's baked into CORS_ORIGINS and SITE_URL there).
+example.com {
+	encode zstd gzip
+
+	request_body {
+		max_size 1MB
+	}
+
+	@blocked path /api/v1/realtime/decode* /docs* /openapi.json* /redoc*
+	respond @blocked 404
+
+	# Prod VM frontend (Next.js proxies /api/* to the backend internally)
+	reverse_proxy 192.168.1.y:3000
+}

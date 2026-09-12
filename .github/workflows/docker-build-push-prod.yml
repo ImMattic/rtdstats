@@ -1,9 +1,9 @@
-name: Build and Push Docker Images (Staging)
+name: Build and Push Docker Images (Prod)
 
 on:
   push:
     branches:
-      - staging
+      - main
 
 env:
   REGISTRY: docker.io
@@ -32,10 +32,10 @@ jobs:
           file: backend/Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/transitden-backend:staging
-            ${{ secrets.DOCKERHUB_USERNAME }}/transitden-backend:staging-${{ github.sha }}
-          cache-from: type=gha,scope=backend-staging
-          cache-to: type=gha,mode=max,scope=backend-staging
+            ${{ secrets.DOCKERHUB_USERNAME }}/transitden-backend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/transitden-backend:${{ github.sha }}
+          cache-from: type=gha,scope=backend-prod
+          cache-to: type=gha,mode=max,scope=backend-prod
 
   build-frontend:
     name: Build & Push Frontend
@@ -60,8 +60,8 @@ jobs:
           file: frontend/Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/transitden-frontend:staging
-            ${{ secrets.DOCKERHUB_USERNAME }}/transitden-frontend:staging-${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/transitden-frontend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/transitden-frontend:${{ github.sha }}
           build-args: BACKEND_URL=http://backend:8000
-          cache-from: type=gha,scope=frontend-staging
-          cache-to: type=gha,mode=max,scope=frontend-staging
+          cache-from: type=gha,scope=frontend-prod
+          cache-to: type=gha,mode=max,scope=frontend-prod

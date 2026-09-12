@@ -1,0 +1,85 @@
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: transitden-db
+    restart: unless-stopped
+    # Same tuning as staging — adjust to the prod VM's actual specs if it
+    # differs from the ~4 GB staging box. See docker-compose.yml.
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=768MB"
+      - "-c"
+      - "effective_cache_size=2GB"
+      - "-c"
+      - "work_mem=16MB"
+      - "-c"
+      - "maintenance_work_mem=128MB"
+      - "-c"
+      - "max_connections=50"
+    environment:
+      POSTGRES_DB: transitden
+      POSTGRES_USER: transitden
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U transitden -d transitden"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+        reservations:
+          memory: 768M
+
+  backend:
+    image: aggiematt/transitden-backend:latest
+    container_name: transitden-backend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://transitden:${DB_PASSWORD}@db:5432/transitden
+      GTFS_RT_VEHICLE_URL: https://www.rtd-denver.com/files/gtfs-rt/VehiclePosition.pb
+      GTFS_RT_TRIP_URL: https://www.rtd-denver.com/files/gtfs-rt/TripUpdate.pb
+      POLLING_INTERVAL_SECONDS: "10"
+      STUCK_VEHICLE_MINUTES: "5"
+      # SPORTS_SIM_PASSWORD is deliberately absent here (unlike staging).
+      # Unset means the /sim routes 404 outright — a fake game on the real
+      # live map would be a lie. Do not add this var to prod's .env.
+      CORS_ORIGINS: '["https://${PROD_DOMAIN:?PROD_DOMAIN is required}"]'
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ../gtfs-static:/app/gtfs-static:ro
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+
+  frontend:
+    image: aggiematt/transitden-frontend:latest
+    container_name: transitden-frontend
+    restart: unless-stopped
+    ports:
+      # Set FRONTEND_BIND_IP to this VM's LAN IP in .env so only the Caddy VM
+      # can reach port 3000 — otherwise clients can bypass Caddy's TLS and
+      # edge limits entirely.
+      - "${FRONTEND_BIND_IP:-0.0.0.0}:3000:3000"
+    environment:
+      BACKEND_URL: http://backend:8000
+      SITE_URL: https://${PROD_DOMAIN:?PROD_DOMAIN is required}
+      CARTO_API_KEY: ${CARTO_API_KEY:-}
+    depends_on:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+volumes:
+  pgdata:
